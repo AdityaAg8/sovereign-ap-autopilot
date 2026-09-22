@@ -40,6 +40,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Generated reports the tooling writes locally but that aren't the committed summaries
-reports/runs/
-.claude/state/
+
+# Planning and agent-orchestration files: local only, never committed.
+PRD.md
+PROGRESS.md
+BLOCKED.md
+KICKOFF.md
+CLAUDE.md
+REVIEW.md
+.claude/

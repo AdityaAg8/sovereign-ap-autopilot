@@ -314,7 +314,7 @@ fi
     [ "$status" = "FAIL" ] && fail_count=$((fail_count + 1))
     [ "$status" = "WARN" ] && warn_count=$((warn_count + 1))
   done
-  printf '\n%d checks, %d FAIL, %d WARN. See BLOCKED.md for any human-only gaps.\n' "${#RESULTS[@]}" "$fail_count" "$warn_count"
+  printf '\n%d checks, %d FAIL, %d WARN. See the Detail column above for what to fix.\n' "${#RESULTS[@]}" "$fail_count" "$warn_count"
 } >"$REPORT_FILE"
 
 echo "preflight: wrote $REPORT_FILE (${#RESULTS[@]} checks, $fail_count FAIL, $warn_count WARN)"

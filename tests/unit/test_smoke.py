@@ -129,6 +129,8 @@ def _client_with_handler(handler) -> httpx.Client:
 
 def test_run_llama_swap_model_passes_against_a_healthy_fake_server() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/api/models/unload/"):
+            return httpx.Response(200, text="OK")
         body = json.loads(request.content)
         if "tools" in body:
             return httpx.Response(
@@ -173,6 +175,27 @@ def test_run_llama_swap_model_passes_against_a_healthy_fake_server() -> None:
         "logprobs",
         "tool_call",
     }
+
+
+def test_unload_llama_swap_model_posts_to_the_admin_endpoint() -> None:
+    requested_paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        return httpx.Response(200, text="OK")
+
+    with _client_with_handler(handler) as client:
+        smoke._unload_llama_swap_model(client, "http://fake", "extractor-a")
+
+    assert requested_paths == ["/api/models/unload/extractor-a"]
+
+
+def test_unload_llama_swap_model_swallows_http_errors() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with _client_with_handler(handler) as client:
+        smoke._unload_llama_swap_model(client, "http://fake", "arbiter")  # must not raise
 
 
 def test_run_llama_swap_model_fails_when_server_unreachable() -> None:
@@ -238,15 +261,32 @@ def test_transformers_load_only_model_fails_without_local_files(tmp_path: Path) 
     assert load_check.detail
 
 
-def test_transformers_embedding_model_fails_without_local_files(tmp_path: Path) -> None:
-    result = smoke.run_transformers_embedding_model(
-        intent="text_embeddings",
-        stage="fraud",
+def test_transformers_vlm_model_fails_without_local_files(tmp_path: Path) -> None:
+    from PIL import Image
+
+    result = smoke.run_transformers_vlm_model(
+        intent="parse",
+        stage="parse",
         repo_dir=tmp_path / "does-not-exist",
-        texts=["hello"],
+        invoice_image=Image.new("RGB", (4, 4), "white"),
     )
     assert result.reachable is False
     assert result.passed is False
+    load_check = next(c for c in result.checks if c.name == "load")
+    assert load_check.detail
+
+
+def test_sentence_transformer_model_fails_without_local_files(tmp_path: Path) -> None:
+    result = smoke.run_sentence_transformer_model(
+        intent="text_embeddings",
+        stage="fraud",
+        repo_dir=tmp_path / "does-not-exist",
+        inputs=["hello"],
+    )
+    assert result.reachable is False
+    assert result.passed is False
+    load_check = next(c for c in result.checks if c.name == "load")
+    assert load_check.detail
 
 
 # --- report rendering ----------------------------------------------------------------------

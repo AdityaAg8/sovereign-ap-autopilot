@@ -1,0 +1,15 @@
+{
+  "pint_ae": {
+    "version": "1.0.4",
+    "resources_url": "https://docs.peppol.eu/poac/ae/pint-ae/resources.zip",
+    "resources_sha256": "1e8b0bd595c672ac9d6fc886ddd0eb8027cb39a1d26bebdcb1ada37b7eee491f",
+    "source_doc": "https://docs.peppol.eu/poac/ae/pint-ae/",
+    "notes": "Official OpenPeppol PINT AE (UAE) validation artifacts: schematron (.sch), UNCL/PINT codelists (.gc) and official sample XMLs for trn-invoice and trn-creditnote. No pint-ae specific git repo exists under github.com/OpenPeppol; docs.peppol.eu publishes the versioned resources.zip that mirrors the repo build output."
+  },
+  "schxslt": {
+    "version": "1.10.1",
+    "url": "https://codeberg.org/SchXslt/schxslt/releases/download/v1.10.1/schxslt-1.10.1-xslt-only.zip",
+    "sha256": "e141fabd4804a0ea527945dc7253dd38f9ef8957d9b219b94e13d16859cff7f0",
+    "notes": "XSLT-only release of the SchXslt schematron-to-XSLT compiler (github.com/schxslt/schxslt moved to codeberg.org/SchXslt/schxslt). The PINT AE .sch files declare queryBinding=xslt2, so compilation uses the 2.0/pipeline-for-svrl.xsl entry point."
+  }
+}

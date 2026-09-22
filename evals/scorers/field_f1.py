@@ -1,0 +1,88 @@
+"""Shared field-level precision/recall/F1 core used by the FATURA and UAE scorers (PRD §5,
+§10 M1.3): both compare a predicted (doc_id, field_name) -> value mapping against gold on
+normalized exact match. Kept as one pure, typed function so both scorers report identically
+comparable numbers for the scoreboard."""
+
+from __future__ import annotations
+
+import unicodedata
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class FieldRecord:
+    """One (document, field, value) triple, e.g. gold or predicted extraction."""
+
+    doc_id: str
+    field: str
+    value: str
+
+
+@dataclass(frozen=True)
+class FieldF1Result:
+    """Precision/recall/F1 for a set of predicted field records against gold, plus the raw
+    counts they were computed from. Precision and recall are defined as 1.0 when their
+    denominator is zero (nothing predicted / nothing to find), a standard vacuous-truth
+    convention that keeps a scorer with no fields to grade from reporting a spurious 0."""
+
+    precision: float
+    recall: float
+    f1: float
+    true_positives: int
+    false_positives: int
+    false_negatives: int
+
+
+def normalize_value(value: str) -> str:
+    """Normalizes a field value for exact-match comparison: NFKC unicode normalization (folds
+    Arabic-Indic digit variants and presentation forms to their canonical form) then collapses
+    surrounding/internal whitespace."""
+    return " ".join(unicodedata.normalize("NFKC", value).split())
+
+
+def _record_key(record: FieldRecord) -> tuple[str, str, str]:
+    return (record.doc_id, record.field, normalize_value(record.value))
+
+
+def field_f1(gold: Iterable[FieldRecord], predicted: Iterable[FieldRecord]) -> FieldF1Result:
+    """Micro-averaged field F1 over normalized exact match of (doc_id, field, value)."""
+    gold_set = {_record_key(r) for r in gold}
+    predicted_set = {_record_key(r) for r in predicted}
+
+    true_positives = len(gold_set & predicted_set)
+    false_positives = len(predicted_set - gold_set)
+    false_negatives = len(gold_set - predicted_set)
+
+    precision = (
+        1.0
+        if true_positives + false_positives == 0
+        else true_positives / (true_positives + false_positives)
+    )
+    recall = (
+        1.0
+        if true_positives + false_negatives == 0
+        else true_positives / (true_positives + false_negatives)
+    )
+    f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+
+    return FieldF1Result(
+        precision=precision,
+        recall=recall,
+        f1=f1,
+        true_positives=true_positives,
+        false_positives=false_positives,
+        false_negatives=false_negatives,
+    )
+
+
+def records_from_field_maps(
+    doc_to_fields: Mapping[str, Mapping[str, str]],
+) -> list[FieldRecord]:
+    """Flattens a `{doc_id: {field: value}}` mapping (the natural shape of a predictor's or a
+    gold set's per-document field output) into `FieldRecord`s for `field_f1`."""
+    return [
+        FieldRecord(doc_id=doc_id, field=field, value=value)
+        for doc_id, fields in doc_to_fields.items()
+        for field, value in fields.items()
+    ]

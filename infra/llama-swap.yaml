@@ -8,18 +8,26 @@
 # seed, JSON-schema output and logprobs -- is applied per request by apx/llm, not baked
 # into these startup flags (chat-template kwargs and response_format are request fields).
 
-healthCheckTimeout: 120
+# 300s, not llama-swap's 120s default: the arbiter GGUF + mmproj (~6.7 GB combined) cold-load
+# from `models/`, a bind mount from the Windows host's NTFS filesystem (ADR-0006's addendum
+# calls out slower bind-mount I/O than a native Linux volume), measured 60-120s+ run to run --
+# a 120s ceiling intermittently failed with "health check timed out after 2m0s".
+healthCheckTimeout: 300
 logLevel: info
 
 macros:
+  # Flags verified against `llama-server --help` in the pinned image (infra/compose.yaml's
+  # llama-swap digest comment) after the v93-cuda-b4879 -> v257-cuda-b11096 bump: `--flash-attn`
+  # now takes a value instead of being a bare boolean, and `--no-mmap` was replaced by
+  # `--load-mode` (`none` is the equivalent of the old `--no-mmap`).
   "llama-server": >
     /app/llama-server
     --host 0.0.0.0
     --port ${PORT}
     --gpu-layers 999
-    --flash-attn
+    --flash-attn on
     --jinja
-    --no-mmap
+    --load-mode none
     --seed 42
     --temp 0.2
 

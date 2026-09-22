@@ -1,18 +1,18 @@
 ---
 name: Task
-about: A PROGRESS.md task that needs tracking outside the main loop
+about: A milestone task to track
 title: "[task] "
 labels: task
 ---
 
-## PRD section / milestone task ID
+## Milestone / task ID
 
 ## Build
 
-<!-- What needs to be built, per PRD §10. -->
+<!-- What needs to be built. -->
 
 ## Done when
 
-<!-- Acceptance criteria, per PRD §10. -->
+<!-- Acceptance criteria. -->
 
 ## Notes / blockers

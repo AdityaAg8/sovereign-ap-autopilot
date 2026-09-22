@@ -1,13 +1,23 @@
-# Keeps Python (uv/pip), web (npm/pnpm) and GitHub Actions dependencies current via
-# weekly automated PRs (PRD §10 M0.2).
+# Keeps Python (uv), web (pnpm) and GitHub Actions dependencies current via weekly grouped PRs.
+# Majors of the pinned web stack (Next.js 15) and the native wheels pinned for the Windows dev
+# host (ADR-0006 addendum) are ignored; those move only through a deliberate ADR-backed change.
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "numpy"
+      - dependency-name: "scipy"
+      - dependency-name: "pandas"
+      - dependency-name: "scikit-learn"
+      - dependency-name: "pyarrow"
 
   - package-ecosystem: "npm"
     directory: "/web"
@@ -15,6 +25,22 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps-web)"
+    groups:
+      web-minor-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -22,3 +48,6 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps-ci)"
+    groups:
+      actions:
+        patterns: ["*"]

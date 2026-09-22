@@ -1,17 +1,15 @@
 # Contributing
 
-This is currently a single-maintainer, agent-driven project run out of `PROGRESS.md`
-against the spec in `PRD.md`. The notes below are for anyone (human or agent) working
-in this repository.
+This is currently a single-maintainer project. The notes below are for anyone working in
+this repository.
 
 ## Workflow
 
-1. Read `CLAUDE.md`, `PROGRESS.md` and `BLOCKED.md` before starting; open PRD sections
-   by number rather than reading the whole spec.
+1. Read `docs/architecture.md` and the ADRs in `docs/adr/` before changing a module.
 2. One branch per milestone: `m<N>-<slug>`, cut from `main`.
 3. One task ≈ one commit, using [Conventional Commits](https://www.conventionalcommits.org/).
-4. Every new source file starts with the PRD §8 header comment (what it does, where it
-   fits).
+4. Every new source file starts with a 1-3 sentence header comment (what it does, where it
+   fits); `scripts/check_headers.py` enforces it.
 5. Tests ship with the code that needs them. Never skip or `xfail` a test, never mock
    the unit under test, never hardcode an expected eval answer, and never relax a gate
    without an ADR in `docs/adr/`.

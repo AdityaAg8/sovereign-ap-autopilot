@@ -20,10 +20,10 @@ jobs:
     name: python
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -39,8 +39,14 @@ jobs:
       - name: mypy --strict
         run: uv run mypy
 
-      - name: pytest (unit, no GPU)
-        run: uv run pytest -m "not gpu"
+      - name: pytest (unit; default selection excludes gpu, integration, artifacts, external)
+        run: uv run pytest
+
+      - name: fetch pinned PINT AE/SchXslt bundles
+        run: uv run python -m evals.pint_ae.fetch
+
+      - name: "pytest (artifacts: pinned PINT AE/SchXslt bundles)"
+        run: uv run pytest -m artifacts
 
   web:
     name: web
@@ -49,15 +55,15 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Install Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -79,10 +85,10 @@ jobs:
     name: headers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -96,7 +102,7 @@ jobs:
     name: gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

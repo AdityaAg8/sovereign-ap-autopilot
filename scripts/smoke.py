@@ -1,17 +1,23 @@
 """Smoke-tests every runtime model pinned in infra/models.lock.json (PRD §4, §10 M0.5): the
-extract/arbitrate LLMs through llama-swap's OpenAI-compatible API, and the embedding/guard/
-parse models directly through transformers. For each it loads the model, samples peak GPU
-memory every 200 ms, times one request, and checks the PRD §4 extraction-call rules (JSON
-schema output, one tool call, logprobs, thinking disabled) or embedding dimensions. Writes
-reports/smoke.md and exits nonzero if any runtime model fails; an unreachable model or a
-missing optional dependency (transformers/torch are not pinned in pyproject.toml -- they
-belong to a later milestone's `ml/` work) is reported as a FAIL with a reason, never skipped.
+extract/arbitrate LLMs through llama-swap's OpenAI-compatible API, the guard/parse models
+directly through transformers, and the two embedding models through sentence-transformers
+(both ship in that format, not a plain `AutoModel` checkpoint). For each it loads the model,
+samples peak GPU memory every 200 ms, times one request, and checks the PRD §4 extraction-
+call rules (JSON schema output, one tool call, logprobs, thinking disabled) or embedding
+dimensions. Writes reports/smoke.md and exits nonzero if any runtime model fails; an
+unreachable model or a missing optional dependency (torch/transformers/sentence-transformers
+are not pinned in pyproject.toml -- they belong to a later milestone's `ml/` work, and are
+installed instead in infra/docker/toolbox/Dockerfile's image) is reported as a FAIL with a
+reason, never skipped. Intended to run inside that `toolbox` container (`make smoke`), which
+has a real GPU and those packages; running it directly on the host is also safe, it just
+reports every transformers-backed model as FAIL with "not installed".
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import io
 import json
 import os
@@ -23,9 +29,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOCK = REPO_ROOT / "infra" / "models.lock.json"
@@ -187,9 +196,10 @@ class VramSampler:
 # --- synthetic invoice image (PIL, in-script -- no fixture files) -----------------------
 
 
-def build_invoice_png_data_url() -> str:
-    """Renders a tiny synthetic invoice as a PNG and returns it as a base64 data URL, matching
-    apx.llm.interfaces.ImagePart's `data:image/(png|jpeg);base64,...` pattern."""
+def build_invoice_image() -> Image.Image:
+    """Renders a tiny synthetic invoice as a PIL image -- no fixture files. Shared by the
+    llama-swap VLM checks (as a data URL) and the parse/page-similarity transformers checks
+    (as a PIL image), so every VLM sees the same input."""
     from PIL import Image, ImageDraw
 
     image = Image.new("RGB", (400, 300), "white")
@@ -197,6 +207,13 @@ def build_invoice_png_data_url() -> str:
     draw.text((10, 10), "INVOICE", fill="black")
     draw.text((10, 40), "Invoice No: INV-0001", fill="black")
     draw.text((10, 60), "Total: AED 105.00", fill="black")
+    return image
+
+
+def build_invoice_png_data_url(image: Image.Image | None = None) -> str:
+    """Encodes `build_invoice_image()` (or a given image) as a base64 PNG data URL, matching
+    apx.llm.interfaces.ImagePart's `data:image/(png|jpeg);base64,...` pattern."""
+    image = image if image is not None else build_invoice_image()
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
@@ -301,8 +318,12 @@ def run_llama_swap_model(
     with VramSampler() as sampler:
         start = time.monotonic()
         try:
+            # 320s, not httpx's default: comfortably above infra/llama-swap.yaml's own
+            # healthCheckTimeout (300s) -- a cold model swap loads a ~7 GB GGUF + mmproj from
+            # `models/`, a bind mount over NTFS (ADR-0006's addendum), which measured 60-120s+
+            # run to run.
             response = client.post(
-                f"{base_url}/v1/chat/completions", json=structured_payload, timeout=60.0
+                f"{base_url}/v1/chat/completions", json=structured_payload, timeout=320.0
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
@@ -324,13 +345,14 @@ def run_llama_swap_model(
             }
             try:
                 tool_response = client.post(
-                    f"{base_url}/v1/chat/completions", json=tool_payload, timeout=60.0
+                    f"{base_url}/v1/chat/completions", json=tool_payload, timeout=320.0
                 )
                 tool_response.raise_for_status()
                 checks.append(evaluate_tool_call_response(tool_response.json()))
             except httpx.HTTPError as exc:
                 checks.append(CheckResult("tool_call", False, f"{type(exc).__name__}: {exc}"))
 
+    _unload_llama_swap_model(client, base_url, served_name)
     return ModelResult(
         intent=intent,
         served_name=served_name,
@@ -342,76 +364,50 @@ def run_llama_swap_model(
     )
 
 
-# --- transformers checks (embedding/guard/parse models, loaded directly) ----------------
+def _unload_llama_swap_model(client: httpx.Client, base_url: str, served_name: str) -> None:
+    """Explicitly unloads `served_name` after its check (llama-swap's admin API, `POST
+    /api/models/unload/{id}`) instead of waiting out infra/llama-swap.yaml's 600s `ttl`. Two
+    models in the same exclusive group (`extractor-a`/`extractor-b`) get reloaded together, so
+    unloading one costs the next check a redundant group reload -- acceptable here, since a
+    smoke run isn't latency-sensitive. Without this, a later stage's VRAM sample would include
+    this model's memory too (PyTorch's cache isn't the only thing that lingers -- llama-swap's
+    own subprocess does too), which is exactly the PRD C2 per-stage budget this script proves.
+    Best-effort: a failed unload just means the next check's peak might run a bit high, not a
+    reason to fail this one."""
+    with contextlib.suppress(httpx.HTTPError):
+        client.post(f"{base_url}/api/models/unload/{served_name}", timeout=30.0)
 
 
-def run_transformers_embedding_model(
-    *, intent: str, stage: str, repo_dir: Path, texts: Sequence[str]
-) -> ModelResult:
-    """Loads an embedding model with transformers and checks that its output dimension
-    matches the model's own config (never a hardcoded number). `local_files_only=True`
-    always, so this makes no network call even if transformers/torch happen to be
-    installed."""
-    checks: list[CheckResult] = []
-    with VramSampler() as sampler:
-        start = time.monotonic()
-        reachable, checks = _load_and_probe_embedding(repo_dir, texts)
-        latency_ms = (time.monotonic() - start) * 1000
-    return ModelResult(
-        intent=intent,
-        served_name=intent,
-        stage=stage,
-        reachable=reachable,
-        checks=tuple(checks),
-        peak_vram_gb=sampler.peak_gb,
-        latency_ms=latency_ms,
-    )
+# --- transformers checks (guard/parse/embedding models, loaded directly) ----------------
 
 
-def _load_and_probe_embedding(
-    repo_dir: Path, texts: Sequence[str]
-) -> tuple[bool, list[CheckResult]]:
+def _empty_cuda_cache() -> None:
+    """Returns PyTorch's cached-but-unused GPU memory to the driver once a check's model has
+    gone out of scope. Without this, nvidia-smi keeps counting a freed model against this
+    process for the rest of the run (PyTorch's caching allocator never gives memory back on
+    its own) -- every later check's peak would include every earlier one's model too, and
+    this toolbox process would keep competing with llama-swap for the one shared GPU (PRD C2)
+    long after each check is actually done with it."""
     try:
-        import torch  # type: ignore[import-not-found]
-        from transformers import AutoModel, AutoTokenizer  # type: ignore[import-not-found]
-    except ImportError as exc:
-        return False, [CheckResult("load", False, f"transformers not installed: {exc}")]
+        import torch
+    except ImportError:
+        return
+    import gc
 
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
-            str(repo_dir), local_files_only=True, trust_remote_code=True
-        )
-        model = AutoModel.from_pretrained(
-            str(repo_dir), local_files_only=True, trust_remote_code=True
-        )
-    except OSError as exc:
-        return False, [CheckResult("load", False, f"could not load model from {repo_dir}: {exc}")]
-
-    checks = [CheckResult("load", True)]
-    with torch.no_grad():
-        inputs = tokenizer(list(texts), return_tensors="pt", padding=True, truncation=True)
-        outputs = model(**inputs)
-    embeddings = outputs.last_hidden_state.mean(dim=1)
-    expected_dim = getattr(model.config, "hidden_size", None)
-    actual_dim = int(embeddings.shape[-1])
-    dims_ok = expected_dim is not None and actual_dim == expected_dim
-    checks.append(
-        CheckResult(
-            "embeddings",
-            dims_ok,
-            "" if dims_ok else f"got dim {actual_dim}, expected {expected_dim}",
-        )
-    )
-    return True, checks
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def run_transformers_load_only_model(*, intent: str, stage: str, repo_dir: Path) -> ModelResult:
-    """Load + one forward pass for models with no llama-swap or embedding-dim check defined
-    yet (the guard base checkpoint and the parse VLM) -- `local_files_only=True` always."""
+    """Load + one forward pass for the injection guard base checkpoint: a plain transformers
+    encoder (`AutoModel`/`AutoTokenizer`), `local_files_only=True` always so this makes no
+    network call."""
     with VramSampler() as sampler:
         start = time.monotonic()
         reachable, checks = _load_and_probe_generic(repo_dir)
         latency_ms = (time.monotonic() - start) * 1000
+    _empty_cuda_cache()
     return ModelResult(
         intent=intent,
         served_name=intent,
@@ -435,7 +431,7 @@ def _load_and_probe_generic(repo_dir: Path) -> tuple[bool, list[CheckResult]]:
             str(repo_dir), local_files_only=True, trust_remote_code=True
         )
         model = AutoModel.from_pretrained(
-            str(repo_dir), local_files_only=True, trust_remote_code=True
+            str(repo_dir), local_files_only=True, trust_remote_code=True, dtype="auto"
         )
         with torch.no_grad():
             inputs = tokenizer("Sample invoice text.", return_tensors="pt")
@@ -443,6 +439,149 @@ def _load_and_probe_generic(repo_dir: Path) -> tuple[bool, list[CheckResult]]:
     except (OSError, ValueError) as exc:
         return False, [CheckResult("load", False, f"could not load model from {repo_dir}: {exc}")]
     return True, [CheckResult("load", True)]
+
+
+def run_transformers_vlm_model(
+    *, intent: str, stage: str, repo_dir: Path, invoice_image: Image.Image
+) -> ModelResult:
+    """Loads the parse VLM (PaddleOCR-VL) and runs one short OCR generation on the same
+    synthetic invoice used for the llama-swap VLM checks. No `trust_remote_code`: transformers
+    now has `paddleocr_vl` as a native model type, and its own implementation is what actually
+    gets used regardless -- passing the checkpoint's local `configuration_paddleocr_vl.py`/
+    `modeling_paddleocr_vl.py` as well produces a config/model class mismatch (`PaddleOCRVLConfig
+    object has no attribute 'text_config'` or `...'rope_parameters'`, depending on transformers
+    version). `repo_dir` is always a local path, never a hub id, so this makes no network call
+    either way."""
+    with VramSampler() as sampler:
+        start = time.monotonic()
+        reachable, checks = _load_and_probe_vlm(repo_dir, invoice_image)
+        latency_ms = (time.monotonic() - start) * 1000
+    _empty_cuda_cache()
+    return ModelResult(
+        intent=intent,
+        served_name=intent,
+        stage=stage,
+        reachable=reachable,
+        checks=tuple(checks),
+        peak_vram_gb=sampler.peak_gb,
+        latency_ms=latency_ms,
+    )
+
+
+def _load_and_probe_vlm(
+    repo_dir: Path, invoice_image: Image.Image
+) -> tuple[bool, list[CheckResult]]:
+    try:
+        import torch
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+    except ImportError as exc:
+        return False, [CheckResult("load", False, f"transformers not installed: {exc}")]
+
+    try:
+        processor = AutoProcessor.from_pretrained(str(repo_dir), local_files_only=True)
+        model = AutoModelForImageTextToText.from_pretrained(
+            str(repo_dir), local_files_only=True, dtype="auto"
+        )
+        if torch.cuda.is_available():
+            model = model.to("cuda")
+        model.eval()
+    except (OSError, ValueError, AttributeError) as exc:
+        return False, [CheckResult("load", False, f"could not load model from {repo_dir}: {exc}")]
+
+    checks = [CheckResult("load", True)]
+    try:
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": invoice_image},
+                    {"type": "text", "text": "OCR:"},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=32)
+        text = processor.decode(
+            outputs[0][inputs["input_ids"].shape[-1] :], skip_special_tokens=True
+        )
+        ocr_ok = bool(text.strip())
+        checks.append(CheckResult("ocr_output", ocr_ok, "" if ocr_ok else "empty OCR output"))
+    except (RuntimeError, ValueError, KeyError, IndexError) as exc:
+        checks.append(CheckResult("ocr_output", False, f"{type(exc).__name__}: {exc}"))
+
+    return True, checks
+
+
+def run_sentence_transformer_model(
+    *, intent: str, stage: str, repo_dir: Path, inputs: Sequence[str | Image.Image]
+) -> ModelResult:
+    """Loads a sentence-transformers-formatted embedding model (Qwen3-Embedding for
+    `text_embeddings`, Qwen3-VL-Embedding for `page_similarity` -- both ship `modules.json` +
+    `1_Pooling/`, i.e. the SentenceTransformer format, not a plain `AutoModel` checkpoint) and
+    checks that `.encode()` returns vectors of the model's own declared dimension, never a
+    hardcoded number. `local_files_only=True` always, so a nonexistent `repo_dir` fails
+    locally instead of falling back to a Hub lookup."""
+    with VramSampler() as sampler:
+        start = time.monotonic()
+        reachable, checks = _load_and_probe_sentence_transformer(repo_dir, inputs)
+        latency_ms = (time.monotonic() - start) * 1000
+    _empty_cuda_cache()
+    return ModelResult(
+        intent=intent,
+        served_name=intent,
+        stage=stage,
+        reachable=reachable,
+        checks=tuple(checks),
+        peak_vram_gb=sampler.peak_gb,
+        latency_ms=latency_ms,
+    )
+
+
+def _load_and_probe_sentence_transformer(
+    repo_dir: Path, inputs: Sequence[str | Image.Image]
+) -> tuple[bool, list[CheckResult]]:
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError as exc:
+        return False, [CheckResult("load", False, f"sentence-transformers not installed: {exc}")]
+
+    try:
+        model = SentenceTransformer(
+            str(repo_dir),
+            local_files_only=True,
+            trust_remote_code=True,
+            model_kwargs={"dtype": "auto"},
+        )
+    except (OSError, ValueError) as exc:
+        return False, [CheckResult("load", False, f"could not load model from {repo_dir}: {exc}")]
+
+    checks = [CheckResult("load", True)]
+    try:
+        embeddings = model.encode(list(inputs))
+        # sentence-transformers renamed this method (`get_embedding_dimension`); fall back to
+        # the older name so this keeps working on any >=3.3 install, not just the newest.
+        get_dim = getattr(model, "get_embedding_dimension", model.get_sentence_embedding_dimension)
+        expected_dim = get_dim()
+        actual_dim = int(embeddings.shape[-1])
+        dims_ok = expected_dim is not None and actual_dim == expected_dim
+        checks.append(
+            CheckResult(
+                "embeddings",
+                dims_ok,
+                "" if dims_ok else f"got dim {actual_dim}, expected {expected_dim}",
+            )
+        )
+    except (RuntimeError, ValueError) as exc:
+        checks.append(CheckResult("embeddings", False, f"{type(exc).__name__}: {exc}"))
+
+    return True, checks
 
 
 # --- report -------------------------------------------------------------------------------
@@ -505,12 +644,14 @@ def load_runtime_models(lock_path: Path) -> list[dict[str, Any]]:
 
 
 def run_all(lock_path: Path, models_dir: Path, base_url: str) -> list[ModelResult]:
-    invoice_image = build_invoice_png_data_url()
+    invoice_image = build_invoice_image()
+    invoice_image_data_url = build_invoice_png_data_url(invoice_image)
     results: list[ModelResult] = []
     with httpx.Client() as client:
         for model in load_runtime_models(lock_path):
             intent = model["intent"]
             stage = MODEL_STAGE.get(intent, model.get("stage", intent))
+            repo_dir = models_dir / model["repo_id"]
             if intent in LLAMA_SWAP_SERVED_NAME:
                 result = run_llama_swap_model(
                     client,
@@ -519,18 +660,26 @@ def run_all(lock_path: Path, models_dir: Path, base_url: str) -> list[ModelResul
                     served_name=LLAMA_SWAP_SERVED_NAME[intent],
                     stage=stage,
                     include_tool_call=(intent == "extractor_a"),
-                    invoice_image_data_url=invoice_image,
+                    invoice_image_data_url=invoice_image_data_url,
                 )
-            elif intent in ("text_embeddings", "page_similarity"):
-                result = run_transformers_embedding_model(
+            elif intent == "parse":
+                result = run_transformers_vlm_model(
+                    intent=intent, stage=stage, repo_dir=repo_dir, invoice_image=invoice_image
+                )
+            elif intent == "text_embeddings":
+                result = run_sentence_transformer_model(
                     intent=intent,
                     stage=stage,
-                    repo_dir=models_dir / model["repo_id"],
-                    texts=["Invoice total AED 105.00, invoice number INV-0001."],
+                    repo_dir=repo_dir,
+                    inputs=["Invoice total AED 105.00, invoice number INV-0001."],
+                )
+            elif intent == "page_similarity":
+                result = run_sentence_transformer_model(
+                    intent=intent, stage=stage, repo_dir=repo_dir, inputs=[invoice_image]
                 )
             else:
                 result = run_transformers_load_only_model(
-                    intent=intent, stage=stage, repo_dir=models_dir / model["repo_id"]
+                    intent=intent, stage=stage, repo_dir=repo_dir
                 )
             print(f"{'PASS' if result.passed else 'FAIL'} {intent} ({stage})", flush=True)
             results.append(result)

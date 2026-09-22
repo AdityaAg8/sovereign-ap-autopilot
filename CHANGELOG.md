@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M1 Evaluation harness: dataset fetchers + manifest (FATURA, ExtractBench short, AgentDojo; DocILE deferred without token), fixed sha256 splits + leakage test, scorers (DocILE KILE/LIR, FATURA, UAE EN/AR, ExtractBench via the official framework, perf), pinned PINT AE 1.0.4 schematron validator, `evals.run` CLI, scoreboard + README sync. Infra: localhost-only gateway, Linux CUDA toolbox, llama-swap re-pinned, live smoke 7/7 PASS, no-egress test.
 - M0 Foundations: preflight (`scripts/preflight.sh`), architecture + ADR-0001..0006, typed `apx` interface stubs enforcing I1/I2, Compose stack (internal app network), HF-resolved `infra/models.lock.json` + `make models`, `make smoke` harness, header checker, CI (ruff, mypy, pytest, web, headers, gitleaks), `make verify-m0`.
 - Repository scaffold (PRD §7): `apx/` subpackages, `web/` Next.js app, uv project,
   Makefile, `.github/` templates, pre-commit config, and root project files (M0.2).

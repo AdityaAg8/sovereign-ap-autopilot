@@ -43,3 +43,39 @@ Option 2 is host-specific and not reproducible in `make fresh-clone`; option 3 a
 - Integration test (`tests/integration/test_no_egress.py`): from the api and worker containers,
   DNS resolution and TCP connect to a public host (for example `1.1.1.1:443`, `huggingface.co`)
   must fail; connect to llama-swap and postgres must succeed. Part of `verify-m0` and M11 audit.
+
+## Amendment (2026-09-22): `gateway` service and the `edge` network
+
+`internal: true` turned out to mean more than "no egress": Docker also never sets up host
+port publishing for a container whose only network is internal (`docker port` shows nothing,
+`curl 127.0.0.1:PORT` gets connection refused), regardless of a service's own `ports:` list.
+That's the opposite of this ADR's original claim ("Published ports still work: Docker
+publishes ports via the host's docker-proxy regardless of `internal`") -- verified wrong
+empirically on this host, not just in theory. Host tools and a browser had no way to reach
+llama-swap, Phoenix, MLflow or Temporal's UI.
+
+**Decision:** add one more container, `gateway` (static nginx, `infra/docker/gateway/`),
+that joins both `app` and a new network, `edge` (`internal: false`). `gateway` is the *only*
+container on `edge`, and it publishes ports to `127.0.0.1` only (never `0.0.0.0`). It proxies:
+llama-swap (8080), Phoenix (6006), MLflow (5000), Temporal's Web UI (8233), and Postgres
+(5432, a raw TCP passthrough via nginx's `stream` module -- Postgres isn't HTTP) for local
+dev tools. Every other service dropped its now-dead `ports:` entries. `gateway` runs no
+application code: its nginx config is a fixed, read-only set of `proxy_pass` targets with no
+client-controlled routing, so there is no way to make it reach anything other than those five
+named upstreams.
+
+This does change the trust boundary slightly: because `edge` is non-internal, `gateway`
+itself *does* have outbound routing to the internet (confirmed: `wget http://1.1.1.1` from
+inside the `gateway` container succeeds) -- a non-internal network can't be inbound-only.
+That is accepted, not a gap, for two reasons: `gateway` runs no application code that could
+be induced to fetch or exfiltrate anything, and its fixed nginx config cannot be pointed at
+an arbitrary host by a client request. The C1 no-egress guarantee this ADR proves is
+therefore scoped to the containers that actually handle invoice data or call models --
+**api, worker, llama-swap, toolbox** (`tests/integration/test_no_egress.py`) -- not `gateway`,
+which is checked differently: proven to reach only its five declared proxy targets.
+
+Also added: `toolbox` (profile `dev`, `infra/docker/toolbox/`), a Linux Python 3.12 + CUDA
+torch/transformers container on `app` only (no `edge`), used by `make smoke` and later
+evals/training. It exists because the Windows host blocks native DLLs from these wheels
+under Smart App Control (ADR-0006's addendum); it carries the same no-egress guarantee as
+llama-swap, proven by the same integration test.

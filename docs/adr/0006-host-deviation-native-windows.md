@@ -48,3 +48,17 @@ Option 1, keeping the intent of C3.
 - M0.4/M0.5: `make up` healthy and `make smoke` passes on this host.
 - `make fresh-clone` (M10/M12) passes on this host; CI (Linux runners) proves portability back
   to the PRD's Linux target.
+
+## Addendum (2026-09-22): Windows Smart App Control
+
+Smart App Control is On on the dev host and blocks native DLLs from wheels with no reputation
+("An Application Control policy has blocked this file"). Mitigation: `[tool.uv]
+constraint-dependencies` pins numpy, scipy, pandas, scikit-learn and pyarrow to builds already
+trusted on the host. CI runs on Linux and is unaffected. New native dependencies (torch, paddle,
+llama.cpp tooling) may need the same treatment or must run inside Docker; turning Smart App Control
+off is a human decision (BLOCKED.md `[host:smart-app-control]`).
+
+Verified on the host (2026-09-22): sqlalchemy 2.0, alembic, asyncpg, temporalio, fastapi,
+pdfplumber, pypdfium2, imagehash and opencv-python-headless import fine; `psycopg[binary]` and
+`psycopg2-binary` are blocked. Decision: asyncpg is the only Postgres driver (SQLAlchemy async
+engine, Alembic via the async template) on the host and in containers alike.
