@@ -456,6 +456,33 @@ class AuditLog(Base):
     hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
 
 
+class AuditAnchor(Base):
+    """Append-only checkpoint of the `audit_log` chain's head at a point in time (mirrors
+    `apx.audit.anchor.AuditAnchorRecord`). Its own independent hash chain (`prev_anchor_hash`
+    / `anchor_hash`), combined with a copy kept outside this database, lets
+    `apx.audit.anchor.verify_anchors` detect tail truncation and whole-chain rewrites that
+    `audit_log`'s internal hash chain alone cannot see (PRD §6.2 I4, §6.4, §10 M10.4).
+    `db/migrations` attaches the same append-only trigger as `audit_log`."""
+
+    __tablename__ = "audit_anchor"
+    __table_args__ = (
+        CheckConstraint(f"last_hash ~ '{SHA256_PATTERN}'", name="last_hash_is_sha256"),
+        CheckConstraint(
+            f"prev_anchor_hash ~ '{SHA256_PATTERN}'", name="prev_anchor_hash_is_sha256"
+        ),
+        CheckConstraint(f"anchor_hash ~ '{SHA256_PATTERN}'", name="anchor_hash_is_sha256"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()"), index=True
+    )
+    last_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    prev_anchor_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    anchor_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+
+
 class LlmCall(Base):
     """Telemetry for one LLM call, keyed by `trace_id` (OTel span) for the M10 dashboard."""
 

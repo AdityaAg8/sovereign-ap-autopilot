@@ -79,3 +79,10 @@ class SegregationOfDutiesError(PolicyDeniedError):
 
 class AuditChainError(ApxError):
     """Audit chain append failed or verification found a broken link (I4)."""
+
+
+class AuditUnavailableError(ApxError):
+    """The audit chain or its anchors could not be read or written -- a database connectivity
+    failure, a failed query, or a filesystem error on the external anchor file. Distinct from
+    `AuditChainError`: this means verification never completed, not that it completed and
+    found tampering (I4, §10 M10.4's could-not-run/broken exit-code distinction)."""

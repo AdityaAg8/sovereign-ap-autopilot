@@ -26,7 +26,9 @@ e-invoices on one 12 GB laptop GPU, with no outbound network at runtime. Source 
 | `apx/workflows` | `interfaces.py` | `InvoiceWorkflow` statuses, step names, activities |
 
 Import direction (no cycles): `common` has no apx imports; `llm`, `parse`, `scan`, `validate`,
-`fraud`, `audit`, `einvoice` import only `common`; `extract` adds `llm`, `parse`; `trust` adds
+`fraud`, `audit`, `einvoice` import only `common` (plus the `db` infrastructure layer where a
+module ships its own persistence adapter, e.g. `audit`'s Postgres chain writer -- never another
+domain module); `extract` adds `llm`, `parse`; `trust` adds
 `extract`; `policy` adds `trust`, `validate`, `fraud`, `scan`; `asp_mock` adds `einvoice`;
 `agent` adds `llm`, `policy`; `workflows` imports the pipeline modules; `api` adds `workflows`.
 

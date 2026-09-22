@@ -1,9 +1,9 @@
 """Integration test for `db/migrations` against a real, throwaway Postgres container (PRD §10
-M5.1): `alembic upgrade head` then `downgrade base` must be clean, the `audit_log`
-append-only trigger (I4) must actually reject UPDATE/DELETE, and the migrated schema must not
-have drifted from `apx/db/models.py` (see `db/migrations/README`). Marked `integration` (needs
-Docker), so it is excluded from the default `make test`/CI selection and runs via
-`pytest -m integration`.
+M5.1): `alembic upgrade head` then `downgrade base` must be clean, the `audit_log` and
+`audit_anchor` append-only triggers (I4) must actually reject UPDATE/DELETE, and the migrated
+schema must not have drifted from `apx/db/models.py` (see `db/migrations/README`). Marked
+`integration` (needs Docker), so it is excluded from the default `make test`/CI selection and
+runs via `pytest -m integration`.
 """
 
 from __future__ import annotations
@@ -58,6 +58,7 @@ EXPECTED_TABLES = {
     "approvals",
     "proposals",
     "audit_log",
+    "audit_anchor",
     "llm_calls",
     "idempotency_keys",
     "labels",
@@ -191,6 +192,42 @@ async def _assert_audit_log_is_append_only() -> None:
         # The row must still be there, untouched, after both rejected attempts.
         actor = await conn.fetchval("SELECT actor FROM audit_log WHERE id = $1", row_id)
         assert actor == "tester"
+    finally:
+        await conn.close()
+
+
+def test_audit_anchor_rejects_update_and_delete(env_database_url: str) -> None:
+    """I4/§6.4: `audit_anchor` (M10.4 head anchoring) is append-only, same as `audit_log`; the
+    `0002_audit_anchor` trigger must reject UPDATE and DELETE at the database level."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "head")
+    try:
+        asyncio.run(_assert_audit_anchor_is_append_only())
+    finally:
+        command.downgrade(cfg, "base")
+
+
+async def _assert_audit_anchor_is_append_only() -> None:
+    conn = await asyncpg.connect(ASYNCPG_DSN)
+    try:
+        row_id = await conn.fetchval(
+            "INSERT INTO audit_anchor (last_id, last_hash, prev_anchor_hash, anchor_hash) "
+            "VALUES ($1, $2, $3, $4) RETURNING id",
+            1,
+            "1" * 64,
+            "0" * 64,
+            "2" * 64,
+        )
+
+        with pytest.raises(asyncpg.exceptions.RaiseError, match="append-only"):
+            await conn.execute("UPDATE audit_anchor SET last_id = 2 WHERE id = $1", row_id)
+
+        with pytest.raises(asyncpg.exceptions.RaiseError, match="append-only"):
+            await conn.execute("DELETE FROM audit_anchor WHERE id = $1", row_id)
+
+        # The row must still be there, untouched, after both rejected attempts.
+        last_id = await conn.fetchval("SELECT last_id FROM audit_anchor WHERE id = $1", row_id)
+        assert last_id == 1
     finally:
         await conn.close()
 

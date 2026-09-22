@@ -1,7 +1,8 @@
 """Static import-direction check for docs/architecture.md: the "common-only" apx packages
-(llm, parse, scan, validate, fraud, audit, einvoice) must import only apx.common among apx
-packages, never each other, and apx.common must not import any other apx package (PRD §8,
-M8.1 F2 regression: apx.fraud once imported apx.validate.interfaces)."""
+(llm, parse, scan, validate, fraud, audit, einvoice) must never import each other -- only
+apx.common and the apx.db infrastructure layer their persistence adapters need -- and
+apx.common must not import any other apx package (PRD §8, M8.1 F2 regression: apx.fraud once
+imported apx.validate.interfaces)."""
 
 from __future__ import annotations
 
@@ -29,8 +30,16 @@ def _apx_imports(py_file: Path) -> set[str]:
     return modules
 
 
+# apx.db is the shared infrastructure layer (SQLAlchemy models, session factory), not a sibling
+# domain module: a domain package's own persistence adapter may use it (e.g. apx.audit's
+# Postgres-backed chain writer). Domain-to-domain imports stay forbidden.
+_INFRASTRUCTURE_PACKAGES = ("apx.common", "apx.db")
+
+
 def _is_allowed(module: str, *, own_package: str) -> bool:
-    if module in ("apx", "apx.common") or module.startswith("apx.common."):
+    if module == "apx" or any(
+        module == infra or module.startswith(f"{infra}.") for infra in _INFRASTRUCTURE_PACKAGES
+    ):
         return True
     return module == f"apx.{own_package}" or module.startswith(f"apx.{own_package}.")
 
