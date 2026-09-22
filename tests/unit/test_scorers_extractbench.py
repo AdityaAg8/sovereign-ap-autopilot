@@ -18,6 +18,11 @@ import pytest
 from evals.adapters.extractbench_adapter import framework_available
 from evals.scorers.extractbench import ExtractBenchExample, score_extractbench
 
+MISSING_CLONE = (
+    "data/external/ExtractBench missing: run "
+    "`uv run python -m evals.datasets fetch --set extractbench`"
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_EXTERNAL_REPO = REPO_ROOT / "data" / "external" / "ExtractBench"
 SHORT_JSONL = REPO_ROOT / "data" / "extractbench" / "short.jsonl"
@@ -89,9 +94,10 @@ def test_framework_available_false_for_incomplete_clone(tmp_path: Path) -> None:
     assert framework_available(tmp_path) is False
 
 
+@pytest.mark.external
 def test_framework_available_true_for_the_real_pinned_clone() -> None:
     if not REAL_EXTERNAL_REPO.exists():
-        pytest.skip("data/external/ExtractBench not cloned in this environment")
+        pytest.fail(MISSING_CLONE)
     assert framework_available(REAL_EXTERNAL_REPO) is True
 
 
@@ -253,7 +259,7 @@ def _find_groundable_bool_field(examples: list[ExtractBenchExample]) -> ExtractB
 @pytest.mark.external
 def test_official_framework_scores_gold_against_itself_and_a_perturbation() -> None:
     if not framework_available(REAL_EXTERNAL_REPO):
-        pytest.skip("data/external/ExtractBench not cloned in this environment")
+        pytest.fail(MISSING_CLONE)
 
     rows = _load_rows(3)
     gold = [example for row in rows for example in _examples_for_row(row)]

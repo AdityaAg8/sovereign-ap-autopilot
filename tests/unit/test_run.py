@@ -39,6 +39,11 @@ from evals.run import (
 from evals.scorers.extractbench import score_extractbench
 from evals.splits import SplitsFile, empty_splits
 
+MISSING_CLONE = (
+    "data/external/ExtractBench missing: run "
+    "`uv run python -m evals.datasets fetch --set extractbench`"
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_EXTRACTBENCH_REPO = REPO_ROOT / "data" / "external" / "ExtractBench"
 REAL_EXTRACTBENCH_JSONL = REPO_ROOT / "data" / "extractbench" / "short.jsonl"
@@ -269,7 +274,7 @@ def test_gold_extractbench_examples_grounding_is_non_vacuous_via_official_framew
     1.0, and corrupting one predicted citation's page must lower it -- i.e. the metric is actually
     being computed from real citations, not vacuously passing because none were ever supplied."""
     if not framework_available(REAL_EXTRACTBENCH_REPO):
-        pytest.skip("data/external/ExtractBench not cloned in this environment")
+        pytest.fail(MISSING_CLONE)
     with REAL_EXTRACTBENCH_JSONL.open(encoding="utf-8") as handle:
         record = json.loads(handle.readline())
 
