@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+data/
+models/
+logs/
+*.gguf
+*.safetensors
