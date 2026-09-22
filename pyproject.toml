@@ -94,6 +94,10 @@ exclude = ["^web/"]
 module = "tests.*"
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = "pypdfium2.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
@@ -102,8 +106,9 @@ markers = [
     "integration: needs a live `make up` Docker Compose stack; excluded from CI (run locally)",
     "artifacts: needs pinned PINT AE/SchXslt bundles fetched by `python -m evals.pint_ae.fetch`",
     "external: needs a local external dataset/framework clone under data/external",
+    "perf: wall-clock performance budgets; run on an idle target host (`pytest -m perf`), not in CI",
 ]
-addopts = "-m 'not gpu and not integration and not artifacts and not external' --cov=apx --cov-branch --cov-report=term-missing"
+addopts = "-m 'not gpu and not integration and not artifacts and not external and not perf' --cov=apx --cov-branch --cov-report=term-missing"
 asyncio_mode = "auto"
 
 [tool.coverage.run]

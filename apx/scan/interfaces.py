@@ -9,7 +9,7 @@ from typing import Annotated, Protocol
 
 from pydantic import Field
 
-from apx.common.types import Frozen, Sha256Hex
+from apx.common.types import BBox, Frozen, Sha256Hex
 from apx.common.untrusted import UntrustedText
 
 Score = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -31,6 +31,9 @@ class ScanFlag(Frozen):
     page: int | None
     score: Score
     evidence: UntrustedText
+    bbox: BBox | None = None
+    """Location of the offending content, page-normalised (M6.2). None for document-level
+    findings that have no single position (metadata, attachments, JavaScript/OpenAction/AA)."""
 
 
 class ScanReport(Frozen):

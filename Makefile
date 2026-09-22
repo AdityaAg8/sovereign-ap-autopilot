@@ -49,7 +49,7 @@ typecheck:
 	cd $(WEB_DIR) && pnpm typecheck
 
 test:
-	uv run pytest -m "not gpu"
+	uv run pytest
 
 ## --- Not yet implemented (later milestones) -----------------------------------------
 
