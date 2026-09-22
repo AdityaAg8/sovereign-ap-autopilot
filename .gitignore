@@ -1,8 +1,45 @@
+# Secrets and local environment (PRD §8): never commit these.
 .env
 .env.*
 !.env.example
+
+# Generated data, model weights and logs (PRD §8): never commit these.
 data/
 models/
 logs/
 *.gguf
 *.safetensors
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+
+# Node / Next.js (web/)
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+web/next-env.d.ts
+node_modules/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated reports the tooling writes locally but that aren't the committed summaries
+reports/runs/
+.claude/state/

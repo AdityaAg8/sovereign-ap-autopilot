@@ -1,0 +1,152 @@
+# Model manifest for Sovereign AP Autopilot (PRD §4): every runtime and offline model,
+# by intent, with a Hugging Face repo id and filenames already located by searching the
+# Hub API (§10 M0.4 rule: never guess an id). scripts/resolve_models.py re-verifies each
+# entry's revision, per-file sha256/size and license live against the Hub and writes the
+# result to infra/models.lock.json; nothing here is trusted without that re-check.
+
+models:
+  - intent: parse
+    role: "Parse: document layout + OCR"
+    stage: parse
+    runtime: true
+    repo_id: PaddlePaddle/PaddleOCR-VL-1.6
+    revision: main
+    files: null # null = full repo snapshot; the doc-parser pipeline needs the whole checkpoint dir
+    vram_gb_est: 2.0
+    notes: "PRD §4: official PaddleOCR 3.x doc-parser pipeline (0.9B)."
+
+  - intent: injection_guard_base
+    role: "Scan: injection guard base checkpoint, fine-tuned into our guard in M6.4"
+    stage: scan
+    runtime: true
+    repo_id: answerdotai/ModernBERT-base
+    revision: main
+    files:
+      [config.json, model.safetensors, tokenizer.json, tokenizer_config.json, special_tokens_map.json]
+    vram_gb_est: 0.9
+    notes: >-
+      PRD §4 lists "ModernBERT-base fine-tune (ours)"; the fine-tuned weights are produced
+      in M6 and are not a Hub download. This entry pins the base checkpoint we fine-tune.
+
+  - intent: extractor_a
+    role: "Extract + exception agent + ops chat: Extractor A"
+    stage: extract
+    runtime: true
+    repo_id: unsloth/Qwen3.5-9B-GGUF
+    revision: main
+    files: [Qwen3.5-9B-UD-Q4_K_XL.gguf, mmproj-F16.gguf]
+    vram_gb_est: 7.0
+    notes: "PRD §4 exact spec: Qwen3.5-9B GGUF UD-Q4_K_XL + mmproj."
+
+  - intent: extractor_b_base
+    role: "Extract: Extractor B base (our LoRA is trained on top from M3.2)"
+    stage: extract
+    runtime: true
+    repo_id: unsloth/Qwen3.5-4B-GGUF
+    revision: main
+    files: [Qwen3.5-4B-Q4_K_M.gguf, mmproj-F16.gguf]
+    vram_gb_est: 3.0
+    notes: >-
+      PRD §4: Qwen3.5-4B GGUF Q4 + mmproj; "our LoRA" is trained later (M3.2+) and is not
+      a Hub download.
+
+  - intent: arbiter
+    role: "Arbitrate: Extractor A/B disagreement"
+    stage: arbitrate
+    runtime: true
+    repo_id: google/gemma-4-12B-it-qat-q4_0-gguf
+    revision: main
+    files: [gemma-4-12b-it-qat-q4_0.gguf, mmproj-gemma-4-12b-it-qat-q4_0.gguf]
+    vram_gb_est: 7.5
+    notes: "PRD §4: Gemma 4 12B, Google QAT Q4_0 GGUF + mmproj."
+
+  - intent: text_embeddings
+    role: "Fraud + ops chat: text embeddings"
+    stage: fraud
+    runtime: true
+    repo_id: Qwen/Qwen3-Embedding-0.6B
+    revision: main
+    files: null
+    vram_gb_est: 1.2
+    notes: "transformers safetensors checkpoint; loaded directly, not through llama-swap."
+
+  - intent: page_similarity
+    role: "Fraud: page/image similarity embeddings"
+    stage: fraud
+    runtime: true
+    repo_id: Qwen/Qwen3-VL-Embedding-2B
+    revision: main
+    files: null
+    vram_gb_est: 4.5
+    notes: "PRD §4: loaded alone in the fraud stage, not shared with other models."
+
+  - intent: bakeoff_challenger_unsloth
+    role: "Offline bake-off challenger (M3.4)"
+    stage: offline
+    runtime: false
+    repo_id: unsloth/Qwen3.8-27B-GGUF
+    revision: main
+    files: [Qwen3.8-27B-UD-IQ2_XXS.gguf, mmproj-F16.gguf]
+    vram_gb_est: null
+    notes: "PRD §4 offline table: Qwen3.8-27B UD-IQ2_XXS + mmproj."
+
+  - intent: bakeoff_challenger_empero
+    role: "Offline bake-off challenger (M3.4)"
+    stage: offline
+    runtime: false
+    repo_id: empero-ai/Qwen3.8-9B-Distill-GGUF
+    revision: main
+    files: [Qwen3.8-9B-Q4_K_M.gguf]
+    vram_gb_est: null
+    notes: "PRD §4 offline table: empero-ai Qwen3.8-9B-Distill Q4."
+
+  - intent: teacher
+    role: "Optional overnight teacher (M7.2, host RAM >= 32 GB only)"
+    stage: offline
+    runtime: false
+    repo_id: unsloth/Qwen3.8-27B-GGUF
+    revision: main
+    files: [Qwen3.8-27B-UD-Q4_K_XL.gguf, mmproj-F16.gguf]
+    vram_gb_est: null
+    notes: >-
+      PRD §4 offline table: Qwen3.8-27B UD-Q4_K_XL with CPU offload; same repo as
+      bakeoff_challenger_unsloth, a larger quant.
+
+  - intent: redteam_generator
+    role: "Adversarial invoice / attack generator (M6.3, M9.5)"
+    stage: offline
+    runtime: false
+    repo_id: HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive
+    revision: main
+    files:
+      [
+        Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf,
+        mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf,
+      ]
+    vram_gb_est: null
+    notes: >-
+      PRD §4 offline table. Generates adversarial training/eval data offline only; never
+      served at runtime.
+
+  - intent: guard_baseline_promptguard
+    role: "Guard baseline for the M6.4 comparison"
+    stage: offline
+    runtime: false
+    repo_id: meta-llama/Llama-Prompt-Guard-2-86M
+    revision: main
+    files: null
+    vram_gb_est: null
+    notes: >-
+      PRD C4: license is Meta's own "Llama 4 community"-style license (Hub tag license:other),
+      not Apache/MIT/BSD, so it is allowed only offline/eval (never runtime) and must be
+      listed in docs/licenses.md.
+
+  - intent: guard_baseline_modernbert
+    role: "Guard baseline for the M6.4 comparison"
+    stage: offline
+    runtime: false
+    repo_id: siberiancat/modernbert-prompt-injection
+    revision: main
+    files: null
+    vram_gb_est: null
+    notes: "PRD §4 offline table."

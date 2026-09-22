@@ -1,0 +1,175 @@
+# Local Docker Compose stack for Sovereign AP Autopilot (PRD §3 cross-cutting, §10 M0.4):
+# Postgres+pgvector, a Temporal dev server, Arize Phoenix, MLflow, llama-swap/CUDA and the
+# parse placeholder. Every runtime service sits on the `app` network, which has no egress
+# (PRD C1) -- model download (scripts/download_models.py, `make models`) runs on the host,
+# never through this file or the `app` network.
+name: sovereign-ap-autopilot
+
+networks:
+  # Runtime services only. `internal: true` means containers on this network cannot reach
+  # the internet; PRD C1's automated test proves that. Published ports still work: Docker
+  # publishes ports via the host's docker-proxy regardless of `internal`.
+  app:
+    internal: true
+  # Not attached to any service started by `make up`. Reserved for the optional
+  # containerized model-fetch path below (profile "tools"), kept off the runtime network.
+  egress:
+    internal: false
+
+volumes:
+  postgres-data:
+  phoenix-data:
+  mlflow-data:
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: apx
+      POSTGRES_PASSWORD: apx
+      POSTGRES_DB: apx
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [app]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apx -d apx"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  temporal:
+    # Bundles the `temporal` CLI's ephemeral dev server (in-memory SQLite, frontend gRPC
+    # on 7233, Web UI on 8233) -- PRD §3 calls for "Temporal dev server", not a production
+    # cluster with its own Postgres schema.
+    image: temporalio/temporal:1.9.1
+    restart: unless-stopped
+    entrypoint: ["temporal"]
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8233"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    networks: [app]
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  phoenix:
+    image: arizephoenix/phoenix:20.15.0
+    restart: unless-stopped
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    ports:
+      - "6006:6006" # UI + OTLP/HTTP
+      - "4317:4317" # OTLP/gRPC
+    volumes:
+      - phoenix-data:/mnt/data
+    networks: [app]
+    healthcheck:
+      # Official image is distroless (no shell/curl/wget): use its own venv's python.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://localhost:6006/healthz')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.7.0
+    restart: unless-stopped
+    working_dir: /mlflow
+    entrypoint: ["mlflow"]
+    command:
+      - server
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - sqlite:////mlflow/mlflow.db
+      - --artifacts-destination
+      - /mlflow/artifacts
+      - --serve-artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    networks: [app]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  llama-swap:
+    # CUDA build; models/ is downloaded and checksum-verified on the host by `make models`
+    # (never inside this network) and mounted read-only. See infra/llama-swap.yaml.
+    image: ghcr.io/mostlygeek/llama-swap:v93-cuda-b4879
+    restart: unless-stopped
+    command: ["-config", "/config/llama-swap.yaml", "-listen", ":8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./llama-swap.yaml:/config/llama-swap.yaml:ro
+      - ../models:/models:ro
+    networks: [app]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  parse:
+    # Placeholder for apx/parse (PRD §10 M0.4 note: "real service in M3.1"). Swap this
+    # build for the PaddleOCR 3.x GPU container once M3.1 lands; keep the GPU memory cap
+    # (e.g. PADDLE_GPU_MEM_FRACTION) on that image, not here, since this stub loads no model.
+    build:
+      context: ./docker/parse-placeholder
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks: [app]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # Optional containerized alternative to running scripts/download_models.py on the host
+  # (e.g. a CI runner without uv). Not started by `make up`/`docker compose up` -- only by
+  # `docker compose --profile tools run model-fetch`. Lives on `egress`, never `app`.
+  model-fetch:
+    profiles: [tools]
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /repo
+        RUN pip install --no-cache-dir huggingface_hub>=0.26 pyyaml>=6.0
+        COPY scripts/resolve_models.py scripts/download_models.py /repo/scripts/
+        COPY infra/models.yaml /repo/infra/models.yaml
+        ENTRYPOINT ["python", "scripts/download_models.py"]
+    networks: [egress]
+    volumes:
+      - ../models:/repo/models
+      - ../infra:/repo/infra

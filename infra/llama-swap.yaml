@@ -1,0 +1,76 @@
+# llama-swap config for the extract/arbitrate stages (PRD §4, §10 M0.4): one group per
+# pipeline stage so only the models a stage needs are resident on the single RTX 4080
+#12 GB at once (PRD C2). Model files are the exact ones pinned in infra/models.lock.json,
+# mounted read-only at /models by infra/compose.yaml -- llama-swap never fetches from the
+# network here (that already happened on the host via `make models`).
+#
+# Extraction-call policy (PRD §4 rule) -- thinking disabled, temperature <= 0.2, fixed
+# seed, JSON-schema output and logprobs -- is applied per request by apx/llm, not baked
+# into these startup flags (chat-template kwargs and response_format are request fields).
+
+healthCheckTimeout: 120
+logLevel: info
+
+macros:
+  "llama-server": >
+    /app/llama-server
+    --host 0.0.0.0
+    --port ${PORT}
+    --gpu-layers 999
+    --flash-attn
+    --jinja
+    --no-mmap
+    --seed 42
+    --temp 0.2
+
+models:
+  extractor-a:
+    name: "Extractor A (Qwen3.5-9B)"
+    description: "PRD §4: extraction, exception agent and ops chat (extract/agent stages)."
+    cmd: |
+      ${llama-server}
+      --model /models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf
+      --mmproj /models/unsloth/Qwen3.5-9B-GGUF/mmproj-F16.gguf
+      --ctx-size 8192
+    aliases: ["exception-agent", "ops-chat"]
+    checkEndpoint: /health
+    ttl: 600
+
+  extractor-b:
+    name: "Extractor B (Qwen3.5-4B + LoRA)"
+    description: "PRD §4: extraction stage, our LoRA lands in M3.2 as a --lora flag."
+    cmd: |
+      ${llama-server}
+      --model /models/unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf
+      --mmproj /models/unsloth/Qwen3.5-4B-GGUF/mmproj-F16.gguf
+      --ctx-size 8192
+    checkEndpoint: /health
+    ttl: 600
+
+  arbiter:
+    name: "Arbiter (Gemma 4 12B QAT)"
+    description: "PRD §4: arbitrates when Extractor A and B disagree."
+    cmd: |
+      ${llama-server}
+      --model /models/google/gemma-4-12B-it-qat-q4_0-gguf/gemma-4-12b-it-qat-q4_0.gguf
+      --mmproj /models/google/gemma-4-12B-it-qat-q4_0-gguf/mmproj-gemma-4-12b-it-qat-q4_0.gguf
+      --ctx-size 8192
+    checkEndpoint: /health
+    ttl: 600
+
+# Groups map 1:1 onto pipeline stages (PRD §3): extract needs A and B loaded together
+# (~10 GB, under the 11.5 GB budget); arbitrate only runs after extract disagrees, so it
+# evicts the extract group rather than sharing the GPU with it.
+routing:
+  router:
+    use: group
+    settings:
+      groups:
+        extract:
+          swap: false
+          exclusive: true
+          members: [extractor-a, extractor-b]
+        arbitrate:
+          swap: true
+          exclusive: true
+          members: [arbiter]

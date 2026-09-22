@@ -1,0 +1,53 @@
+# Pre-commit gate for Sovereign AP Autopilot: Python and web lint/format, secret
+# scanning, large-file guard and the PRD §8 header check (PRD §10 M0.2).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict (apx/ factory/ evals/)
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: eslint
+        name: eslint (web/)
+        entry: bash -c 'cd web && pnpm exec eslint .'
+        language: system
+        files: ^web/.*\.(ts|tsx|js|mjs)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier --check (web/)
+        entry: bash -c 'cd web && pnpm exec prettier --check .'
+        language: system
+        files: ^web/
+        pass_filenames: false
+
+      - id: check_headers
+        name: check PRD §8 file headers
+        entry: uv run python scripts/check_headers.py --all
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict

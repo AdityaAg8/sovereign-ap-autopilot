@@ -1,0 +1,15 @@
+# Normalize line endings to LF everywhere; keep true binaries untouched (PRD §10 M0.2).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.gguf binary
+*.safetensors binary

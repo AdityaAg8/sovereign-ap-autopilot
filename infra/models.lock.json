@@ -1,0 +1,621 @@
+{
+  "generated_at": "2026-09-22T11:02:42.572929+00:00",
+  "source_manifest": "infra/models.yaml",
+  "models": [
+    {
+      "intent": "parse",
+      "role": "Parse: document layout + OCR",
+      "stage": "parse",
+      "runtime": true,
+      "repo_id": "PaddlePaddle/PaddleOCR-VL-1.6",
+      "revision_requested": "main",
+      "revision_sha": "c5630abae1d940eafe0697512a0325494b02ab42",
+      "license": "apache-2.0",
+      "vram_gb_est": 2.0,
+      "notes": "PRD \u00a74: official PaddleOCR 3.x doc-parser pipeline (0.9B).",
+      "files": [
+        {
+          "filename": ".eval_results/real5_omnidocbench.yaml",
+          "size_bytes": 1418,
+          "sha256": null
+        },
+        {
+          "filename": ".gitattributes",
+          "size_bytes": 1570,
+          "sha256": null
+        },
+        {
+          "filename": "LICENSE",
+          "size_bytes": 11376,
+          "sha256": null
+        },
+        {
+          "filename": "README.md",
+          "size_bytes": 21424,
+          "sha256": null
+        },
+        {
+          "filename": "added_tokens.json",
+          "size_bytes": 25381,
+          "sha256": null
+        },
+        {
+          "filename": "chat_template.jinja",
+          "size_bytes": 1474,
+          "sha256": null
+        },
+        {
+          "filename": "config.json",
+          "size_bytes": 2059,
+          "sha256": null
+        },
+        {
+          "filename": "configuration_paddleocr_vl.py",
+          "size_bytes": 8104,
+          "sha256": null
+        },
+        {
+          "filename": "generation_config.json",
+          "size_bytes": 133,
+          "sha256": null
+        },
+        {
+          "filename": "image_processing_paddleocr_vl.py",
+          "size_bytes": 25032,
+          "sha256": null
+        },
+        {
+          "filename": "inference.yml",
+          "size_bytes": 43,
+          "sha256": null
+        },
+        {
+          "filename": "model.safetensors",
+          "size_bytes": 1917255968,
+          "sha256": "85a479d506a11e724e7285d395c551be69f41dbc16b6342d3cacfb189aed71db"
+        },
+        {
+          "filename": "modeling_paddleocr_vl.py",
+          "size_bytes": 103889,
+          "sha256": null
+        },
+        {
+          "filename": "preprocessor_config.json",
+          "size_bytes": 641,
+          "sha256": null
+        },
+        {
+          "filename": "processing_paddleocr_vl.py",
+          "size_bytes": 12253,
+          "sha256": null
+        },
+        {
+          "filename": "processor_config.json",
+          "size_bytes": 137,
+          "sha256": null
+        },
+        {
+          "filename": "special_tokens_map.json",
+          "size_bytes": 1151,
+          "sha256": null
+        },
+        {
+          "filename": "tokenizer.json",
+          "size_bytes": 11189060,
+          "sha256": "c8a215a59183d0d0781adc33bacd3ce6162716f7fd568fb30234a74d69803a7d"
+        },
+        {
+          "filename": "tokenizer.model",
+          "size_bytes": 1614363,
+          "sha256": "34ef7db83df785924fb83d7b887b6e822a031c56e15cff40aaf9b982988180df"
+        },
+        {
+          "filename": "tokenizer_config.json",
+          "size_bytes": 186947,
+          "sha256": null
+        }
+      ],
+      "total_size_bytes": 1930462423
+    },
+    {
+      "intent": "injection_guard_base",
+      "role": "Scan: injection guard base checkpoint, fine-tuned into our guard in M6.4",
+      "stage": "scan",
+      "runtime": true,
+      "repo_id": "answerdotai/ModernBERT-base",
+      "revision_requested": "main",
+      "revision_sha": "8949b909ec900327062f0ebf497f51aef5e6f0c8",
+      "license": "apache-2.0",
+      "vram_gb_est": 0.9,
+      "notes": "PRD \u00a74 lists \"ModernBERT-base fine-tune (ours)\"; the fine-tuned weights are produced in M6 and are not a Hub download. This entry pins the base checkpoint we fine-tune.",
+      "files": [
+        {
+          "filename": "config.json",
+          "size_bytes": 1193,
+          "sha256": null
+        },
+        {
+          "filename": "model.safetensors",
+          "size_bytes": 598635032,
+          "sha256": "340ac08b74eef0d7bdec2d7981a6a3d4249bf0e6aab60634b72ad02c2b8023a9"
+        },
+        {
+          "filename": "tokenizer.json",
+          "size_bytes": 2132967,
+          "sha256": null
+        },
+        {
+          "filename": "tokenizer_config.json",
+          "size_bytes": 20810,
+          "sha256": null
+        },
+        {
+          "filename": "special_tokens_map.json",
+          "size_bytes": 694,
+          "sha256": null
+        }
+      ],
+      "total_size_bytes": 600790696
+    },
+    {
+      "intent": "extractor_a",
+      "role": "Extract + exception agent + ops chat: Extractor A",
+      "stage": "extract",
+      "runtime": true,
+      "repo_id": "unsloth/Qwen3.5-9B-GGUF",
+      "revision_requested": "main",
+      "revision_sha": "3885219b6810b007914f3a7950a8d1b469d598a5",
+      "license": "apache-2.0",
+      "vram_gb_est": 7.0,
+      "notes": "PRD \u00a74 exact spec: Qwen3.5-9B GGUF UD-Q4_K_XL + mmproj.",
+      "files": [
+        {
+          "filename": "Qwen3.5-9B-UD-Q4_K_XL.gguf",
+          "size_bytes": 5966095584,
+          "sha256": "6f5d30666c2d8ae16a306e616d95341dcf3cc46810df84d7e6f5a7d1e4c1b293"
+        },
+        {
+          "filename": "mmproj-F16.gguf",
+          "size_bytes": 918166080,
+          "sha256": "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f"
+        }
+      ],
+      "total_size_bytes": 6884261664
+    },
+    {
+      "intent": "extractor_b_base",
+      "role": "Extract: Extractor B base (our LoRA is trained on top from M3.2)",
+      "stage": "extract",
+      "runtime": true,
+      "repo_id": "unsloth/Qwen3.5-4B-GGUF",
+      "revision_requested": "main",
+      "revision_sha": "e87f176479d0855a907a41277aca2f8ee7a09523",
+      "license": "apache-2.0",
+      "vram_gb_est": 3.0,
+      "notes": "PRD \u00a74: Qwen3.5-4B GGUF Q4 + mmproj; \"our LoRA\" is trained later (M3.2+) and is not a Hub download.",
+      "files": [
+        {
+          "filename": "Qwen3.5-4B-Q4_K_M.gguf",
+          "size_bytes": 2740937888,
+          "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+        },
+        {
+          "filename": "mmproj-F16.gguf",
+          "size_bytes": 672423616,
+          "sha256": "cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864"
+        }
+      ],
+      "total_size_bytes": 3413361504
+    },
+    {
+      "intent": "arbiter",
+      "role": "Arbitrate: Extractor A/B disagreement",
+      "stage": "arbitrate",
+      "runtime": true,
+      "repo_id": "google/gemma-4-12B-it-qat-q4_0-gguf",
+      "revision_requested": "main",
+      "revision_sha": "29d097773436b69ff9feafd636ab4cf873786537",
+      "license": "apache-2.0",
+      "vram_gb_est": 7.5,
+      "notes": "PRD \u00a74: Gemma 4 12B, Google QAT Q4_0 GGUF + mmproj.",
+      "files": [
+        {
+          "filename": "gemma-4-12b-it-qat-q4_0.gguf",
+          "size_bytes": 6975879296,
+          "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"
+        },
+        {
+          "filename": "mmproj-gemma-4-12b-it-qat-q4_0.gguf",
+          "size_bytes": 175115616,
+          "sha256": "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7"
+        }
+      ],
+      "total_size_bytes": 7150994912
+    },
+    {
+      "intent": "text_embeddings",
+      "role": "Fraud + ops chat: text embeddings",
+      "stage": "fraud",
+      "runtime": true,
+      "repo_id": "Qwen/Qwen3-Embedding-0.6B",
+      "revision_requested": "main",
+      "revision_sha": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "license": "apache-2.0",
+      "vram_gb_est": 1.2,
+      "notes": "transformers safetensors checkpoint; loaded directly, not through llama-swap.",
+      "files": [
+        {
+          "filename": ".gitattributes",
+          "size_bytes": 1570,
+          "sha256": null
+        },
+        {
+          "filename": "1_Pooling/config.json",
+          "size_bytes": 313,
+          "sha256": null
+        },
+        {
+          "filename": "README.md",
+          "size_bytes": 17237,
+          "sha256": null
+        },
+        {
+          "filename": "config.json",
+          "size_bytes": 727,
+          "sha256": null
+        },
+        {
+          "filename": "config_sentence_transformers.json",
+          "size_bytes": 215,
+          "sha256": null
+        },
+        {
+          "filename": "generation_config.json",
+          "size_bytes": 117,
+          "sha256": null
+        },
+        {
+          "filename": "merges.txt",
+          "size_bytes": 1671853,
+          "sha256": null
+        },
+        {
+          "filename": "model.safetensors",
+          "size_bytes": 1191586416,
+          "sha256": "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd"
+        },
+        {
+          "filename": "modules.json",
+          "size_bytes": 349,
+          "sha256": null
+        },
+        {
+          "filename": "tokenizer.json",
+          "size_bytes": 11423705,
+          "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a"
+        },
+        {
+          "filename": "tokenizer_config.json",
+          "size_bytes": 9706,
+          "sha256": null
+        },
+        {
+          "filename": "vocab.json",
+          "size_bytes": 2776833,
+          "sha256": null
+        }
+      ],
+      "total_size_bytes": 1207489041
+    },
+    {
+      "intent": "page_similarity",
+      "role": "Fraud: page/image similarity embeddings",
+      "stage": "fraud",
+      "runtime": true,
+      "repo_id": "Qwen/Qwen3-VL-Embedding-2B",
+      "revision_requested": "main",
+      "revision_sha": "9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda",
+      "license": "apache-2.0",
+      "vram_gb_est": 4.5,
+      "notes": "PRD \u00a74: loaded alone in the fraud stage, not shared with other models.",
+      "files": [
+        {
+          "filename": ".gitattributes",
+          "size_bytes": 1570,
+          "sha256": null
+        },
+        {
+          "filename": "1_Pooling/config.json",
+          "size_bytes": 96,
+          "sha256": null
+        },
+        {
+          "filename": "README.md",
+          "size_bytes": 24249,
+          "sha256": null
+        },
+        {
+          "filename": "added_tokens.json",
+          "size_bytes": 707,
+          "sha256": null
+        },
+        {
+          "filename": "chat_template.jinja",
+          "size_bytes": 5519,
+          "sha256": null
+        },
+        {
+          "filename": "config.json",
+          "size_bytes": 1570,
+          "sha256": null
+        },
+        {
+          "filename": "config_sentence_transformers.json",
+          "size_bytes": 238,
+          "sha256": null
+        },
+        {
+          "filename": "merges.txt",
+          "size_bytes": 1671853,
+          "sha256": null
+        },
+        {
+          "filename": "model.safetensors",
+          "size_bytes": 4255140312,
+          "sha256": "c73fa9caeddeb3ff831d46c085a7a5708343248ca777e90f2d486964464509c1"
+        },
+        {
+          "filename": "modules.json",
+          "size_bytes": 429,
+          "sha256": null
+        },
+        {
+          "filename": "preprocessor_config.json",
+          "size_bytes": 783,
+          "sha256": null
+        },
+        {
+          "filename": "scripts/qwen3_vl_embedding.py",
+          "size_bytes": 13258,
+          "sha256": null
+        },
+        {
+          "filename": "sentence_bert_config.json",
+          "size_bytes": 770,
+          "sha256": null
+        },
+        {
+          "filename": "special_tokens_map.json",
+          "size_bytes": 613,
+          "sha256": null
+        },
+        {
+          "filename": "tokenizer.json",
+          "size_bytes": 11423705,
+          "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a"
+        },
+        {
+          "filename": "tokenizer_config.json",
+          "size_bytes": 5404,
+          "sha256": null
+        },
+        {
+          "filename": "video_preprocessor_config.json",
+          "size_bytes": 817,
+          "sha256": null
+        },
+        {
+          "filename": "vocab.json",
+          "size_bytes": 2776833,
+          "sha256": null
+        }
+      ],
+      "total_size_bytes": 4271068726
+    },
+    {
+      "intent": "bakeoff_challenger_unsloth",
+      "role": "Offline bake-off challenger (M3.4)",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "unsloth/Qwen3.8-27B-GGUF",
+      "revision_requested": "main",
+      "revision_sha": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+      "license": "apache-2.0",
+      "vram_gb_est": null,
+      "notes": "PRD \u00a74 offline table: Qwen3.8-27B UD-IQ2_XXS + mmproj.",
+      "files": [
+        {
+          "filename": "Qwen3.8-27B-UD-IQ2_XXS.gguf",
+          "size_bytes": 7266070528,
+          "sha256": "e792d8fb3142fe6d9171876d6da0f71f05a71028718debc72dbec93ff645e67d"
+        },
+        {
+          "filename": "mmproj-F16.gguf",
+          "size_bytes": 927607488,
+          "sha256": "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+        }
+      ],
+      "total_size_bytes": 8193678016
+    },
+    {
+      "intent": "bakeoff_challenger_empero",
+      "role": "Offline bake-off challenger (M3.4)",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "empero-ai/Qwen3.8-9B-Distill-GGUF",
+      "revision_requested": "main",
+      "revision_sha": "760121cd70bb4c36b2b5ec58eb765e0df5987efe",
+      "license": "apache-2.0",
+      "vram_gb_est": null,
+      "notes": "PRD \u00a74 offline table: empero-ai Qwen3.8-9B-Distill Q4.",
+      "files": [
+        {
+          "filename": "Qwen3.8-9B-Q4_K_M.gguf",
+          "size_bytes": 5780090176,
+          "sha256": "df13d66021cef676f82be74053220fd75af6bf2a6a7fb77f5222ab9e50744a7a"
+        }
+      ],
+      "total_size_bytes": 5780090176
+    },
+    {
+      "intent": "teacher",
+      "role": "Optional overnight teacher (M7.2, host RAM >= 32 GB only)",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "unsloth/Qwen3.8-27B-GGUF",
+      "revision_requested": "main",
+      "revision_sha": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+      "license": "apache-2.0",
+      "vram_gb_est": null,
+      "notes": "PRD \u00a74 offline table: Qwen3.8-27B UD-Q4_K_XL with CPU offload; same repo as bakeoff_challenger_unsloth, a larger quant.",
+      "files": [
+        {
+          "filename": "Qwen3.8-27B-UD-Q4_K_XL.gguf",
+          "size_bytes": 17559178144,
+          "sha256": "3f227079003add2511437e5b1e94812e363385225bf6a9b47b0054a72bc8b01e"
+        },
+        {
+          "filename": "mmproj-F16.gguf",
+          "size_bytes": 927607488,
+          "sha256": "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+        }
+      ],
+      "total_size_bytes": 18486785632
+    },
+    {
+      "intent": "redteam_generator",
+      "role": "Adversarial invoice / attack generator (M6.3, M9.5)",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+      "revision_requested": "main",
+      "revision_sha": "0a41c68809d375475f954be12ba7c40efa56c2a9",
+      "license": "apache-2.0",
+      "vram_gb_est": null,
+      "notes": "PRD \u00a74 offline table. Generates adversarial training/eval data offline only; never served at runtime.",
+      "files": [
+        {
+          "filename": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+          "size_bytes": 5627044224,
+          "sha256": "2ca636d9e81d3d23ca9b60c234fe185d30ec082eeba69ce770fdb0c76559a4f5"
+        },
+        {
+          "filename": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+          "size_bytes": 921704448,
+          "sha256": "05f662501f8bd45607b079723a3e238a4e888fd085a10a53f4057a0e250f6934"
+        }
+      ],
+      "total_size_bytes": 6548748672
+    },
+    {
+      "intent": "guard_baseline_promptguard",
+      "role": "Guard baseline for the M6.4 comparison",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "meta-llama/Llama-Prompt-Guard-2-86M",
+      "revision_requested": "main",
+      "revision_sha": "a8ded8e697ce7c355e395a0df51f94adb4a2fd27",
+      "license": "other",
+      "vram_gb_est": null,
+      "notes": "PRD C4: license is Meta's own \"Llama 4 community\"-style license (Hub tag license:other), not Apache/MIT/BSD, so it is allowed only offline/eval (never runtime) and must be listed in docs/licenses.md.",
+      "files": [
+        {
+          "filename": ".gitattributes",
+          "size_bytes": 1570,
+          "sha256": null
+        },
+        {
+          "filename": "LICENSE",
+          "size_bytes": 7554,
+          "sha256": null
+        },
+        {
+          "filename": "README.md",
+          "size_bytes": 19046,
+          "sha256": null
+        },
+        {
+          "filename": "USE_POLICY.md",
+          "size_bytes": 5796,
+          "sha256": null
+        },
+        {
+          "filename": "checklist.chk",
+          "size_bytes": 261,
+          "sha256": null
+        },
+        {
+          "filename": "config.json",
+          "size_bytes": 871,
+          "sha256": null
+        },
+        {
+          "filename": "model.safetensors",
+          "size_bytes": 1115268200,
+          "sha256": "e72017dbbe89c1232dcbc4a74ce0c389db5b468c42afd05850347b2a8c5f6b09"
+        },
+        {
+          "filename": "special_tokens_map.json",
+          "size_bytes": 286,
+          "sha256": null
+        },
+        {
+          "filename": "tokenizer.json",
+          "size_bytes": 16351353,
+          "sha256": "3e7e96867c2acdd575f0862c74822e05d1d15b93d9d9a4a2144b1ce83ae3339f"
+        },
+        {
+          "filename": "tokenizer_config.json",
+          "size_bytes": 19674,
+          "sha256": null
+        }
+      ],
+      "total_size_bytes": 1131674611
+    },
+    {
+      "intent": "guard_baseline_modernbert",
+      "role": "Guard baseline for the M6.4 comparison",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "siberiancat/modernbert-prompt-injection",
+      "revision_requested": "main",
+      "revision_sha": "fd9d17421e2e6bbe2eeea1874269fddc64e95e03",
+      "license": "apache-2.0",
+      "vram_gb_est": null,
+      "notes": "PRD \u00a74 offline table.",
+      "files": [
+        {
+          "filename": ".gitattributes",
+          "size_bytes": 1519,
+          "sha256": null
+        },
+        {
+          "filename": "README.md",
+          "size_bytes": 4372,
+          "sha256": null
+        },
+        {
+          "filename": "config.json",
+          "size_bytes": 1989,
+          "sha256": null
+        },
+        {
+          "filename": "model.safetensors",
+          "size_bytes": 598439784,
+          "sha256": "0e70e2e0c02c802c98b0a1dd423aed988b4bba4a925cf0927d0dc835d4d4858f"
+        },
+        {
+          "filename": "tokenizer.json",
+          "size_bytes": 3583485,
+          "sha256": null
+        },
+        {
+          "filename": "tokenizer_config.json",
+          "size_bytes": 380,
+          "sha256": null
+        }
+      ],
+      "total_size_bytes": 602031529
+    }
+  ]
+}
