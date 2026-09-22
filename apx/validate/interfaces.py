@@ -9,7 +9,12 @@ from enum import StrEnum
 from typing import Literal, Protocol
 
 from apx.common.invoice import Invoice
-from apx.common.types import Frozen, Money, VendorId
+
+# PoLine/PurchaseOrder live in apx.common (fraud needs them too and must stay common-only); the
+# `as`-aliased re-export keeps `apx.validate.interfaces.PurchaseOrder` importable for compatibility.
+from apx.common.purchasing import PoLine as PoLine
+from apx.common.purchasing import PurchaseOrder as PurchaseOrder
+from apx.common.types import Frozen
 
 
 class ViolationCode(StrEnum):
@@ -29,19 +34,6 @@ class Violation(Frozen):
     field: str | None
     message: str
     severity: Literal["error", "warning"]
-
-
-class PoLine(Frozen):
-    line_ref: str
-    description: str
-    quantity: Decimal
-    unit_price: Money
-
-
-class PurchaseOrder(Frozen):
-    number: str
-    vendor_id: VendorId
-    lines: tuple[PoLine, ...]
 
 
 class GrnLine(Frozen):

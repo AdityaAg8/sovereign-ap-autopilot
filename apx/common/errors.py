@@ -56,6 +56,11 @@ class ValidationError(ApxError):
     """Validation could not be evaluated (not a rule violation; those are data)."""
 
 
+class FraudError(ApxError):
+    """A fraud rule was misconfigured (for example, a non-positive threshold) or could not be
+    evaluated (for example, a page image that could not be decoded for hashing)."""
+
+
 class EInvoiceError(ApxError):
     """UBL build or schematron validation could not run."""
 

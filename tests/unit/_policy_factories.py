@@ -125,14 +125,17 @@ def make_validation_report(*, has_error: bool = False) -> ValidationReport:
 
 
 def make_fraud_report(*, max_flag_score: float = 0.0) -> FraudReport:
-    from apx.fraud.interfaces import FraudFlag, FraudTypology
+    from apx.fraud.interfaces import FraudFlag, FraudSeverity, FraudTypology
 
     flags = (
         (
             FraudFlag(
+                rule_id="isolation_forest",
                 typology=FraudTypology.ANOMALY,
+                severity=FraudSeverity.HIGH,
                 score=max_flag_score,
                 evidence="anomaly score",
+                explanation="This invoice looks unusual compared with this vendor's history.",
             ),
         )
         if max_flag_score > 0

@@ -11,6 +11,7 @@ from pydantic import Field
 
 from apx.common.invoice import Invoice
 from apx.common.master import BankDetailChange
+from apx.common.purchasing import PurchaseOrder
 from apx.common.types import Frozen, InvoiceId, VendorId
 
 Score = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -22,14 +23,29 @@ class FraudTypology(StrEnum):
     SPLIT = "split"
     BANK_CHANGE = "bank_change"
     VENDOR_IMPERSONATION = "vendor_impersonation"
+    NEW_VENDOR_HIGH_AMOUNT = "new_vendor_high_amount"
     PRICE_ANOMALY = "price_anomaly"
     ANOMALY = "anomaly"
 
 
+class FraudSeverity(StrEnum):
+    """How urgently a flag should be surfaced in review (feeds the M8.3 UI explanation)."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class FraudFlag(Frozen):
+    rule_id: str
+    """Stable id of the rule (or rule mechanism) that raised this flag, e.g. "duplicate_invoice"."""
     typology: FraudTypology
+    severity: FraudSeverity
     score: Score
     evidence: str
+    """Concrete facts behind the flag (ids, amounts, dates) for the audit trail."""
+    explanation: str
+    """Plain-language sentence a reviewer can read without domain training (M8.3)."""
     related_invoices: tuple[InvoiceId, ...] = ()
 
 
@@ -45,11 +61,17 @@ class SimilarPage(Frozen):
 
 
 class InvoiceHistory(Protocol):
+    """Data access every rule needs: prior invoices, bank changes, cross-vendor IBAN use and
+    the PO to match prices against. One context object so every rule takes (invoice, history)."""
+
     def recent_for_vendor(self, vendor_id: VendorId, days: int) -> Sequence[Invoice]: ...
     def bank_changes(self, vendor_id: VendorId, days: int) -> Sequence[BankDetailChange]: ...
+    def vendors_using_iban(self, iban: str) -> Sequence[VendorId]: ...
+    def purchase_order(self, number: str) -> PurchaseOrder | None: ...
 
 
 class FraudRule(Protocol):
+    rule_id: str
     typology: FraudTypology
 
     def evaluate(self, invoice: Invoice, history: InvoiceHistory) -> list[FraudFlag]: ...
