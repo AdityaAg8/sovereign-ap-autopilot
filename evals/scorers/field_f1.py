@@ -1,13 +1,18 @@
 """Shared field-level precision/recall/F1 core used by the FATURA and UAE scorers (PRD §5,
 §10 M1.3): both compare a predicted (doc_id, field_name) -> value mapping against gold on
 normalized exact match. Kept as one pure, typed function so both scorers report identically
-comparable numbers for the scoreboard."""
+comparable numbers for the scoreboard. For a UAE header field (`apx.common.compare.
+FIELD_KIND_BY_NAME`), normalization delegates to the same comparator as the M7 trust gate
+(ADR-0009 §4.1, F4), so the F1 promotion gate and the trust labels agree on what "correct" means;
+other fields (FATURA, ExtractBench) keep the plain NFKC + whitespace-collapse rule unchanged."""
 
 from __future__ import annotations
 
 import unicodedata
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+
+from apx.common.compare import FIELD_KIND_BY_NAME, normalize_for_compare
 
 
 @dataclass(frozen=True)
@@ -34,15 +39,23 @@ class FieldF1Result:
     false_negatives: int
 
 
-def normalize_value(value: str) -> str:
-    """Normalizes a field value for exact-match comparison: NFKC unicode normalization (folds
-    Arabic-Indic digit variants and presentation forms to their canonical form) then collapses
-    surrounding/internal whitespace."""
+def normalize_value(value: str, field: str | None = None) -> str:
+    """Normalizes a field value for exact-match comparison. When `field` is a UAE header field
+    (a `FieldName` value, e.g. "supplier_trn" or "iban"), delegates to the same per-kind
+    comparator the M7 trust gate uses (`apx.common.compare.normalize_for_compare`), so Extractor
+    B's F1 promotion gate and the trust labels can never disagree on what counts as a match
+    (ADR-0009 §4.1, F4). `normalize_for_compare`'s None (blank input) becomes "", matching this
+    function's plain-string contract. Otherwise (FATURA, ExtractBench, or no field given): NFKC
+    unicode normalization (folds Arabic-Indic digit variants and presentation forms to their
+    canonical form) then collapses surrounding/internal whitespace, unchanged from before."""
+    if field is not None and field in FIELD_KIND_BY_NAME:
+        canonical = normalize_for_compare(FIELD_KIND_BY_NAME[field], value)
+        return canonical if canonical is not None else ""
     return " ".join(unicodedata.normalize("NFKC", value).split())
 
 
 def _record_key(record: FieldRecord) -> tuple[str, str, str]:
-    return (record.doc_id, record.field, normalize_value(record.value))
+    return (record.doc_id, record.field, normalize_value(record.value, record.field))
 
 
 def field_f1(gold: Iterable[FieldRecord], predicted: Iterable[FieldRecord]) -> FieldF1Result:

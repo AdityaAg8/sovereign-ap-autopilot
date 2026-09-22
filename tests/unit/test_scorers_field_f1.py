@@ -1,8 +1,15 @@
 """Unit tests for evals/scorers/field_f1.py, the shared normalized-exact-match field F1 core
-(PRD §10 M1.3), on hand-computed cases."""
+(PRD §10 M1.3), on hand-computed cases, plus the ADR-0009 §4.1 (F4) equivalence property: for a
+UAE header field, this module's comparator and the M7 trust gate's must agree on every match."""
 
 from __future__ import annotations
 
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
+from apx.common.compare import FIELD_KIND_BY_NAME
+from apx.extract.interfaces import FieldName
+from apx.trust.features import is_correct
 from evals.scorers.field_f1 import FieldRecord, field_f1, normalize_value
 
 
@@ -80,3 +87,46 @@ def test_field_f1_normalizes_before_matching() -> None:
     result = field_f1(gold, predicted)
     assert result.true_positives == 1
     assert result.f1 == 1.0
+
+
+# --------------------------------------------------------------------------------------------
+# ADR-0009 §4.1 (F4): UAE header fields share one comparator with the M7 trust gate
+# --------------------------------------------------------------------------------------------
+
+
+def test_field_kind_by_name_covers_exactly_the_uae_header_fields() -> None:
+    assert set(FIELD_KIND_BY_NAME) == {name.value for name in FieldName}
+
+
+def test_normalize_value_delegates_to_the_trust_comparator_for_a_header_field() -> None:
+    # IBAN: spacing differs, must still match (ADR-0009 §4.1's own worked example).
+    assert normalize_value("ae07 0331 2345 6789 0123 456", "iban") == normalize_value(
+        "AE070331234567890123456", "iban"
+    )
+    # TRN: dashes vs none.
+    assert normalize_value("100-234-567-890-003", "supplier_trn") == normalize_value(
+        "100234567890003", "supplier_trn"
+    )
+    # A field with no FieldKind (e.g. a FATURA/ExtractBench field, or a line-item column) keeps
+    # the plain NFKC + whitespace-collapse rule, unaffected by the delegation.
+    assert normalize_value("  Acme   Corp  ", "vendor") == "Acme Corp"
+    assert normalize_value("  Acme   Corp  ") == "Acme Corp"  # field omitted entirely
+
+
+@settings(
+    max_examples=1000,
+    derandomize=True,
+    database=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
+)
+@given(st.sampled_from(list(FieldName)), st.text(max_size=30), st.text(max_size=30))
+def test_normalize_value_agrees_with_the_trust_comparator_for_every_header_field(
+    field: FieldName, a: str, b: str
+) -> None:
+    """For every UAE header field and arbitrary raw values, evals' `normalize_value` and the
+    trust gate's `is_correct` must reach the same match/no-match verdict. They now share the
+    same underlying `apx.common.compare.normalize_for_compare` call (ADR-0009 §4.1, F4), so this
+    proves the delegation is wired correctly end to end rather than merely present in the diff."""
+    matches_in_eval = normalize_value(a, field.value) == normalize_value(b, field.value)
+    matches_in_trust = is_correct(field, a, b)
+    assert matches_in_eval == matches_in_trust

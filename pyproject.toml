@@ -98,6 +98,12 @@ disallow_untyped_defs = false
 module = "pypdfium2.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# scipy and scikit-learn ship no py.typed marker / stubs (ADR-0006 addendum); apx.trust wraps
+# every call site with typed signatures, so untyped imports do not leak Any into the rest of apx.
+module = ["scipy.*", "sklearn.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
