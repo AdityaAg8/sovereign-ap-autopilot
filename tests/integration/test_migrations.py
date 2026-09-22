@@ -1,0 +1,226 @@
+"""Integration test for `db/migrations` against a real, throwaway Postgres container (PRD §10
+M5.1): `alembic upgrade head` then `downgrade base` must be clean, the `audit_log`
+append-only trigger (I4) must actually reject UPDATE/DELETE, and the migrated schema must not
+have drifted from `apx/db/models.py` (see `db/migrations/README`). Marked `integration` (needs
+Docker), so it is excluded from the default `make test`/CI selection and runs via
+`pytest -m integration`.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import subprocess
+import time
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import asyncpg  # type: ignore[import-untyped]
+import pytest
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import Connection
+from sqlalchemy.ext.asyncio import create_async_engine
+
+import apx.db.models  # noqa: F401 -- import side effect registers every table on Base.metadata
+from apx.db.base import Base
+
+pytestmark = pytest.mark.integration
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONTAINER_NAME = "apx-test-postgres-m5-1"
+HOST_PORT = 55432
+PG_USER = "apx"
+PG_PASSWORD = "apx"
+PG_DB = "apx"
+
+# SQLAlchemy-style URL for Alembic/the app; a plain DSN for direct asyncpg assertions.
+DATABASE_URL = f"postgresql+asyncpg://{PG_USER}:{PG_PASSWORD}@127.0.0.1:{HOST_PORT}/{PG_DB}"
+ASYNCPG_DSN = f"postgresql://{PG_USER}:{PG_PASSWORD}@127.0.0.1:{HOST_PORT}/{PG_DB}"
+
+EXPECTED_TABLES = {
+    "users",
+    "roles",
+    "user_roles",
+    "vendors",
+    "bank_verifications",
+    "bank_details",
+    "bank_details_history",
+    "pos",
+    "po_lines",
+    "grns",
+    "grn_lines",
+    "invoices",
+    "fields",
+    "decisions",
+    "approvals",
+    "proposals",
+    "audit_log",
+    "llm_calls",
+    "idempotency_keys",
+    "labels",
+}
+
+
+def _alembic_config() -> Config:
+    cfg = Config(str(REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(REPO_ROOT / "db" / "migrations"))
+    return cfg
+
+
+async def _wait_for_postgres(dsn: str, timeout_s: float = 30.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            conn = await asyncpg.connect(dsn)
+        except (OSError, asyncpg.PostgresError) as exc:
+            last_error = exc
+            await asyncio.sleep(0.5)
+            continue
+        await conn.close()
+        return
+    raise TimeoutError(f"Postgres did not become ready within {timeout_s}s") from last_error
+
+
+async def _fetch_public_tables(dsn: str) -> set[str]:
+    conn = await asyncpg.connect(dsn)
+    try:
+        rows = await conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        return {row["tablename"] for row in rows}
+    finally:
+        await conn.close()
+
+
+@pytest.fixture(scope="module")
+def postgres_url() -> Iterator[str]:
+    """Starts a throwaway `pgvector/pgvector:pg16-trixie` container on a host-only port (the
+    Compose `postgres` service sits on an internal-only network, PRD §3 C1), waits for it to
+    accept connections, and stops it on teardown. `--rm` means `docker stop` also removes it.
+    """
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True, check=False)
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-d",
+            "--name",
+            CONTAINER_NAME,
+            "-p",
+            f"127.0.0.1:{HOST_PORT}:5432",
+            "-e",
+            f"POSTGRES_USER={PG_USER}",
+            "-e",
+            f"POSTGRES_PASSWORD={PG_PASSWORD}",
+            "-e",
+            f"POSTGRES_DB={PG_DB}",
+            "pgvector/pgvector:pg16-trixie",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    try:
+        asyncio.run(_wait_for_postgres(ASYNCPG_DSN))
+        yield DATABASE_URL
+    finally:
+        subprocess.run(["docker", "stop", CONTAINER_NAME], capture_output=True, check=False)
+
+
+@pytest.fixture
+def env_database_url(postgres_url: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """`db/migrations/env.py` reads `DATABASE_URL`, overriding `alembic.ini`'s static value
+    (see env.py), so tests point Alembic at the throwaway container this way."""
+    monkeypatch.setenv("DATABASE_URL", postgres_url)
+    return postgres_url
+
+
+def test_alembic_upgrade_head_creates_every_expected_table(env_database_url: str) -> None:
+    cfg = _alembic_config()
+    command.upgrade(cfg, "head")
+    try:
+        tables = asyncio.run(_fetch_public_tables(ASYNCPG_DSN))
+        assert tables >= EXPECTED_TABLES
+    finally:
+        command.downgrade(cfg, "base")
+
+
+def test_alembic_upgrade_then_downgrade_base_is_clean(env_database_url: str) -> None:
+    cfg = _alembic_config()
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "base")
+    tables = asyncio.run(_fetch_public_tables(ASYNCPG_DSN))
+    # `alembic_version` is Alembic's own bookkeeping table; everything this migration created
+    # must be gone.
+    assert tables - {"alembic_version"} == set()
+
+
+def test_audit_log_rejects_update_and_delete(env_database_url: str) -> None:
+    """I4/§6.4: the audit chain is append-only; `db/migrations` attaches a trigger that must
+    reject UPDATE and DELETE at the database level, not just in application code."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "head")
+    try:
+        asyncio.run(_assert_audit_log_is_append_only())
+    finally:
+        command.downgrade(cfg, "base")
+
+
+async def _assert_audit_log_is_append_only() -> None:
+    conn = await asyncpg.connect(ASYNCPG_DSN)
+    try:
+        row_id = await conn.fetchval(
+            "INSERT INTO audit_log (actor, action, entity, payload_json, prev_hash, hash) "
+            "VALUES ($1, $2, $3, $4::jsonb, $5, $6) RETURNING id",
+            "tester",
+            "create",
+            "invoice:1",
+            "{}",
+            "0" * 64,
+            "1" * 64,
+        )
+
+        with pytest.raises(asyncpg.exceptions.RaiseError, match="append-only"):
+            await conn.execute("UPDATE audit_log SET actor = 'other' WHERE id = $1", row_id)
+
+        with pytest.raises(asyncpg.exceptions.RaiseError, match="append-only"):
+            await conn.execute("DELETE FROM audit_log WHERE id = $1", row_id)
+
+        # The row must still be there, untouched, after both rejected attempts.
+        actor = await conn.fetchval("SELECT actor FROM audit_log WHERE id = $1", row_id)
+        assert actor == "tester"
+    finally:
+        await conn.close()
+
+
+def _compare_metadata_sync(sync_conn: Connection) -> list[Any]:
+    context = MigrationContext.configure(sync_conn)
+    return list(compare_metadata(context, Base.metadata))
+
+
+async def _autogenerate_diff(database_url: str) -> list[Any]:
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            return await conn.run_sync(_compare_metadata_sync)
+    finally:
+        await engine.dispose()
+
+
+def test_models_have_no_undeclared_migration_drift(env_database_url: str) -> None:
+    """db/migrations/README: `0001` builds its DDL from live `apx.db.models`, so it alone
+    cannot drift, but any *later* model edit needs its own revision with explicit DDL. This
+    diffs the migrated (not model-derived) schema against `apx.db.models` the same way
+    `alembic revision --autogenerate` would, and fails if a model change was never turned
+    into migration DDL."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "head")
+    try:
+        diffs = asyncio.run(_autogenerate_diff(DATABASE_URL))
+        assert diffs == [], (
+            f"apx/db/models.py has drifted from db/migrations (see db/migrations/README): {diffs}"
+        )
+    finally:
+        command.downgrade(cfg, "base")

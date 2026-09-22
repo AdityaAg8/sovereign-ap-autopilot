@@ -1,0 +1,35 @@
+# db/migrations
+
+Alembic migrations for the Postgres schema in `apx/db/models.py` (PRD §7 db/migrations,
+§10 M5.1). `env.py` resolves the connection URL from `DATABASE_URL` (falling back to
+`alembic.ini`'s `sqlalchemy.url`) and runs migrations through an `asyncpg` engine.
+
+## Every schema change needs a new revision with explicit DDL
+
+Revision `0001_initial_schema` builds its tables by calling
+`Base.metadata.create_all(bind)` directly against the live ORM models, rather than emitting
+frozen `CREATE TABLE` statements. That was a one-time shortcut for the first migration only:
+because it re-reads `apx.db.models` at run time, `0001` alone cannot drift from the models
+package, and a *brand-new* database looks identical whether it was created by
+`Base.metadata.create_all()` directly or by `alembic upgrade head`.
+
+That guarantee stops at revision `0001`. Any database that has already run `0001` (every
+non-fresh dev, staging, or production database) only changes when a *new* Alembic revision
+adds explicit `op.add_column(...)` / `op.alter_column(...)` / `op.execute(...)` DDL for the
+change. If a future PR edits `apx/db/models.py` (adds a column, changes a type, adds a
+constraint) without also adding a revision under `db/migrations/versions/` that applies the
+same change with real DDL, the ORM models and any already-migrated database will silently
+diverge: a fresh `create_all()` database matches the new models, an `alembic upgrade head`
+database on top of `0001` does not, and nothing fails loudly until a query hits the missing
+column or constraint in a deployed environment.
+
+**Rule:** every change to a mapped table in `apx/db/models.py` ships with a new
+`db/migrations/versions/000N_*.py` revision in the same PR, with explicit `upgrade()` /
+`downgrade()` DDL (autogenerate is a fine starting point; review the output, it does not
+reliably capture computed columns, `CHECK` constraints, or triggers). `0001` is the only
+revision allowed to take the `Base.metadata.create_all()` shortcut.
+
+`tests/integration/test_migrations.py::test_models_have_no_undeclared_migration_drift`
+guards this: it runs `alembic upgrade head` against a throwaway Postgres container and diffs
+the result against `apx/db/models.py` with Alembic's own autogenerate comparison, failing if
+a model change has no corresponding migration DDL.

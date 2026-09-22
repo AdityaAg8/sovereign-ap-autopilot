@@ -1,6 +1,7 @@
 """Leakage gate for PRD §6.2 I5 ("eval, cal and test data never reach training") and ADR-0005:
 validates the committed evals/splits.json has no cross-pool sha256 overlap and no duplicate
-within a split, greps apx/ to confirm only apx/trust references the cal split, and proves the
+within a split, greps apx/ to confirm only apx/trust references the cal split (quoted "cal" or a
+`*Split.CAL` member; the one exempt line is the DB enum declaring the value), and proves the
 checker is not a no-op by injecting a duplicate into a temp copy of splits.json. No network,
 no GPU.
 """
@@ -25,18 +26,29 @@ APX_ROOT = REPO_ROOT / "apx"
 # substring inside a longer word like "calibrator" or "calendar" (PRD §5: "Only apx/trust
 # uses the cal split").
 _QUOTED_CAL_RE = re.compile(r"""(['"])cal\1""")
+# Referencing the split through an enum member (e.g. `LabelSplit.CAL`) is a use too.
+_CAL_MEMBER_RE = re.compile(r"\b\w*Split\.CAL\b")
+# The only exemption (ADR-0005 amendment): the DB schema *declaring* the split value so label
+# rows can record it. Declaring is not reading; any other "cal" in that file is still flagged.
+_DECLARATION_EXEMPTIONS: dict[tuple[str, ...], re.Pattern[str]] = {
+    ("db", "enums.py"): re.compile(r"""^\s*CAL = "cal"$"""),
+}
 
 
 def find_unauthorized_cal_references(apx_root: Path = APX_ROOT) -> list[str]:
-    """Grep-based static check: returns "path:lineno" for every quoted "cal"/'cal' token found
-    in an apx/ Python file outside apx/trust/. Empty means only apx/trust references it."""
+    """Grep-based static check: returns "path:lineno" for every quoted "cal"/'cal' token (or
+    `*Split.CAL` member) in an apx/ Python file outside apx/trust/, except the single
+    declaration line in `_DECLARATION_EXEMPTIONS`. Empty means only apx/trust references it."""
     violations: list[str] = []
     for path in sorted(apx_root.rglob("*.py")):
         relative_parts = path.relative_to(apx_root).parts
         if relative_parts[0] == "trust" or "__pycache__" in relative_parts:
             continue
+        exemption = _DECLARATION_EXEMPTIONS.get(relative_parts)
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if _QUOTED_CAL_RE.search(line):
+            if exemption is not None and exemption.match(line):
+                continue
+            if _QUOTED_CAL_RE.search(line) or _CAL_MEMBER_RE.search(line):
                 violations.append(f"apx/{path.relative_to(apx_root).as_posix()}:{lineno}")
     return violations
 
@@ -77,6 +89,26 @@ def test_find_unauthorized_cal_references_detects_a_planted_violation(tmp_path: 
     assert len(violations) == 1
     assert "policy" in violations[0]
     assert "trust" not in violations[0]
+
+
+def test_enum_member_use_is_flagged_and_only_the_exact_declaration_is_exempt(
+    tmp_path: Path,
+) -> None:
+    """`LabelSplit.CAL` outside apx/trust is a use and is flagged; in apx/db/enums.py only the
+    exact `CAL = "cal"` declaration is exempt, so any other "cal" there is still caught."""
+    fake_apx = tmp_path / "apx"
+    (fake_apx / "workflows").mkdir(parents=True)
+    (fake_apx / "db").mkdir(parents=True)
+    (fake_apx / "workflows" / "select.py").write_text(
+        "rows = labels_for(LabelSplit.CAL)\n", encoding="utf-8"
+    )
+    (fake_apx / "db" / "enums.py").write_text(
+        'class LabelSplit:\n    CAL = "cal"\n    DEFAULT = "cal"\n', encoding="utf-8"
+    )
+
+    violations = find_unauthorized_cal_references(fake_apx)
+
+    assert violations == ["apx/db/enums.py:3", "apx/workflows/select.py:1"]
 
 
 def test_checker_fails_on_a_duplicate_injected_into_a_temp_copy_of_splits_json(

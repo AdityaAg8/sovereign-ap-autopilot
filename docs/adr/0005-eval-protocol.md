@@ -46,3 +46,13 @@ Option 1.
   and expects failure.
 - M1: `make eval-quick` produces a scoreboard with every §5 row present (value or "not run").
 - M11 auditor re-runs `make eval` from a fresh clone and diffs the scoreboard.
+
+## Amendment (M5.1): declaring the split value is not reading it
+
+The M5.1 schema records which split a corrected label belongs to (`apx/db/enums.py`,
+`LabelSplit.CAL = "cal"`), which the "only `apx/trust` references cal" grep flagged. The guard
+now exempts exactly that one declaration line and nothing else in the file, and in exchange also
+flags any `*Split.CAL` enum-member use outside `apx/trust`. Net effect: the gate is stricter than
+before (enum-based selection of cal rows was previously invisible to it), and the only mention
+allowed outside `apx/trust` is the schema stating the value exists. Proof:
+`tests/test_no_leakage.py::test_enum_member_use_is_flagged_and_only_the_exact_declaration_is_exempt`.
