@@ -88,6 +88,18 @@ class AnomalyDetector(Protocol):
         ...
 
 
+PageVector = tuple[float, ...]
+"""One page embedding. Fraud owns this port; `apx.llm.embedding.HttpPageEmbedder` satisfies it
+structurally, so `apx.fraud` never imports `apx.llm` (docs/architecture.md import rule)."""
+
+
+class PageEmbedder(Protocol):
+    async def embed_page(self, page_png: bytes) -> PageVector:
+        """Embed one rendered page image. Raises `ModelServingError` (unavailable) or
+        `ModelOutputError`; never returns an empty vector."""
+        ...
+
+
 class PageSimilarityIndex(Protocol):
     async def nearest(self, page_png: bytes, k: int) -> list[SimilarPage]:
         """Qwen3-VL-Embedding page neighbours from pgvector (runs in its own GPU stage)."""

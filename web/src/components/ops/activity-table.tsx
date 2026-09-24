@@ -4,6 +4,7 @@
 import Link from "next/link";
 import type { OpsRecentInvoice } from "@/lib/api/types";
 import { StatusBadge, RouteBadge } from "@/components/inbox/status-badge";
+import { formatGroupedAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 function ago(iso: string, now: number): string {
@@ -78,9 +79,13 @@ export function ActivityTable({
                   <td className="px-4 py-2.5">
                     <RouteBadge route={row.route} />
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
-                    {row.total}{" "}
-                    <span className="text-muted-foreground text-xs">{row.currency}</span>
+                  <td
+                    className="px-4 py-2.5 text-right whitespace-nowrap tabular-nums"
+                    data-testid="ops-amount"
+                  >
+                    <span className="tabular-mono">
+                      {row.currency} {formatGroupedAmount(row.total)}
+                    </span>
                   </td>
                   <td className="text-muted-foreground py-2.5 pr-5 pl-4 text-right text-xs tabular-nums sm:pr-6">
                     {ago(row.updatedAt, now)}

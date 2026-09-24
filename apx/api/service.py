@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
 
@@ -133,6 +133,26 @@ def _to_field_view(field: FieldRow, *, mask_iban: bool) -> InvoiceFieldView:
     )
 
 
+def corrections_for_rows(rows: Sequence[FieldRow]) -> ReviewCorrections:
+    """`corrections_from_fields` over an invoice's field rows in id order: the latest value of
+    each field with a reviewer's row winning, plus the latest model-sourced values, which are
+    what the workflow's `Invoice` was built from (a human row never reaches it). Those are the
+    normalized values only, as `GroundedInvoiceBuilder` reads supplier TRN and currency."""
+    latest: dict[str, str | None] = {}
+    extracted: dict[str, str | None] = {}
+    human: set[str] = set()
+    for row in rows:
+        is_human = row.source is FieldSource.HUMAN
+        if not is_human:
+            extracted[row.name] = row.normalized_value
+        if row.name in human and not is_human:
+            continue
+        latest[row.name] = row.normalized_value or row.value
+        if is_human:
+            human.add(row.name)
+    return corrections_from_fields(latest, extracted=extracted)
+
+
 class DbInvoiceService:
     """`apx.api.interfaces.InvoiceService` backed by Postgres. Every method opens its own
     `AsyncSession` (matching `apx.audit.chain.PgAuditLog`'s convention) and every state change
@@ -240,8 +260,12 @@ class DbInvoiceService:
         accepted = {row.name: row.source != FieldSource.HUMAN for row in field_rows}
         reasons: tuple[str, ...] = ()
         if latest_decision is not None and latest_decision.reasons:
+            # A `policy_route` row also carries one `{"payee": ...}` element (masked payee or
+            # refusal, `apx.policy.interfaces.routing_record`); it is not a reason.
             reasons = tuple(
-                str(reason.get("message", reason)) for reason in latest_decision.reasons
+                str(reason.get("message", reason))
+                for reason in latest_decision.reasons
+                if "payee" not in reason
             )
 
         proposals = tuple(
@@ -429,7 +453,8 @@ class DbInvoiceService:
         """ADR-0012 amendment: the kind, currency and line VAT categories/rates an approval
         carries to the workflow, read from the invoice's field rows (a reviewer's fix-field row
         wins over the model's). Raises `MissingCorrectionsError` (422) while any is missing, so
-        an approval can never reach the e-invoice step with an unresolved value."""
+        an approval can never reach the e-invoice step with an unresolved value. Its subclasses
+        `SupplierTrnMissingError` and `CurrencyRelabelError` refuse what no review can fix."""
         async with get_session() as session:
             rows = (
                 (
@@ -442,16 +467,7 @@ class DbInvoiceService:
                 .scalars()
                 .all()
             )
-        latest: dict[str, str | None] = {}
-        human: set[str] = set()
-        for row in rows:
-            is_human = row.source is FieldSource.HUMAN
-            if row.name in human and not is_human:
-                continue
-            latest[row.name] = row.normalized_value or row.value
-            if is_human:
-                human.add(row.name)
-        return corrections_from_fields(latest)
+        return corrections_for_rows(rows)
 
     async def _approving_proposal_invoice(self, proposal_id: str) -> InvoiceId | None:
         """The invoice an approve_payment proposal would approve, else None."""

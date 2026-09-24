@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
+from typing import Any, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -18,9 +19,9 @@ from apx.common.invoice import Invoice, InvoiceKind
 from apx.common.master import BankDetailChange, Vendor
 from apx.common.purchasing import PoLine, PurchaseOrder
 from apx.common.types import InvoiceId, Money, Route, UserId, VendorId
-from apx.db.enums import DbInvoiceStatus, FieldSource
+from apx.db.enums import DbInvoiceStatus, DecisionAction, FieldSource
 from apx.db.models import BankDetail as BankDetailRow
-from apx.db.models import BankDetailHistory
+from apx.db.models import BankDetailHistory, Decision
 from apx.db.models import Field as FieldRow
 from apx.db.models import FraudFlag as FraudFlagRow
 from apx.db.models import Invoice as InvoiceRow
@@ -28,6 +29,7 @@ from apx.db.models import PurchaseOrder as PoRow
 from apx.db.models import Vendor as VendorRow
 from apx.extract.interfaces import ExtractionResult
 from apx.fraud.interfaces import FraudFlag
+from apx.policy.interfaces import RoutingDecision, routing_record
 from apx.policy.writer import invoice_for_digest, load_vendor
 from apx.trust.interfaces import TrustDecision
 from apx.workflows.corrections import (
@@ -285,13 +287,28 @@ class SqlInvoiceRecords:
                 update(InvoiceRow).where(InvoiceRow.id == invoice_id).values(status=status)
             )
 
-    async def routed(self, invoice_id: InvoiceId, route: Route, trust: TrustDecision) -> None:
-        """Stores the route, its status and each field's calibrated P(correct)."""
+    async def routed(
+        self, invoice_id: InvoiceId, routing: RoutingDecision, trust: TrustDecision
+    ) -> None:
+        """Stores the route, its status, each field's calibrated P(correct) and a `policy_route`
+        decision whose reasons end with the pinned payee (masked IBAN and match, or the refusal;
+        `routing_record`). `v_agent_invoices` reads the newest such row (migration 0008), so the
+        agent and reviewer see `select_payee`'s choice. A retry appends another row; the newest
+        wins."""
+        route = routing.route
         async with self._sessions() as session:
             await session.execute(
                 update(InvoiceRow)
                 .where(InvoiceRow.id == invoice_id)
                 .values(route=route, status=ROUTE_STATUS[route])
+            )
+            session.add(
+                Decision(
+                    invoice_id=invoice_id,
+                    action=DecisionAction.POLICY_ROUTE,
+                    route=route,
+                    reasons=cast(list[dict[str, Any]], routing_record(routing)),
+                )
             )
             for decision in trust.fields:
                 await session.execute(

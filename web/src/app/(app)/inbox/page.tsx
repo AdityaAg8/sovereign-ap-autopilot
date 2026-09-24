@@ -4,7 +4,6 @@
 
 import { useEffect, useState } from "react";
 import { InboxTable } from "@/components/inbox/inbox-table";
-import { Skeleton } from "@/components/ui/skeleton";
 import { getApiClient } from "@/lib/api/client";
 import { useSetPageHeader } from "@/lib/shell/page-header-context";
 import type { InvoiceSummary } from "@/lib/api/types";
@@ -25,15 +24,7 @@ export default function InboxPage() {
     };
   }, []);
 
-  if (!invoices) {
-    return (
-      <div className="space-y-2 p-6">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <Skeleton key={i} className="h-11 w-full" />
-        ))}
-      </div>
-    );
-  }
-
+  // Rendered while loading too (`invoices === null`): the table shows its filter bar and column
+  // labels over skeleton rows, so the page's real layout paints before the data arrives.
   return <InboxTable invoices={invoices} />;
 }

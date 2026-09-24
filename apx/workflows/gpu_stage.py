@@ -3,7 +3,8 @@ one of the scan parser (PaddleOCR-VL, ~4.3 GB cap), Extractor A (~6.4 GB) and Ex
 fits at a time (A and B together measured ~10.5 GB). Every GPU call holds its `GpuStage` and
 `GpuStageScheduler` runs one stage at a time, so work is batched per model instead of thrashing:
 calls of the active stage share it; a switch waits for the stage to drain, then frees its VRAM
-through a release hook (llama-swap `/unload`, parse service `/unload`) before the next starts."""
+through a release hook (llama-swap `/unload`, parse service `/unload`) and checks free VRAM/RAM
+(`apx.llm.preflight`) before the next starts."""
 
 from __future__ import annotations
 
@@ -16,10 +17,21 @@ from enum import StrEnum
 import structlog
 
 from apx.llm.interfaces import CompletionResult, LlmClient, StructuredRequest, ToolRequest
+from apx.llm.preflight import (
+    GpuWorkload,
+    HeadroomCheck,
+    check_gpu_headroom,
+    check_workload_headroom,
+)
 
 logger = structlog.get_logger(__name__)
 
 ReleaseHook = Callable[[], Awaitable[None]]
+StagePreflight = Callable[["GpuStage"], object]
+"""Synchronous headroom check run (in a thread) before a stage loads; raises to refuse it."""
+
+STAGE_PREFLIGHT_WAIT_S = 30.0
+"""How long a switch waits for released VRAM to come back before refusing the stage."""
 
 
 class GpuStage(StrEnum):
@@ -29,6 +41,20 @@ class GpuStage(StrEnum):
     """Extractor A in llama-swap, and every model served as its alias (the exception agent)."""
     EXTRACTOR_B = "extractor-b"
     """Extractor B in llama-swap."""
+
+
+class HeadroomPreflight:
+    """The scheduler's default `StagePreflight`: the stage's `MEMORY_NEEDS` row (ADR-0013) through
+    `check`, waiting up to `wait_s` for a just-released stage's memory to come back."""
+
+    def __init__(
+        self, check: HeadroomCheck = check_gpu_headroom, wait_s: float = STAGE_PREFLIGHT_WAIT_S
+    ) -> None:
+        self._check = check
+        self._wait_s = wait_s
+
+    def __call__(self, stage: GpuStage) -> None:
+        check_workload_headroom(GpuWorkload(stage.value), check=self._check, wait_s=self._wait_s)
 
 
 class GpuStageScheduler:
@@ -41,7 +67,8 @@ class GpuStageScheduler:
     busy ones (A and B) handing the card back and forth. The first entry of any stage releases
     every other stage, since a fresh worker cannot know what an earlier process left resident.
     A release hook that raises propagates to the caller and leaves no stage active, so the next
-    caller retries it."""
+    caller retries it. After the releases and before the stage becomes active, `preflight`
+    checks the card has room for it; a refusal propagates the same way."""
 
     def __init__(
         self,
@@ -51,8 +78,10 @@ class GpuStageScheduler:
         idle_grace_s: float = 3.0,
         poll_s: float = 1.0,
         clock: Callable[[], float] = time.monotonic,
+        preflight: StagePreflight | None = None,
     ) -> None:
         self._release = dict(release)
+        self._preflight: StagePreflight = HeadroomPreflight() if preflight is None else preflight
         self._max_hold_s = max_hold_s
         self._idle_grace_s = idle_grace_s
         self._idle_since = 0.0
@@ -109,6 +138,10 @@ class GpuStageScheduler:
             hook = self._release.get(other)
             if hook is not None:
                 await hook()
+        # Still under `_cond` on purpose: switches must serialize, so no other caller can load a
+        # model while this one measures (or waits up to STAGE_PREFLIGHT_WAIT_S for) free memory;
+        # the thread only keeps the blocking nvidia-smi call off the event loop.
+        await asyncio.to_thread(self._preflight, stage)
         self._active = stage
         self._started_at = self._clock()
         self.switches.append(stage)

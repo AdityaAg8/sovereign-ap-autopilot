@@ -143,7 +143,8 @@ We choose option 1 for the typed boundary and option A for the capability model.
   - the actor has `required_capabilities` (P3: `APPROVE_ABOVE_LIMIT` if the total is above
     `approval_limit` or in a currency other than the limit's)
   - `select_payee(vendor)` succeeds (P1: exactly one account with `verified=True` and
-    `source="admin_callback"`; `Invoice.iban` is never read)
+    `source="admin_callback"`; `Invoice.iban` is never read; amended by ADR-0014: with several
+    verified accounts the invoice IBAN selects one, never introduces a payee)
   - routing is present and is not BLOCK
   - the actor is not `changed_by` on any of the vendor's bank changes with
     `at - changed_at < sod_cooldown_days` (P2 SoD)
@@ -202,7 +203,8 @@ verified account within the limit, and that is straight-through processing (§6.
 - Bad: more types, and the agent sees less (8000-character budget, masked IBANs).
 - Bad: a BLOCK false positive needs the vendor to resubmit.
 - Bad: a vendor with two verified accounts routes to REVIEW until an admin retires one (P1
-  uniqueness).
+  uniqueness). Superseded by ADR-0014: the invoice IBAN selects one of several verified
+  accounts, and every such selection routes REVIEW.
 - Bad: a single reviewer can edit a money field and then approve within the limit. Revalidation,
   fraud rules and the audit log are the only mitigations (residual risk R-4 in
   `docs/security.md`).
@@ -228,7 +230,8 @@ verified account within the limit, and that is straight-through processing (§6.
   - `agent/test_no_write_imports.py`: an AST scan finds no `Grant`, `PolicyGuard` or
     `PaymentStateWriter` in `apx/agent`.
   - `policy/test_proposals.py`: agent, chat and MCP `change_bank` proposals are refused.
-  - `policy/test_payee.py`: `Invoice.iban` never influences `select_payee` (property test).
+  - `policy/test_payee.py`: `Invoice.iban` never influences `select_payee` (property test;
+    amended by ADR-0014: it may only select among verified accounts).
 - **M6.6**: every M6.3 case runs through the real workflow with live models. Payment-changing
   attack success must be 0, which is the PRD gate. `reports/attacks.md` also reports it with the
   guard disabled, which must also be 0; anything else is a critical finding against this ADR.
@@ -248,7 +251,7 @@ verified account within the limit, and that is straight-through processing (§6.
    `is_payment_affecting`; add tests.
 6. `apx/policy/payee.py`: implement `select_payee` and `subject_digest`; add
    `tests/unit/policy/test_payee.py`, a property test showing `Invoice.iban` never changes the
-   payee.
+   payee (amended by ADR-0014: it may only select among verified accounts).
 7. `apx/policy/engine.py`: implement `route()` per K7; add route property tests covering P2
    window boundaries.
 8. `apx/policy/engine.py`: implement `authorize()` per K5; add authorize property tests (above

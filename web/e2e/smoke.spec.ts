@@ -15,8 +15,12 @@ test("login -> inbox -> open invoice -> keyboard approve", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Inbox", level: 1 })).toBeVisible();
 
   // Filter to invoices awaiting review so the one we open is guaranteed to be approvable.
+  // Scope to the filter popup: inbox rows are options too, and the popup opens only once the
+  // deferred Select has loaded.
   await page.getByRole("combobox", { name: "Filter by status" }).click();
-  await page.getByRole("option", { name: /awaiting review/i }).click();
+  const statusPopup = page.getByRole("listbox").filter({ has: page.getByText("All statuses") });
+  await statusPopup.getByRole("option", { name: /^awaiting review$/i }).click();
+  await expect(statusPopup).toBeHidden();
 
   const firstRow = page.getByRole("option").first();
   await expect(firstRow).toBeVisible();

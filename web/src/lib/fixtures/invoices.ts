@@ -236,6 +236,7 @@ function generate(): readonly GeneratedInvoice[] {
       detail: {
         summary: {
           id,
+          invoiceNumber: fields.find((f) => f.name === "invoice_number")?.raw ?? null,
           status: bucket.status,
           route: bucket.route,
           vendorId: vendor.id,

@@ -246,3 +246,44 @@
     display: none;
   }
 }
+
+/* Inbox grid (M5.4). One column set per container width, so the header and the virtualized rows
+   always share a template and no fixed column is ever squeezed under its content: every column
+   but Vendor is sized from its longest real value ("AED 1,234,567.89", "Awaiting review",
+   "27 Sep 17:30"). Phone: vendor + amount, with invoice number, received time and status on a
+   second line (.ic-sub). Tablet/small laptop: adds the number, status and received columns.
+   Desktop: every column. */
+.inbox-table {
+  container: inbox / inline-size;
+}
+.inbox-grid {
+  display: grid;
+  column-gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.inbox-grid > * {
+  min-width: 0;
+  white-space: nowrap;
+}
+.inbox-grid > :is(.ic-num, .ic-status, .ic-route, .ic-conf, .ic-flags, .ic-received) {
+  display: none;
+}
+@container inbox (min-width: 720px) {
+  .inbox-grid {
+    grid-template-columns: 7.5rem minmax(0, 1fr) 8.5rem 8.5rem 6.5rem;
+  }
+  .inbox-grid > :is(.ic-num, .ic-status, .ic-received) {
+    display: block;
+  }
+  .inbox-grid .ic-sub {
+    display: none;
+  }
+}
+@container inbox (min-width: 1024px) {
+  .inbox-grid {
+    grid-template-columns: 7.5rem minmax(0, 1fr) 8.5rem 6rem 8.5rem 6.5rem 3.5rem 6.5rem;
+  }
+  .inbox-grid > :is(.ic-route, .ic-conf, .ic-flags) {
+    display: block;
+  }
+}

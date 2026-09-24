@@ -105,7 +105,7 @@ Control IDs refer to the catalogue in §8.
 | STRIDE | Threat | Controls | Proof |
 |---|---|---|---|
 | E | Injected text makes the model call tools or act | `StructuredRequest` has no `tools` field (SEC-04) | *exists*: `test_interfaces.py::test_structured_request_has_no_tools_field` |
-| T | Injection changes extracted values (A01-A12) | A/B agreement, grounding and trust gate (SEC-06, SEC-07); P1 ignores the invoice IBAN (SEC-08) | M7.5 simulation; M6.6 |
+| T | Injection changes extracted values (A01-A12) | A/B agreement, grounding and trust gate (SEC-06, SEC-07); the invoice IBAN only selects among admin-verified accounts, never adds a payee (SEC-08, ADR-0014) | M7.5 simulation; M6.6 |
 | D | Context bomb exhausts VRAM or time | Page cap, token budget, timeouts; `ModelServingError` → retry → REVIEW | M5.2 retry tests |
 | I | Cross-invoice leakage through the model | Stateless calls; one invoice per request | Prompt-builder unit test |
 
@@ -195,7 +195,9 @@ Each leaf lists its attack categories (§7), then the control that stops it (✗
 G1 Redirect a payment to an attacker account                                    [OR]
 ├── G1.1 Get an attacker IBAN used as payee                                     [OR]
 │   ├── G1.1a IBAN in the document (A08 visible; A01-A04 hidden; A05/A06 obfuscated)
-│   │         ✗ SEC-08 P1: payee = select_payee(vendor master); Invoice.iban never read
+│   │         ✗ SEC-08 P1: payee = select_payee(vendor master, invoice IBAN); the invoice IBAN
+│   │           only selects among admin-verified accounts, never adds one (ADR-0014)
+│   │           SEC-08 invoice IBAN ≠ sole verified account, or several verified → REVIEW
 │   │           SEC-15 invoice IBAN ≠ master → BANK_CHANGE flag → REVIEW (P4)
 │   │           proof: policy/test_payee.py (property), M6.6 per-category ASR
 │   ├── G1.1b Make an extractor emit a payee or "approved" field
@@ -221,6 +223,9 @@ G1 Redirect a payment to an attacker account                                    
 │               proof: test_compose_security.py, audit verifier
 └── G1.3 Swap payee or amount after approval (TOCTOU)
           ✗ SEC-14 approval bound to subject_digest; stale grant refused → policy/test_grant.py
+          ✗ SEC-08 payee pinned at routing (RoutingDecision.payee); build_einvoice re-selects and
+            refuses a different payee (PayeeChangedError, non-retryable, audited; ADR-0014 §7)
+            → test_money_path_review_fixes.py
 ```
 
 ### G2 Get a fraudulent invoice approved (O2)
@@ -285,7 +290,7 @@ evidence). Payment-changing ASR must be 0 in both runs.
 | A05 | Zero-width characters | G1 | SEC-02 zero-width flag | `to_untrusted` strip (SEC-13); normalised matching (SEC-15); SEC-08 | `scan/test_zero_width.py`; `common/test_untrusted.py` |
 | A06 | Bidi override | G1, G2 | SEC-02 bidi control (normal Arabic RTL never flags) | SEC-18 LTR isolation of IBAN/amounts; SEC-08 | `scan/test_bidi.py`; `scan/test_arabic_clean.py` |
 | A07 | Homoglyph vendor | G1 | SEC-15 VENDOR_IMPERSONATION | TRN-based vendor match; SEC-08 (no verified account) | `fraud/test_rules.py::test_vendor_impersonation` |
-| A08 | IBAN-swap instruction | G1 | SEC-03 guard; SEC-15 BANK_CHANGE | SEC-08 P1; SEC-12 no agent `change_bank`; SEC-09 P2 | `policy/test_payee.py`; `policy/test_proposals.py` |
+| A08 | IBAN-swap instruction | G1 | SEC-03 guard; SEC-15 BANK_CHANGE; SEC-08 invoice IBAN ≠ sole verified account → REVIEW | SEC-08 P1 (the invoice IBAN only selects among admin-verified accounts); SEC-12 no agent `change_bank`; SEC-09 P2 | `policy/test_payee.py`; `policy/test_proposals.py` |
 | A09 | Fake approval stamp | G2 | SEC-05 no approval field | SEC-14 approval only by Grant; SEC-18 system status separate | `extract/test_output_schema.py`; `policy/test_grant.py` |
 | A10 | Metadata injection (Info/XMP, annotations, attachments, JS) | G2, G3 | SEC-02 metadata/attachment/JS flags | Metadata never in extractor prompts; `UntrustedText` `scan:metadata` (SEC-13); SEC-19 | `scan/test_active_content.py` |
 | A11 | Filename or email-body injection | G2, G3 | SEC-03 guard on `ingest:*` text | SEC-01 content-addressed paths; SEC-13 source pattern and fencing | `ingest/test_filename_untrusted.py`; `common/test_untrusted.py` |
@@ -302,7 +307,7 @@ evidence). Payment-changing ASR must be 0 in both runs.
 | SEC-05 | Schema at the model edge: grammar, `extra="forbid"`, `maxLength`, failure → REVIEW | T1 | M6.5 | `extract/test_output_schema.py` | planned |
 | SEC-06 | Boxes and OCR support only from parse words | I1 | M3 | `test_interfaces.py`, `extract/test_grounder.py` | exists (types) |
 | SEC-07 | Learn-then-Test trust gate | §6.1 | M7.5 | `trust/test_ltt_simulation.py` | planned |
-| SEC-08 | Payee only from `select_payee` (unique verified admin-callback account) | P1 | M6.5 | `tests/unit/test_policy_payee.py`, `tests/unit/test_policy_authorize.py` (`test_allowed_approval_implies_every_k5_condition`) | implemented |
+| SEC-08 | Payee only from `select_payee`: always an admin-callback verified account; with several, the invoice IBAN (strict ISO 13616 electronic form) must equal exactly one, else a typed `PayeeRefusal`; any selection among several, or an invoice IBAN that differs from a sole verified account, routes REVIEW; the grant digest binds payee IBAN and match; the routed payee is pinned, persisted masked for the agent view and re-checked at the e-invoice build (ADR-0014 §7) | P1 | M6.5 | `tests/unit/test_money_path_review_fixes.py`, `tests/unit/test_policy_payee.py`, `tests/unit/test_policy_route.py`, `tests/unit/test_policy_grant.py`, `tests/unit/test_policy_authorize.py` (`test_allowed_approval_implies_every_k5_condition`) | implemented |
 | SEC-09 | Bank change → REVIEW for 30 days; changer barred from approving for 30 days | P2, I3 | M6.5 | `tests/unit/test_policy_sod.py`, `tests/unit/test_policy_route.py` (`test_bank_change_review_window_boundary`) | implemented |
 | SEC-10 | Amounts above the limit or in another currency need `APPROVE_ABOVE_LIMIT` | P3 | M5.3, M6.5 | `tests/unit/test_policy_authorize.py`, `tests/unit/test_policy_route.py` (`test_above_the_approval_limit_routes_to_review`, `test_a_different_currency_routes_to_review_even_under_the_limit`) | implemented (M6.5 policy engine; `api/test_authz_matrix.py` pending M5.3, `apx/api` is still an interface stub) |
 | SEC-11 | Flag routing; the most severe outcome wins; BLOCK has no override | P4 | M6.5 | `tests/unit/test_policy_route.py`, `tests/unit/test_policy_authorize.py` (`test_blocked_routing_denies_an_approval_with_no_override`) | implemented |

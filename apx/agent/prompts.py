@@ -68,7 +68,8 @@ class DefaultAgentPromptBuilder:
     def build(self, context: AgentContext, tools: Sequence[ToolSpec], model: str) -> ToolRequest:
         case = {
             "invoice_id": context.invoice_id,
-            "routing": context.routing.model_dump(mode="json"),
+            # The pinned payee's IBAN digest is for the e-invoice build only (ADR-0014 §7).
+            "routing": context.routing.model_dump(mode="json", exclude={"payee": {"iban_sha256"}}),
             "state": context.state,
         }
         system = f"{SYSTEM_PROMPT}\n\nCase state (system data):\n{_canonical(case)}"

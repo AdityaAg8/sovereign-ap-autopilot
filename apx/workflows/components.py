@@ -17,7 +17,13 @@ from typing import Protocol
 
 import pypdfium2 as pdfium
 
-from apx.common.errors import EInvoiceError, IngestError, ModelOutputError, TrustGateError
+from apx.common.errors import (
+    ConfigError,
+    EInvoiceError,
+    IngestError,
+    ModelOutputError,
+    TrustGateError,
+)
 from apx.common.fields import InvoiceFields, LineItemFields
 from apx.common.invoice import Invoice, InvoiceKind, InvoiceLine, Party, VatCategory
 from apx.common.normalize import NormalizationError, normalize_amount, normalize_date
@@ -326,11 +332,21 @@ def _emirate(address: str | None) -> str | None:
 
 class PintAeUblBuilder:
     """`UblBuilder`: maps an `Invoice` onto `InvoiceFields` and builds PINT AE UBL. The payment
-    account is always the vendor master's verified IBAN, never the one printed on the invoice."""
+    account is always the vendor master's verified IBAN, never the one printed on the invoice.
+    The buyer is our own organisation, so its TRN (BT-48, and the BT-49 EndpointID) is the
+    configured `buyer_trn`; the document's buyer TRN is only cross-checked by the validator
+    (`check_buyer_trn`, ADR-0012 amendment 2)."""
 
     def __init__(
-        self, *, buyer_trade_license: str | None = None, buyer_address: str | None = None
+        self,
+        *,
+        buyer_trn: str,
+        buyer_trade_license: str | None = None,
+        buyer_address: str | None = None,
     ) -> None:
+        if not buyer_trn.strip():
+            raise ConfigError("the configured buyer TRN is blank")
+        self._buyer_trn = buyer_trn.strip()
         self._buyer_license = buyer_trade_license
         self._buyer_address = buyer_address
 
@@ -366,7 +382,7 @@ class PintAeUblBuilder:
             supplier_city=_emirate(invoice.supplier.address),
             supplier_country_code=invoice.supplier.country,
             buyer_name=invoice.buyer.name,
-            buyer_trn=invoice.buyer.trn,
+            buyer_trn=self._buyer_trn,
             buyer_legal_registration_id=self._buyer_license,
             buyer_address_line1=buyer_address,
             buyer_city=_emirate(buyer_address),

@@ -220,6 +220,9 @@ const VALID_ROLES: ReadonlySet<string> = new Set<Role>(["reviewer", "approver", 
 function mapSummary(dto: InvoiceSummaryDto): InvoiceSummary {
   return {
     id: dto.id,
+    // Not on apx.api.interfaces.InvoiceSummary yet; see InvoiceSummary.invoiceNumber. The inbox
+    // falls back to the (marked) internal id, so real-API rows are never an unlabelled "—".
+    invoiceNumber: null,
     status: dto.status,
     route: dto.route,
     vendorId: dto.vendor_id,

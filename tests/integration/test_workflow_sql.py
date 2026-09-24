@@ -24,9 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from apx.api.security import verify_password
 from apx.common.invoice import Invoice, Party
 from apx.common.types import FieldValue, InvoiceId, Language, Money, Route, Sha256Hex, VendorId
-from apx.db.enums import BankDetailSource, DbInvoiceStatus
+from apx.db.enums import BankDetailSource, DbInvoiceStatus, DecisionAction
 from apx.db.models import BankDetail as BankDetailRow
 from apx.db.models import BankVerification as BankVerificationRow
+from apx.db.models import Decision as DecisionRow
 from apx.db.models import Field as FieldRow
 from apx.db.models import FraudFlag as FraudFlagRow
 from apx.db.models import Invoice as InvoiceRow
@@ -34,7 +35,9 @@ from apx.db.models import User
 from apx.db.models import Vendor as VendorRow
 from apx.extract.interfaces import ExtractionResult, ExtractorId, ExtractorOutput, FieldName
 from apx.fraud.interfaces import FraudFlag, FraudSeverity, FraudTypology
+from apx.policy.interfaces import PayeeMatch, RoutedPayee, RoutingDecision, payee_iban_digest
 from apx.trust.interfaces import FieldDecision, TrustDecision
+from apx.workflows.corrections import KIND_FIELD
 from apx.workflows.sql import PgInvoiceHistory, PgVendorDirectory, SqlInvoiceRecords
 from factory.erp import generate_erp
 from factory.seed_db import email_for, seed
@@ -227,26 +230,47 @@ async def test_records_are_idempotent_and_track_the_workflow(sessions: SessionFa
         fields=(FieldDecision(field=FieldName.TOTAL, p_correct=0.42, accepted=False),),
         all_accepted=False,
     )
-    await records.routed(FIRST, Route.REVIEW, trust)
+    payee = RoutedPayee(
+        masked_iban="****3456",
+        match=PayeeMatch.SOLE_UNCLAIMED,
+        verified_count=1,
+        iban_sha256=payee_iban_digest(IBAN),
+    )
+    routing = RoutingDecision(route=Route.REVIEW, reasons=(), payee=payee)
+    await records.routed(FIRST, routing, trust)
 
     async with sessions() as session:
         row = await session.get(InvoiceRow, FIRST)
         assert row is not None
         assert row.total == Decimal("1050.00")
         assert (row.status, row.route) == (DbInvoiceStatus.AWAITING_REVIEW, Route.REVIEW)
-        fields = {
-            f.name: f
-            for f in (
-                await session.scalars(select(FieldRow).where(FieldRow.invoice_id == FIRST))
-            ).all()
-        }
-        assert set(fields) == {"invoice_number", "total"}
+        field_rows = (
+            await session.scalars(select(FieldRow).where(FieldRow.invoice_id == FIRST))
+        ).all()
+        fields = {f.name: f for f in field_rows}
+        # The grounded fields plus the ADR-0012 classification row (BT-3; no lines here), each
+        # exactly once although `save` ran twice.
+        assert set(fields) == {"invoice_number", "total", KIND_FIELD}
+        assert len(field_rows) == len(fields)
+        assert fields[KIND_FIELD].value is None  # the fixture's kind is unresolved
         assert fields["total"].confidence == pytest.approx(0.42)
         assert fields["total"].model_revision == "qwen-a"
         flags = await session.scalar(
             select(func.count()).select_from(FraudFlagRow).where(FraudFlagRow.invoice_id == FIRST)
         )
         assert flags == 1
+        # ADR-0014 §7: the route decision is persisted with the masked pinned payee only.
+        decision = await session.scalar(
+            select(DecisionRow).where(
+                DecisionRow.invoice_id == FIRST,
+                DecisionRow.action == DecisionAction.POLICY_ROUTE,
+            )
+        )
+        assert decision is not None and decision.route is Route.REVIEW
+        assert decision.reasons == [
+            {"payee": {"masked_iban": "****3456", "match": "sole_unclaimed", "verified_count": 1}}
+        ]
+        assert IBAN not in str(decision.reasons)
 
     await records.set_status(FIRST, DbInvoiceStatus.SENT)
     async with sessions() as session:

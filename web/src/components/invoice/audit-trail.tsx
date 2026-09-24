@@ -10,37 +10,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getApiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/contract";
 import type { AuditEventView, CitationSource } from "@/lib/api/types";
+import { auditActionLabel } from "@/lib/audit-actions";
+import { formatAuditTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const ACTION_LABEL: Record<string, string> = {
-  "activity:scan": "Scanned for hidden instructions",
-  "activity:parse": "Parsed",
-  "activity:extract": "Fields extracted",
-  "activity:trust_gate": "Confidence checked",
-  "activity:validate": "Validated",
-  "activity:fraud": "Fraud checks run",
-  "activity:route": "Routed",
-  "fraud.flag": "Fraud check flagged",
-  "agent.review_note": "Assistant review note",
-  "agent.review_note_refused": "Review note withheld (not verifiable)",
-  "agent.review_note_unavailable": "Review note unavailable (model offline)",
-  "proposal.submit": "Proposal drafted",
-  "decision.approve": "Approved",
-  "decision.reject": "Rejected",
-};
-
-function label(action: string): string {
-  return ACTION_LABEL[action] ?? action.replace(/[._:]/g, " ");
-}
-
-function when(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+/** Fact keys are snake_case system names ("max_score"); shown as plain words. */
+function factLabel(key: string): string {
+  return key.replace(/_/g, " ");
 }
 
 export function AuditTrail({ invoiceId, focusId }: { invoiceId: string; focusId: number | null }) {
@@ -117,23 +93,27 @@ export function AuditTrail({ invoiceId, focusId }: { invoiceId: string; focusId:
               )}
             >
               <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                <span className="font-medium">{label(event.action)}</span>
-                <span className="text-muted-foreground font-mono text-[0.6875rem]">
+                <span className="font-medium" data-testid="audit-label" title={event.action}>
+                  {auditActionLabel(event.action)}
+                </span>
+                <span className="text-muted-foreground tabular-mono text-[0.6875rem]">
                   #{event.id}
                 </span>
               </p>
               <p className="text-muted-foreground text-xs">
-                {when(event.ts)} · {event.actor}
+                <span className="tabular-mono">{formatAuditTime(event.ts)}</span> · {event.actor}
               </p>
               {facts.length > 0 && (
                 <dl className="mt-1.5 flex flex-wrap gap-1.5">
                   {facts.map(([key, value]) => (
                     <div
                       key={key}
-                      className="bg-muted flex gap-1 rounded px-1.5 py-0.5 font-mono text-[0.6875rem]"
+                      className="bg-muted flex gap-1 rounded px-1.5 py-0.5 text-[0.6875rem]"
                     >
-                      <dt className="text-muted-foreground">{key}</dt>
-                      <dd>{String(value)}</dd>
+                      <dt className="text-muted-foreground">{factLabel(key)}</dt>
+                      <dd className={cn(typeof value === "number" && "tabular-mono")}>
+                        {String(value)}
+                      </dd>
                     </div>
                   ))}
                 </dl>

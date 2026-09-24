@@ -12,6 +12,7 @@ from typing import Final
 from apx.common.errors import ApxError
 from apx.common.invoice import Invoice, InvoiceKind, VatCategory
 from apx.common.types import Frozen, Money
+from apx.validate.interfaces import vat_rate_fits_category
 
 KIND_FIELD: Final[str] = "invoice_type_code"
 """Field row holding BT-3 as "380" (invoice) or "381" (credit note)."""
@@ -23,7 +24,11 @@ _KIND_VALUES: Final[Mapping[str, InvoiceKind]] = {
 CURRENCY_FIELD: Final[str] = "currency"
 """The grounded currency field (`FieldName.CURRENCY`); "XXX" or blank means not extracted."""
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
+_DOCUMENT_CURRENCY: Final[str] = "AED"
+"""The only currency a PINT AE e-invoice is built in here (`apx.einvoice.builder`)."""
 _LINE_FIELD = re.compile(r"^line_items\[(\d+)\]\.(vat_category|vat_rate)$")
+SUPPLIER_TRN_FIELD: Final[str] = "supplier_trn"
+"""The grounded supplier TRN (`FieldName.SUPPLIER_TRN`): BT-31 and the seller EndpointID."""
 
 
 def kind_value(kind: InvoiceKind | None) -> str | None:
@@ -46,6 +51,33 @@ def line_rate_field(index: int) -> str:
 class MissingCorrectionsError(ApxError):
     """An approval arrived while a classified value is still missing or unreadable; the API
     answers 422 and the workflow is never signalled."""
+
+
+class SupplierTrnMissingError(MissingCorrectionsError):
+    """Approval refused: the document has no supplier TRN. The e-invoice needs it (BT-31, the
+    BT-34 EndpointID) and a reviewer's field edit cannot supply it (the workflow builds from the
+    extracted invoice), so the approval would only fail at the build. 422, nothing recorded."""
+
+
+class CurrencyRelabelError(MissingCorrectionsError):
+    """Approval refused: the reviewer's currency would relabel amounts extracted in another
+    valid currency (for example USD) as AED without converting them. 422, nothing recorded."""
+
+
+def currency_relabel(extracted: str | None, corrected: str) -> str | None:
+    """Why `corrected` may not replace `extracted`, else None. A reviewer may resolve a missing
+    or `XXX` currency, but changing a valid extracted code to AED would put foreign amounts
+    into an AED e-invoice unchanged. Any other non-AED target is refused by the AED-only rule."""
+    code = (extracted or "").strip().upper()
+    target = corrected.strip().upper()
+    if not _CURRENCY.match(code) or code in ("XXX", _DOCUMENT_CURRENCY):
+        return None
+    if target != _DOCUMENT_CURRENCY:
+        return None
+    return (
+        f"{CURRENCY_FIELD}: the document's amounts are in {code}; relabelling them {target} "
+        "without conversion is refused, so reject the invoice"
+    )
 
 
 class LineCorrection(Frozen):
@@ -72,9 +104,22 @@ def _rate(raw: str) -> Decimal | None:
     return value if value.is_finite() and value >= 0 else None
 
 
-def corrections_from_fields(values: Mapping[str, str | None]) -> ReviewCorrections:
-    """Builds `ReviewCorrections` from the latest value of each classified field row. Raises
-    `MissingCorrectionsError` naming every field still missing or unreadable."""
+def corrections_from_fields(
+    values: Mapping[str, str | None], *, extracted: Mapping[str, str | None]
+) -> ReviewCorrections:
+    """Builds `ReviewCorrections` from the latest value of each classified field row (`values`,
+    a reviewer's row winning). Raises `MissingCorrectionsError` naming every field still missing
+    or unreadable, or holding a value the e-invoice build refuses: a non-AED currency, or a line
+    rate that does not fit its category (so the approval is refused before anything is
+    recorded). `extracted` holds the model-sourced values the workflow's invoice was built from:
+    a missing supplier TRN raises `SupplierTrnMissingError`, and a currency override that
+    relabels a valid extracted code as AED raises `CurrencyRelabelError`."""
+    if not (extracted.get(SUPPLIER_TRN_FIELD) or "").strip():
+        raise SupplierTrnMissingError(
+            "cannot approve: the document has no supplier TRN (BT-31); a reviewer's edit of "
+            f"{SUPPLIER_TRN_FIELD} does not reach the e-invoice, so reject the invoice and ask "
+            "the supplier for a corrected one"
+        )
     problems: list[str] = []
     kind = _KIND_VALUES.get((values.get(KIND_FIELD) or "").strip())
     if kind is None:
@@ -82,6 +127,12 @@ def corrections_from_fields(values: Mapping[str, str | None]) -> ReviewCorrectio
     currency = (values.get(CURRENCY_FIELD) or "").strip().upper()
     if not _CURRENCY.match(currency) or currency == "XXX":
         problems.append(CURRENCY_FIELD)
+    elif currency != _DOCUMENT_CURRENCY:
+        # The PINT AE builder refuses a non-AED document (ADR-0012 amendment 2), so approving
+        # one would only fail at the e-invoice build, after the approval was recorded.
+        problems.append(f"{CURRENCY_FIELD} (must be AED, got {currency})")
+    elif (relabel := currency_relabel(extracted.get(CURRENCY_FIELD), currency)) is not None:
+        raise CurrencyRelabelError(f"cannot approve: {relabel}")
     indices = sorted(
         {int(m.group(1)) for name in values if (m := _LINE_FIELD.match(name)) is not None}
     )
@@ -97,7 +148,11 @@ def corrections_from_fields(values: Mapping[str, str | None]) -> ReviewCorrectio
             problems.append(line_category_field(index))
         if rate is None:
             problems.append(line_rate_field(index))
-        if category is not None and rate is not None:
+        if category is not None and rate is not None and not vat_rate_fits_category(category, rate):
+            # apply_review refuses VAT_CATEGORY_RATE_MISMATCH and the builder refuses an E/O line
+            # with a rate, so a mismatch is refused here, before the approval is recorded.
+            problems.append(f"{line_rate_field(index)} ({rate}% does not fit category {category})")
+        elif category is not None and rate is not None:
             lines.append(LineCorrection(index=index, vat_category=category, vat_rate=rate))
     if problems or kind is None:
         raise MissingCorrectionsError(
@@ -108,7 +163,9 @@ def corrections_from_fields(values: Mapping[str, str | None]) -> ReviewCorrectio
 
 def apply_corrections(invoice: Invoice, corrections: ReviewCorrections) -> Invoice:
     """`invoice` with the reviewer's kind and line categories/rates. Every line must be covered
-    exactly once; anything else is a `MissingCorrectionsError` (never a partial apply)."""
+    exactly once; anything else is a `MissingCorrectionsError` (never a partial apply). So is a
+    currency that would relabel the invoice's valid extracted code as AED (`currency_relabel`):
+    raised as the base class, which `apply_review` already lists as non-retryable."""
     by_index = {c.index: c for c in corrections.lines}
     expected = set(range(1, len(invoice.lines) + 1))
     if set(by_index) != expected or len(by_index) != len(corrections.lines):
@@ -116,6 +173,8 @@ def apply_corrections(invoice: Invoice, corrections: ReviewCorrections) -> Invoi
             f"corrections cover lines {sorted(by_index)}, invoice has lines {sorted(expected)}"
         )
     cur = corrections.currency
+    if (relabel := currency_relabel(invoice.total.currency, cur)) is not None:
+        raise MissingCorrectionsError(f"invoice {invoice.id}: {relabel}")
 
     def money(value: Money) -> Money:
         return value.model_copy(update={"currency": cur})

@@ -33,6 +33,13 @@ function loadFixtureClient(): Promise<ApiClient> {
   return fixtureModule;
 }
 
+/** Starts fetching the fixture adapter's chunk now instead of on the first API call, so a
+ * signed-in route's session restore and first data load do not wait for one more serial round
+ * trip after hydration. A no-op in http mode; a failed prefetch is retried by the first call. */
+export function warmApiClient(): void {
+  if (getApiMode() === "fixture") loadFixtureClient().catch(() => {});
+}
+
 /** Forwards every call to the fixture adapter once its module has loaded. A failed load rejects
  * the call (a plain Error, not ApiError), which callers report as "couldn't reach the server". */
 const lazyFixtureClient: ApiClient = {

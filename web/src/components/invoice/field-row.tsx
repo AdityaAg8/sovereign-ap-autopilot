@@ -156,9 +156,12 @@ export function FieldRow({
       data-field={field.name}
       aria-describedby={rowDescribedBy || undefined}
       className={cn(
+        // Rings are drawn inset: the list scrolls, so the global 2px-outside ring would be clipped
+        // by its overflow edge and cut through the row's first and last lines. `outline-none`
+        // sets Tailwind's outline style to none, so each ring re-states `outline-solid`.
         "border-border/70 group flex flex-col gap-1.5 border-b px-4 py-2.5 outline-none",
-        "focus-visible:outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
-        active && "bg-accent/10 outline-ring outline-1 -outline-offset-1",
+        "focus-visible:outline-ring focus-visible:outline-solid focus-visible:outline-2 focus-visible:-outline-offset-2",
+        active && "bg-accent/10 outline-ring outline-1 -outline-offset-1 outline-solid",
         unresolved && "border-s-destructive border-s-2",
       )}
     >
@@ -242,7 +245,13 @@ export function FieldRow({
           {shown === null && editor.kind !== "text" ? (
             <span className="text-destructive text-sm font-medium">Missing</span>
           ) : (
-            <span className={cn("truncate text-sm", mono && "tabular-mono")}>{shown ?? "—"}</span>
+            <span
+              className={cn("truncate text-sm", mono && "tabular-mono")}
+              dir={mono ? "ltr" : undefined}
+              data-testid={`field-value-${field.name}`}
+            >
+              {shown ?? "—"}
+            </span>
           )}
           <button
             type="button"

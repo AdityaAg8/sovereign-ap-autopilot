@@ -39,68 +39,81 @@ function reviewRule(invoice: InvoiceDetail): string {
   return invoice.flags[0]?.rule ?? "low_confidence";
 }
 
-/** The invoice's audit trail, newest first. Ids are stable per invoice. */
+/** The invoice's audit trail, newest first, in the vocabulary apx writes: one `activity:<step>`
+ * event per workflow step (apx.workflows.activities `_audit`, one `activity:fraud` per invoice
+ * with its flag count), then the exception agent's note or the delivery steps. Ids are stable
+ * per invoice and increase along the trail, like the hash chain's. */
 export function fixtureAudit(invoice: InvoiceDetail): AuditEventView[] {
-  const base = stableId(invoice.summary.id) * 10;
+  let nextId = stableId(invoice.summary.id) * 20;
   const start = Date.parse(invoice.summary.receivedAt);
-  const at = (seconds: number) => new Date(start + seconds * 1000).toISOString();
-  const events: AuditEventView[] = [
-    { id: base + 1, ts: at(2), actor: "workflow", action: "activity:scan", facts: {}, note: null },
-    {
-      id: base + 2,
-      ts: at(40),
-      actor: "workflow",
-      action: "activity:extract",
-      facts: {},
-      note: null,
-    },
-    {
-      id: base + 3,
-      ts: at(44),
-      actor: "workflow",
-      action: "activity:validate",
-      facts: {},
-      note: null,
-    },
-  ];
-  invoice.flags.slice(0, 4).forEach((flag, index) => {
+  const events: AuditEventView[] = [];
+  const add = (
+    seconds: number,
+    action: string,
+    facts: AuditEventView["facts"] = {},
+    actor = "workflow",
+    note: string | null = null,
+  ): number => {
+    const id = ++nextId;
     events.push({
-      id: base + 4 + index,
-      ts: at(46 + index),
-      actor: "workflow",
-      action: "fraud.flag",
-      facts: { rule: flag.rule, kind: flag.severity },
-      note: null,
+      id,
+      ts: new Date(start + seconds * 1000).toISOString(),
+      actor,
+      action,
+      facts,
+      note,
     });
+    return id;
+  };
+  const { status, route } = invoice.summary;
+
+  add(2, "activity:scan", { flags: 0 });
+  add(9, "activity:parse", { pages: invoice.pageCount });
+  add(40, "activity:extract");
+  add(42, "activity:trust_gate");
+  add(43, "activity:build_invoice");
+  add(44, "activity:validate");
+  const reached = route !== null || status === "fraud_checked";
+  if (!reached) return events.reverse();
+
+  const rules = invoice.flags.map((f) => f.rule);
+  const fraudId = add(46, "activity:fraud", {
+    flags: invoice.flags.length,
+    rules: rules.length > 0 ? [...new Set(rules)].join(", ") : null,
   });
-  if (invoice.summary.route) {
-    events.push({
-      id: base + 8,
-      ts: at(50),
-      actor: "workflow",
-      action: "activity:route",
-      facts: {
-        route: invoice.summary.route,
-        rule: invoice.summary.route === "auto" ? null : reviewRule(invoice),
-      },
-      note: null,
-    });
-  }
-  if (invoice.summary.status === "awaiting_review") {
+  if (route === null) return events.reverse();
+
+  const routeId = add(50, "activity:route", {
+    route,
+    rule: route === "auto" ? null : reviewRule(invoice),
+  });
+  if (status === "awaiting_review") {
     const first = invoice.flags[0];
-    events.push({
-      id: base + 9,
-      ts: at(75),
-      actor: "agent",
-      action: "agent.review_note",
-      facts: {},
-      note:
-        `Held for review by the ${reviewRule(invoice).replace(/_/g, " ")} check [audit:${base + 8}]. ` +
+    add(
+      75,
+      "agent.review_note",
+      {},
+      "agent",
+      `Held for review by the ${reviewRule(invoice).replace(/_/g, " ")} check [audit:${routeId}]. ` +
         (first
-          ? `Check this first: ${first.explanation} [audit:${base + 4}]`
+          ? `Check this first: ${first.explanation} [audit:${fraudId}]`
           : "Check the fields marked for review before deciding."),
-    });
+    );
   }
+  const cleared = status === "approved" || status === "sent" || status === "archived";
+  if (route === "review" && cleared) {
+    // A reviewer approved it: the policy check, the decision and the payment-state write
+    // (apx.policy.guard, apx.api.service, apx.policy.writer), in the order apx records them.
+    add(90, "authorize:approve_payment", { allowed: true }, "reviewer");
+    add(91, "decision.approve", {}, "reviewer");
+    add(91, "payment_state:approve", {}, "reviewer");
+  }
+  const delivered = route === "review" ? 95 : 52;
+  if (status === "sent" || status === "archived") {
+    add(delivered, "activity:build_einvoice");
+    add(delivered + 3, "activity:send_to_asp");
+  }
+  if (status === "archived") add(delivered + 8, "activity:archive");
   return events.reverse();
 }
 
@@ -126,28 +139,22 @@ function explain(invoice: InvoiceDetail): string {
   const number = invoiceNumber(invoice);
   const trail = fixtureAudit(invoice);
   const route = trail.find((e) => e.action === "activity:route");
-  const flags = trail.filter((e) => e.action === "fraud.flag").reverse();
+  const fraud = trail.find((e) => e.action === "activity:fraud");
   const top = invoice.flags[0];
+  const others = invoice.flags.length - 1;
   switch (invoice.summary.status) {
     case "blocked":
       return (
         `${number} was blocked [audit:${route?.id}]. ` +
-        (top && flags[0] ? `${top.explanation} [audit:${flags[0].id}]` : "") +
-        (flags.length > 1
-          ? ` It also tripped ${flags.length - 1} other check${flags.length > 2 ? "s" : ""} ` +
-            flags
-              .slice(1)
-              .map((f) => `[audit:${f.id}]`)
-              .join(" ") +
-            "."
-          : "") +
+        (top && fraud ? `${top.explanation} [audit:${fraud.id}]` : "") +
+        (others > 0 ? ` It also tripped ${others} other check${others > 1 ? "s" : ""}.` : "") +
         " A blocked invoice can only be rejected; nothing will be paid."
       );
     case "awaiting_review":
       return (
         `${number} is waiting for a reviewer because of the ` +
         `${reviewRule(invoice).replace(/_/g, " ")} check [audit:${route?.id}].` +
-        (top && flags[0] ? ` ${top.explanation} [audit:${flags[0].id}]` : "")
+        (top && fraud ? ` ${top.explanation} [audit:${fraud.id}]` : "")
       );
     case "approved":
     case "sent":

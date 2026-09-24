@@ -3,7 +3,8 @@
 Local-only AP agent: supplier invoices (EN/AR) become validated UAE PINT AE
 e-invoices, with fraud checks, a provable field error rate and
 injection-proof payments. Architecture: [`docs/architecture.md`](docs/architecture.md);
-decisions: [`docs/adr/`](docs/adr/).
+decisions: [`docs/adr/`](docs/adr/) (index in
+[`docs/architecture.md`](docs/architecture.md#decision-index), ADR-0001 to ADR-0015).
 
 ## Quickstart
 
@@ -21,6 +22,10 @@ No stack or GPU? `make preview` runs the web UI against built-in fixtures on
 http://localhost:3001; the login page lists the demo accounts (any password works).
 Against the live API (`make demo`) use the accounts in `data/seed_credentials.json`.
 
+The worker needs `WORKER_BUYER_TRN`, our own 15-digit TRN written as the e-invoice buyer
+(ADR-0012 amendment 2). Compose defaults it to the demo company. Anywhere else it has no
+default, and the worker refuses to start without a valid value (`.env.example`).
+
 ## Make targets
 
 | Target | What it does |
@@ -29,11 +34,11 @@ Against the live API (`make demo`) use the accounts in `data/seed_credentials.js
 | `up` / `down` | Start / stop the Docker Compose stack (`infra/compose.yaml`) |
 | `models` | Download and verify model weights |
 | `smoke` | Check every model loads and serves |
-| `gpu-free` | Stop llama-swap, parse and toolbox to free the GPU |
+| `gpu-free` | Stop llama-swap, parse and toolbox to free the GPU (does not clear `data/ml/gpu.lock`; see `docs/runbook.md`) |
 | `lint` / `fmt` / `typecheck` | ruff + ESLint, formatters, mypy --strict + tsc |
 | `test` / `test-gpu` / `e2e` | Unit tests, GPU tests, end-to-end tests (`e2e` lands with M5.4) |
 | `eval` / `eval-quick` | Full / quick evaluation; regenerates the scoreboard below |
-| `retrain` | Retrain the extractor |
+| `retrain` | Export corrections, train a challenger, shadow-eval it against the champion and promote only if no gate regresses (ADR-0015). Exits 2 with `RetrainPrerequisiteError` until the production adapters exist |
 | `seed` | Load the factory ERP into Postgres |
 | `demo` | Stack + seed + web app on :3000 + staged demo scenarios |
 | `fresh-clone` / `verify-mN` / `verify-all` | Clean-clone check and milestone gates |
@@ -49,7 +54,10 @@ so in one line instead of failing with a stack trace.
 ## Keyboard shortcuts (web UI)
 
 Press `?` anywhere to see the shortcuts for the current screen. Single-key shortcuts are
-ignored while typing in a text field.
+ignored while typing in a text field and inside open menus, dialogs and dropdowns. Letter
+shortcuts also work on Arabic and other non-Latin layouts (matched by physical key), and
+AltGr symbols never trigger them. Keys typed right after opening the palette, the assistant or
+the shortcut reference go to that overlay, never to Approve, Reject or Fix.
 
 | Keys | Where | Action |
 |---|---|---|

@@ -95,7 +95,13 @@ Code = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,40}$")]
 """System enum value (status, rule, typology, flag kind, field name)."""
 AuditId = Annotated[int, Field(ge=1)]
 AuditActor = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_:.\-]{1,80}$")]
-AuditAction = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_.]{0,63}$")]
+AuditAction = Annotated[
+    str,
+    StringConstraints(max_length=64, pattern=r"^[a-z][a-z0-9_]*(?:[.:][a-z][a-z0-9_]*)*$"),
+]
+"""Audit action as written by the pipeline: `activity:<step>`, `authorize:<cap>`,
+`decision.<action>`, `proposal.submit`, `mcp.refusal`, `field_edit`. Segments joined by `.` or
+`:`; no empty segment, no uppercase, at most 64 characters. Rust-regex compatible."""
 SystemText = Annotated[str, StringConstraints(max_length=300)]
 """System-written template text. Never interpolates document free text (ADR-0008 T5)."""
 Probability = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -387,10 +393,18 @@ class InvoiceView(ToolOutput):
     subtotal: Money | None
     vat_total: Money | None
     payee: MaskedIban | None
-    """P1 payee from the vendor master (`select_payee`), never `Invoice.iban`."""
+    """P1 payee (`select_payee`) pinned when the invoice was routed and persisted with the
+    `policy_route` decision (ADR-0014 §7, migration 0008): the account the e-invoice pays, since
+    the build refuses if the live selection differs. The invoice IBAN only selects among the
+    vendor's admin-verified accounts and is never itself the payee. None when P1 refused (see
+    `payee_refusal`) or the invoice has not been routed yet."""
     document_iban_matches_payee: bool | None
-    """Whether the IBAN printed on the document equals the payee; the document IBAN itself is
-    never returned."""
+    """Whether the IBAN printed on the document selected the payee (`payee_match == "matched"`);
+    None without a payee. The document IBAN itself is never returned."""
+    payee_match: Code | None = None
+    """`PayeeMatch` value of the pinned payee: matched, sole_unclaimed or sole_mismatch."""
+    payee_refusal: Code | None = None
+    """`PayeeRefusal` value when P1 could not select a payee at routing, else None."""
     line_count: int
     fields: tuple[FieldStatus, ...]
     reasons: tuple[ReasonView, ...]
@@ -424,6 +438,8 @@ class VendorHistory(ToolOutput):
     """From the vendor master (admin-entered), not from any document."""
     trn: Trn | None
     payee: MaskedIban | None
+    """The vendor's most recently changed verified current account (display only). Not the P1
+    payee, which is chosen per invoice (`InvoiceView.payee`, ADR-0014)."""
     accounts: Annotated[tuple[AccountView, ...], Field(max_length=VENDOR_MAX_ACCOUNTS)]
     bank_changes: Annotated[tuple[BankChangeView, ...], Field(max_length=VENDOR_MAX_BANK_CHANGES)]
     invoices: tuple[InvoiceRow, ...]

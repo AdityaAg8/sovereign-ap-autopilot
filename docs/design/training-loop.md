@@ -34,7 +34,7 @@ data/ml/extractor_b/                 # never committed (C5)
   quarantine.jsonl                   # QuarantineRecord rows
   guard_report.json                  # GuardReport
   pages/<sha256>/<n>.jpg             # pre-resized by apx.extract's shared resize function
-data/ml/gpu.lock                     # {pid, job, started_at}; O_EXCL
+data/ml/gpu.lock                     # format 2 metadata; O_EXCL + held flock (ADR-0011 am. 4)
 models/extractor_b/<run_id>/
   run.json                           # RunRecord (atomic)
   best.json                          # {"step": N} (atomic)
@@ -73,7 +73,9 @@ make train-b  →  make gpu-free  →  docker compose --profile train run --rm t
                                      python -m ml.extractor_b.train --resume auto   (nohup, logs/)
 train.py
   1. load_config; set offline env asserts (HF_HUB_OFFLINE etc. must be "1", else TrainingError)
-  2. preflight_gpu (raises GpuBusyError) and acquire GpuLock (released in finally)
+  2. preflight_gpu (raises GpuBusyError) and acquire GpuLock (flock held for the job, released in
+     finally). Before any model loads, `ml/extractor_b/gpu_job.py` also runs the ADR-0013 VRAM/RAM
+     headroom check (trainer: 6 GB VRAM, 12 GB RAM) and refuses typed when short.
   3. load raw manifests → run_guards → write train/dev/quarantine/guard_report (skipped when the
      files exist and raw sha256 is unchanged)
   4. compute_fingerprint; resolve run dir:
@@ -194,7 +196,7 @@ base variables explicitly. `ml.extractor_b.train.resolve_base` never guesses a p
 | `tests/unit/ml/test_spike_guard.py` | CI | NaN loss → `SKIP_MICROBATCH`; inf grad → `SKIP_STEP`; 3 consecutive → `STOP`; 6 in 100 → `STOP`; state JSON round-trip; not armed during warmup |
 | `tests/unit/ml/test_selection.py` | CI | highest F1 wins; tie within 0.1 → lower dev loss → earlier step; dev-loss-only evals ignored; last step is not preferred |
 | `tests/unit/ml/test_fingerprint.py` | CI | each comparable field changes the hash; `git_sha` does not affect `comparable()` |
-| `tests/unit/ml/test_gpu_preflight.py` | CI | fake `nvidia-smi` output: busy → `GpuBusyError`; held lock → `GpuBusyError`; stale lock reported, not taken |
+| `tests/unit/ml/test_gpu_preflight.py` | CI | fake `nvidia-smi` output: busy → `GpuBusyError`; held lock → `GpuBusyError`; stale-lock reclaim by flock is in `test_gpu_lock_stale.py` (ADR-0011 amendment 4) |
 | `tests/trainer/test_resume_equivalence.py` | trainer image, CPU | tiny random causal LM (from config, no download) with LoRA via peft and `GuardedSFTTrainer`: 12 steps straight vs 6 + SIGTERM + resume 6 → equal adapter tensors, optimizer state and loss sequence; `torch.use_deterministic_algorithms(True)` |
 | `tests/trainer/test_nan_skip.py` | trainer image, CPU | a planted NaN batch is skipped and logged to `spikes.jsonl`; weights stay finite |
 | `tests/trainer/test_private_api_pins.py` | trainer image | the overridden private Trainer methods exist with the expected signatures |

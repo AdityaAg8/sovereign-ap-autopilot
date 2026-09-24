@@ -3,7 +3,9 @@ ERP-verified vendor payment IBAN (never the invoice's own claimed IBAN, per P1 "
 payments"), for VAT categories S/Z/E/AE/O (PRD §3 apx/einvoice, §10 M4.3). Presence checks are
 deliberately shallow: a header/line field left `None` is simply omitted from the XML, so the
 runtime schematron validator (`apx.einvoice.schematron`) is the single source of truth for which
-omissions are fatal, and reports the violated rule ID."""
+omissions are fatal, and reports the violated rule ID. The money path is the exception: currency
+and line VAT rate are never defaulted (ADR-0012), so a missing/non-AED currency or a rate-bearing
+line without a rate raises `EInvoiceError`."""
 
 from __future__ import annotations
 
@@ -75,7 +77,13 @@ _DEFAULT_UNIT_CODE = "C62"
 _CREDIT_TRANSFER_CODE = "30"
 """UNCL4461 payment means code for a bank credit transfer."""
 
-_STANDARD_VAT_RATE = Decimal("5")
+_DOCUMENT_CURRENCY = "AED"
+"""The only document currency (BT-5) this builder emits. A non-AED invoice needs the VAT
+accounting currency (BT-6), a tax-currency `cac:TaxTotal` and the tax accounting exchange rate
+(BTAE-04, `ibr-159-ae`), none of which `InvoiceFields` carries, so it is refused rather than
+relabelled as AED (see `apx.validate.interfaces`, which flags it for review for the same
+reason)."""
+
 _ZERO = Decimal("0")
 _CENTS = Decimal("0.01")
 
@@ -137,11 +145,19 @@ def _parse_date(value: str | None, *, field: str) -> date | None:
 
 
 def _money(amount: Decimal) -> etree._Element:
-    return CBC.Amount(_fmt(_round2(amount)), currencyID="AED")
+    return CBC.Amount(_fmt(_round2(amount)), currencyID=_DOCUMENT_CURRENCY)
 
 
-def _endpoint_id(identifier: str | None, trn: str | None) -> etree._Element:
-    value = _text(identifier) or _text(trn) or "0000000000000"
+def _endpoint_id(identifier: str | None, trn: str | None, *, party: str) -> etree._Element:
+    """The party's electronic address (seller BT-34 / buyer BT-49), mandatory in PINT: its
+    identifier, else its TRN. Never fabricated: with neither, the document cannot be addressed."""
+    value = _text(identifier) or _text(trn)
+    if value is None:
+        bt = "BT-34" if party == "supplier" else "BT-49"
+        raise EInvoiceError(
+            f"{party}: no identifier or TRN to use as the electronic address ({bt}); "
+            "an EndpointID is never fabricated"
+        )
     return CBC.EndpointID(value, schemeID=_EAS_SCHEME_ID)
 
 
@@ -202,6 +218,7 @@ def _party_legal_entity(
 
 def _party(
     *,
+    role: str,
     identifier: str | None,
     name: str | None,
     legal_registration_id: str | None,
@@ -213,7 +230,7 @@ def _party(
     country: str | None,
 ) -> etree._Element:
     children = [
-        _endpoint_id(identifier, trn),
+        _endpoint_id(identifier, trn, party=role),
         _postal_address(
             address_line1=address_line1,
             city=city,
@@ -274,9 +291,23 @@ def _resolve_line_tax(
         )
     rate = _amount(rate_raw, field=f"{line_ref}.vat_rate")
     if category in _LINE_RATE_CATEGORIES:
-        rate = rate if rate is not None else _STANDARD_VAT_RATE
+        if rate is None:
+            # ADR-0012: a missing rate is never assumed (no 5% fallback); the validator routes
+            # it to review as VAT_RATE_MISSING and the reviewer supplies it.
+            raise EInvoiceError(
+                f"{line_ref}: vat_category_code {category!r} requires a vat_rate (BT-152), "
+                "and none was given; a VAT rate is never assumed"
+            )
     else:
-        rate = None  # E, O: the line MUST NOT carry a rate at all
+        # E, O: the line MUST NOT carry a rate at all. A stated non-zero rate contradicts the
+        # category (the validator's VAT_CATEGORY_RATE_MISMATCH); dropping it would silently turn
+        # a VAT-bearing line into a 0-VAT one, so it is refused instead.
+        if rate is not None and rate != _ZERO:
+            raise EInvoiceError(
+                f"{line_ref}: vat_category_code {category!r} carries no VAT, but vat_rate is "
+                f"{rate}; the category and rate disagree"
+            )
+        rate = None
 
     exemption_code = exemption_text = None
     if category == _E:
@@ -310,7 +341,9 @@ def _item_price_extension(tax: _LineTax) -> etree._Element:
     children: list[etree._Element] = [_money(gross)]
     if tax.line_vat_amount is not None:  # ibr-163-ae: omit entirely for Exempt lines
         children.append(
-            CAC.TaxTotal(CBC.TaxAmount(_fmt(_round2(tax.line_vat_amount)), currencyID="AED"))
+            CAC.TaxTotal(
+                CBC.TaxAmount(_fmt(_round2(tax.line_vat_amount)), currencyID=_DOCUMENT_CURRENCY)
+            )
         )
     return CAC.ItemPriceExtension(*children)
 
@@ -346,18 +379,18 @@ def _invoice_line(
     return line(
         CBC.ID(line_id),
         quantity_el(_fmt(quantity), unitCode=unit_code or _DEFAULT_UNIT_CODE),
-        CBC.LineExtensionAmount(_fmt(_round2(tax.net_amount)), currencyID="AED"),
+        CBC.LineExtensionAmount(_fmt(_round2(tax.net_amount)), currencyID=_DOCUMENT_CURRENCY),
         CAC.Item(*item_children),
         CAC.Price(
-            CBC.PriceAmount(_fmt(unit_price), currencyID="AED"),
+            CBC.PriceAmount(_fmt(unit_price), currencyID=_DOCUMENT_CURRENCY),
             CBC.BaseQuantity(_fmt(price_base_quantity), unitCode=unit_code or _DEFAULT_UNIT_CODE),
             # ibr-126-ae: Item price base quantity (IBT-149) and Item Gross Price (IBT-148, the
             # AllowanceCharge/BaseAmount below) MUST both be there; ChargeIndicator=false and
             # Amount=0 mean "no line-level price discount" rather than an actual allowance.
             CAC.AllowanceCharge(
                 CBC.ChargeIndicator("false"),
-                CBC.Amount(_fmt(_ZERO), currencyID="AED"),
-                CBC.BaseAmount(_fmt(unit_price), currencyID="AED"),
+                CBC.Amount(_fmt(_ZERO), currencyID=_DOCUMENT_CURRENCY),
+                CBC.BaseAmount(_fmt(unit_price), currencyID=_DOCUMENT_CURRENCY),
             ),
         ),
         _item_price_extension(tax),
@@ -380,8 +413,8 @@ def _tax_subtotal(
         category_children.append(CBC.Percent(_fmt(rate)))
     category_children.append(CAC.TaxScheme(CBC.ID(_VAT_SCHEME_ID)))
     return CAC.TaxSubtotal(
-        CBC.TaxableAmount(_fmt(_round2(taxable_amount)), currencyID="AED"),
-        CBC.TaxAmount(_fmt(tax_amount), currencyID="AED"),
+        CBC.TaxableAmount(_fmt(_round2(taxable_amount)), currencyID=_DOCUMENT_CURRENCY),
+        CBC.TaxAmount(_fmt(tax_amount), currencyID=_DOCUMENT_CURRENCY),
         CAC.TaxCategory(*category_children),
     )
 
@@ -393,6 +426,23 @@ def _payment_means(iban: str | None) -> etree._Element | None:
         CBC.PaymentMeansCode(_CREDIT_TRANSFER_CODE),
         CAC.PayeeFinancialAccount(CBC.ID(iban)),
     )
+
+
+def _require_document_currency(currency_raw: str | None) -> None:
+    """Refuse, typed, any currency other than AED: never default a missing one to AED and never
+    label a foreign-currency invoice's amounts as AED (ADR-0012; "XXX" is ISO 4217 "no
+    currency", what the extraction wiring emits for a missing one)."""
+    currency = (_text(currency_raw) or "").upper()
+    if currency in ("", "XXX"):
+        raise EInvoiceError(
+            "currency_code (BT-5) is missing; the document currency is never assumed to be AED"
+        )
+    if currency != _DOCUMENT_CURRENCY:
+        raise EInvoiceError(
+            f"currency_code {currency_raw!r} is not AED; a non-AED PINT AE invoice needs a VAT "
+            "accounting currency and tax exchange rate (BT-6, BTAE-04, ibr-159-ae) that "
+            "InvoiceFields does not carry, so it cannot be built"
+        )
 
 
 def build_ubl_xml(
@@ -408,11 +458,15 @@ def build_ubl_xml(
     an absent header/line value is simply left out of the XML and the runtime schematron
     validator (`apx.einvoice.schematron`) reports the specific violated rule ID.
 
-    Raises `EInvoiceError` when data cannot be structurally represented at all: an unrecognised
-    `vat_category_code`, an unparsable amount/date, or (for an Invoice document, per PINT
-    AE `ibr-191-ae`/`ibr-192-ae`) a missing `verified_payment_iban`, since an Invoice without a
+    Raises `EInvoiceError` when data cannot be structurally represented at all: a missing or
+    non-AED `currency_code` (see `_DOCUMENT_CURRENCY`), an unrecognised or missing
+    `vat_category_code`, a missing `vat_rate` on an S/Z/AE line or a non-zero one on an E/O
+    line, a supplier or buyer with neither identifier nor TRN (no EndpointID), an unparsable
+    amount/date, a zero quantity with no unit price, or (for an Invoice document, per PINT AE
+    `ibr-191-ae`/`ibr-192-ae`) a missing `verified_payment_iban`, since an Invoice without a
     payment account would otherwise silently fail the money path further downstream.
     """
+    _require_document_currency(fields.currency_code)
     if type_code.is_invoice and verified_payment_iban is None:
         raise EInvoiceError(
             "an Invoice requires a verified_payment_iban (ERP vendor master, never the "
@@ -433,13 +487,20 @@ def build_ubl_xml(
         net_amount = _amount(line.net_amount, field=f"{line_ref}.net_amount")
         if net_amount is None:
             raise EInvoiceError(f"{line_ref}.net_amount is required to build a line")
-        quantity = _amount(line.quantity, field=f"{line_ref}.quantity") or Decimal(1)
+        quantity = _amount(line.quantity, field=f"{line_ref}.quantity")
+        if quantity is None:
+            quantity = Decimal(1)
         unit_price = _amount(line.unit_price, field=f"{line_ref}.unit_price")
         if unit_price is None:
-            unit_price = net_amount / quantity if quantity else net_amount
-        price_base_quantity = _amount(
-            line.price_base_quantity, field=f"{line_ref}.base_qty"
-        ) or Decimal(1)
+            if quantity == _ZERO:
+                raise EInvoiceError(
+                    f"{line_ref}: unit_price is missing and quantity is 0, so it cannot be "
+                    "derived from net_amount"
+                )
+            unit_price = net_amount / quantity
+        price_base_quantity = _amount(line.price_base_quantity, field=f"{line_ref}.base_qty")
+        if price_base_quantity is None:
+            price_base_quantity = Decimal(1)
 
         tax = _resolve_line_tax(
             category_raw=line.vat_category_code,
@@ -488,6 +549,7 @@ def build_ubl_xml(
     due_date = _parse_date(fields.due_date, field="due_date")
 
     supplier_party = _party(
+        role="supplier",
         identifier=fields.supplier_identifier,
         name=fields.supplier_name,
         legal_registration_id=fields.supplier_legal_registration_id,
@@ -499,6 +561,7 @@ def build_ubl_xml(
         country=fields.supplier_country_code,
     )
     buyer_party = _party(
+        role="buyer",
         identifier=fields.buyer_identifier,
         name=fields.buyer_name,
         legal_registration_id=fields.buyer_legal_registration_id,
@@ -542,10 +605,7 @@ def build_ubl_xml(
         header.append(CAC.DiscrepancyResponse(CBC.ResponseCode(response_code)))
     if (note := _text(fields.invoice_note)) is not None:
         header.append(CBC.Note(note))
-    if (currency := _text(fields.currency_code)) is not None:
-        header.append(CBC.DocumentCurrencyCode(currency))
-    else:
-        header.append(CBC.DocumentCurrencyCode("AED"))
+    header.append(CBC.DocumentCurrencyCode(_DOCUMENT_CURRENCY))
     if (buyer_ref := _text(fields.buyer_reference)) is not None:
         header.append(CBC.BuyerReference(buyer_ref))
     if preceding is not None:
@@ -562,16 +622,16 @@ def build_ubl_xml(
 
     header.append(
         CAC.TaxTotal(
-            CBC.TaxAmount(_fmt(_round2(vat_total)), currencyID="AED"),
+            CBC.TaxAmount(_fmt(_round2(vat_total)), currencyID=_DOCUMENT_CURRENCY),
             *tax_subtotals,
         )
     )
     header.append(
         CAC.LegalMonetaryTotal(
-            CBC.LineExtensionAmount(_fmt(line_extension_amount), currencyID="AED"),
-            CBC.TaxExclusiveAmount(_fmt(tax_exclusive_amount), currencyID="AED"),
-            CBC.TaxInclusiveAmount(_fmt(tax_inclusive_amount), currencyID="AED"),
-            CBC.PayableAmount(_fmt(payable_amount), currencyID="AED"),
+            CBC.LineExtensionAmount(_fmt(line_extension_amount), currencyID=_DOCUMENT_CURRENCY),
+            CBC.TaxExclusiveAmount(_fmt(tax_exclusive_amount), currencyID=_DOCUMENT_CURRENCY),
+            CBC.TaxInclusiveAmount(_fmt(tax_inclusive_amount), currencyID=_DOCUMENT_CURRENCY),
+            CBC.PayableAmount(_fmt(payable_amount), currencyID=_DOCUMENT_CURRENCY),
         )
     )
     header.extend(line_elements)

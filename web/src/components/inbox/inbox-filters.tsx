@@ -1,18 +1,13 @@
 /** Search + status/route filters above the inbox table (PRD §10 M5.4: "filters"). Pure controlled
- * inputs — filtering itself runs client-side over the already-fetched page in inbox-table.tsx. */
+ * inputs — filtering itself runs client-side over the already-fetched page in inbox-table.tsx.
+ * The two pickers are `FilterSelect`s, whose Radix select loads on the first interaction. */
 
 "use client";
 
 import { SearchIcon, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FilterSelect, type FilterSelectOption } from "@/components/inbox/filter-select";
 import type { InvoiceStatus, RouteDecision } from "@/lib/api/types";
 
 export interface InboxFilterState {
@@ -37,6 +32,18 @@ const STATUSES: readonly InvoiceStatus[] = [
   "failed",
 ];
 
+const STATUS_OPTIONS: readonly FilterSelectOption[] = [
+  { value: "all", label: "All statuses" },
+  ...STATUSES.map((s) => ({ value: s, label: s.replaceAll("_", " "), className: "capitalize" })),
+];
+
+const ROUTE_OPTIONS: readonly FilterSelectOption[] = [
+  { value: "all", label: "All routes" },
+  { value: "auto", label: "Auto" },
+  { value: "review", label: "Review" },
+  { value: "block", label: "Blocked" },
+];
+
 export function InboxFilters({
   value,
   onChange,
@@ -56,45 +63,31 @@ export function InboxFilters({
         <Input
           value={value.query}
           onChange={(e) => onChange({ ...value, query: e.target.value })}
-          placeholder="Search invoice ID or vendor…"
+          placeholder="Search invoice number, ID or vendor…"
           aria-label="Search invoices"
           className="ps-8"
         />
       </div>
       {!hideStatus && (
-        <Select
+        <FilterSelect
           value={value.status}
           onValueChange={(status) =>
             onChange({ ...value, status: status as InboxFilterState["status"] })
           }
-        >
-          <SelectTrigger className="w-44" aria-label="Filter by status">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">
-                {s.replaceAll("_", " ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={STATUS_OPTIONS}
+          ariaLabel="Filter by status"
+          className="w-44"
+          placeholder="Status"
+        />
       )}
-      <Select
+      <FilterSelect
         value={value.route}
         onValueChange={(route) => onChange({ ...value, route: route as InboxFilterState["route"] })}
-      >
-        <SelectTrigger className="w-36" aria-label="Filter by route">
-          <SelectValue placeholder="Route" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All routes</SelectItem>
-          <SelectItem value="auto">Auto</SelectItem>
-          <SelectItem value="review">Review</SelectItem>
-          <SelectItem value="block">Blocked</SelectItem>
-        </SelectContent>
-      </Select>
+        options={ROUTE_OPTIONS}
+        ariaLabel="Filter by route"
+        className="w-36"
+        placeholder="Route"
+      />
       {dirty && (
         <Button
           variant="ghost"

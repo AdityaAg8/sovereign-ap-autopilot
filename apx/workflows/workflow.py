@@ -40,8 +40,13 @@ with workflow.unsafe.imports_passed_through():
 
 NON_RETRYABLE_ERRORS: Final[Mapping[str, tuple[str, ...]]] = {
     "scan": ("DocumentNotFoundError",),
-    "parse": ("DocumentNotFoundError",),
-    "extract": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "ModelContextError"),
+    "parse": ("DocumentNotFoundError", "GpuProbeError"),
+    "extract": (
+        "DocumentNotFoundError",
+        "ParsedArtifactIntegrityError",
+        "ModelContextError",
+        "GpuProbeError",
+    ),
     "trust_gate": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "TrustGateError"),
     "fraud": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "FraudError"),
     "apply_review": ("EInvoiceError", "MissingCorrectionsError"),
@@ -60,7 +65,13 @@ fail again (re-running OCR or an ASP call on the way). Temporal matches a raised
 exact class name (not its bases), hence every concrete subclass is listed; tests resolve each
 name to a real `apx` exception. Transient failures (`ModelServingError` incl. `ModelBusyError`,
 `ParseError`, and `ModelOutputError`, since sampling may differ) keep the default retries;
-`ModelContextError` (prompt larger than the slot's context) is deterministic."""
+`ModelContextError` (prompt larger than the slot's context) is deterministic. GPU preflight
+(ADR-0013 addendum, M5.6a) in the GPU-stage activities: `GpuProbeError` (no `nvidia-smi`, or
+unparsable output) is a deployment fault a retry cannot fix, so it is listed; its subclass
+`GpuProbeTransientError` (`nvidia-smi` timed out or exited non-zero) is deliberately not listed,
+so exact-name matching retries it; the
+`InsufficientGpuMemoryError`/`InsufficientHostMemoryError` shortfalls are transient (another
+process may free memory) and keep the default retries."""
 
 
 def _retry_policy(activity: str) -> RetryPolicy:
@@ -74,6 +85,8 @@ def _retry_policy(activity: str) -> RetryPolicy:
 
 
 _ACTIVITY_TIMEOUT = timedelta(minutes=5)
+"""Generous enough for an LLM-backed extract/arbiter call; tightened per-activity once M3/M7
+land real latency numbers."""
 _GPU_ACTIVITY_TIMEOUT = timedelta(minutes=30)
 """Start-to-close for parse and extract, which wait inside the activity for their GPU stage
 (`apx.workflows.gpu_stage`, ADR-0013): a batch of the other stage (up to ~5 min of Extractor A
@@ -87,8 +100,9 @@ REVIEW_CORRECTIONS_PATCH = "adr12-review-corrections"
 """`workflow.patched` id: histories recorded before ADR-0012 replay without apply_review."""
 REVIEW_NOTE_PATCH = "m9-review-note"
 """`workflow.patched` id: histories recorded before M9.3 replay without the review-note step."""
-"""Generous enough for an LLM-backed extract/arbiter call; tightened per-activity once M3/M7
-land real latency numbers."""
+PAYEE_PIN_PATCH = "adr14-payee-pin"
+"""`workflow.patched` id: histories recorded before ADR-0014 §7 replay `build_einvoice` with the
+invoice alone; new executions also pass the payee pinned at routing (`RoutingDecision.payee`)."""
 
 
 class ReviewDecision(Frozen):
@@ -248,9 +262,14 @@ class InvoiceWorkflow:
 
         self._status = InvoiceStatus.APPROVED
 
+        # ADR-0014 §7: the build re-selects the payee and refuses unless it is still the one
+        # pinned at routing, which the reviewer saw (a master change after routing is TOCTOU).
+        build_args: list[object] = (
+            [invoice, routing.payee] if workflow.patched(PAYEE_PIN_PATCH) else [invoice]
+        )
         einvoice: EInvoiceDocument = await workflow.execute_activity(
             "build_einvoice",
-            invoice,
+            args=build_args,
             result_type=EInvoiceDocument,
             start_to_close_timeout=_ACTIVITY_TIMEOUT,
             retry_policy=_retry_policy("build_einvoice"),

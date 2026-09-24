@@ -4,9 +4,9 @@
 
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { PdfPane } from "@/components/invoice/pdf-pane";
 import { FieldList, type FieldListHandle } from "@/components/invoice/field-list";
 import { AuditTrail } from "@/components/invoice/audit-trail";
@@ -46,18 +46,40 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     if (tabParam) setTab(tabParam);
   }
 
+  // The record lands as a transition: React renders the whole detail tree (field rows, tabs,
+  // action bar) in yielding slices instead of one long main-thread task (TBT, M5.4a). The skeleton
+  // (same layout) stays up until that render commits, so nothing shifts.
+  // Every load takes a fresh token and only the latest may commit: navigating from one invoice to
+  // another (or reloading after an edit) must never let an older response land on the screen
+  // that the action bar would then approve or reject under the current `id`.
+  const loadToken = useRef(0);
   const load = useCallback(() => {
+    const token = ++loadToken.current;
+    const commit = (next: InvoiceDetail | null) => {
+      if (token === loadToken.current) startTransition(() => setInvoice(next));
+    };
     getApiClient()
       .getInvoice(id)
-      .then(setInvoice)
-      .catch(() => setInvoice(null));
+      .then(commit, () => commit(null));
   }, [id]);
 
+  // A different invoice drops the previous record at once (skeleton, action bar unmounted)
+  // instead of showing it under the new ID until the new one arrives.
+  const [shownId, setShownId] = useState(id);
+  if (shownId !== id) {
+    setShownId(id);
+    setInvoice(null);
+    setApproveError(null);
+  }
+
+  // The new id's load takes a newer token, which is what invalidates the old id's in-flight one.
   useEffect(() => {
     load();
   }, [load]);
 
-  useSetPageHeader(useMemo(() => ({ title: invoice ? invoice.summary.id : "Invoice" }), [invoice]));
+  // The invoice ID is the route param, so the header shows it from the first paint instead of a
+  // generic "Invoice" that is swapped for the same ID once the record arrives.
+  useSetPageHeader(useMemo(() => ({ title: id }), [id]));
 
   const boxes = useMemo(
     () =>
@@ -149,7 +171,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const approveBlockedReason = !isApproverRole
     ? "Approving requires the approver role — reviewers can fix and reject."
     : overLimit
-      ? `Above your AED ${user!.approvalLimitAed!.toLocaleString()} approval limit — needs a higher-limit approver.`
+      ? `Above your ${formatAed(user!.approvalLimitAed!)} approval limit — needs a higher-limit approver.`
       : null;
   const decisionsClosed = !["awaiting_review", "validated", "fraud_checked", "gated"].includes(
     invoice.summary.status,
@@ -166,7 +188,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         >
           {invoice.summary.vendorName ?? "Unknown vendor"}
         </span>
-        <span className="tabular-mono ms-auto text-sm font-medium">
+        <span
+          className="tabular-mono ms-auto text-sm font-medium whitespace-nowrap"
+          data-testid="invoice-total"
+        >
           {formatAed(invoice.summary.total)}
         </span>
       </div>

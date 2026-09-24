@@ -9,8 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M10.2 Promotion decider and retrain pipeline (`ml/promotion/`, ADR-0015): champion vs challenger on gates G1-G11 with a +0.5-point UAE F1 bar, compare-and-set on the champion alias, ordered side effects (audit, calibrator invalidation, models.lock, alias) and typed partial-apply reporting; `make retrain` exits 2 with `RetrainPrerequisiteError` until the production adapters exist.
+- M8.1 Page-similarity provider: `apx.llm.embedding.HttpPageEmbedder` (local Qwen3-VL-Embedding-2B client, typed errors, never an empty vector) and `apx.fraud.page_similarity.InMemoryPageSimilarityIndex` serving `DuplicateInvoiceRule.evaluate_similarity`; fraud owns the `PageEmbedder` port and never imports `apx.llm`.
+- M5.6a VRAM/RAM preflight (`apx.llm.preflight`, ADR-0013 addendum): every GPU stage switch and the trainer check free memory against a needs table plus a 0.3 GB margin and fail typed; the worker gets a utility-only GPU reservation for `nvidia-smi`, and probe timeouts or non-zero exits raise the retryable `GpuProbeTransientError`.
+- M9.3a Audit actions: `AuditAction` accepts the actions the pipeline really writes (`activity:route`, `authorize:pay`, `decision.approve`, 64-char cap); `explain_decision` topics match the written prefixes, including `payment_state` writes; the web audit trail labels them.
+- P1 option b (ADR-0014): a vendor may have several admin-verified accounts; the invoice IBAN (strict electronic form) selects exactly one or P1 refuses with a typed `PayeeRefusal`.
+- Payee pin, routing to build (ADR-0014 §7): `route` pins the selected payee, `build_einvoice` refuses a changed payee with a non-retryable, audited `PayeeChangedError`; migration `0008_agent_routed_payee` makes the agent view read the pinned payee.
+- Required `WORKER_BUYER_TRN` worker config (ADR-0012 amendment 2): our TRN is written as the buyer (BT-48/BT-49); a different printed buyer TRN is `BUYER_TRN_MISMATCH` and routes REVIEW.
 - M1 Evaluation harness: dataset fetchers + manifest (FATURA, ExtractBench short, AgentDojo; DocILE deferred without token), fixed sha256 splits + leakage test, scorers (DocILE KILE/LIR, FATURA, UAE EN/AR, ExtractBench via the official framework, perf), pinned PINT AE 1.0.4 schematron validator, `evals.run` CLI, scoreboard + README sync. Infra: localhost-only gateway, Linux CUDA toolbox, llama-swap re-pinned, live smoke 7/7 PASS, no-egress test.
 - M0 Foundations: preflight (`scripts/preflight.sh`), architecture + ADR-0001..0006, typed `apx` interface stubs enforcing I1/I2, Compose stack (internal app network), HF-resolved `infra/models.lock.json` + `make models`, `make smoke` harness, header checker, CI (ruff, mypy, pytest, web, headers, gitleaks), `make verify-m0`.
 - Repository scaffold (PRD §7): `apx/` subpackages, `web/` Next.js app, uv project,
   Makefile, `.github/` templates, pre-commit config, and root project files (M0.2).
 - `scripts/preflight.sh` environment check (M0.1).
+
+### Changed
+
+- ADR-0011 amendment 4: `data/ml/gpu.lock` liveness is a kernel `flock` held for the whole training job; a lock with a free flock (empty metadata included) is reclaimed, legacy and no-flock locks need a manual `rm` after confirming no trainer runs; `make gpu-free` does not clear it.
+- M5.4a Mobile Lighthouse 96/96/96 on the key pages: command palette, shortcut help, assistant and toasts load on first use, Radix controls render a stand-in until first interaction, and pdf.js renders in a worker via OffscreenCanvas.
+- M5.4 Design fixes: inbox columns no longer overlap and show the supplier invoice number, focus rings render inside rows, mono only for numbers and IDs, one Latin-digit amount formatter, solid AA Approve in dark mode.
+- A vendor with a sole verified account whose invoice prints a different IBAN, or any vendor with several verified accounts, now routes REVIEW (ADR-0014).
+
+### Fixed
+
+- pdf.js viewer broke on Chromium 141-class browsers (`Map.getOrInsertComputed`, `Math.sumPrecise`); spec-correct ES polyfills load with the viewer, and a failed worker load shows an error instead of spinning.
+- Inbox hotkeys: Enter on a filter option no longer also opens the highlighted invoice, `?` opens and closes the shortcut reference on real keyboards, letter hotkeys work on Arabic layouts and AltGr symbols never fire them.
+- Keys typed right after Cmd/Ctrl+K, `c` or `?` are held and forwarded to the opening overlay, never reaching Approve, Reject or Fix (`web/src/lib/overlay-guard.ts`).
+- Inbox shows the internal id when the API sends no invoice number; amounts that would lose precision are shown as the raw extracted text.
+- E-invoice builder silent defaults removed (ADR-0012 amendment 2): no AED default or relabel, no statutory 5% rate fill, no fabricated EndpointID; E/O lines with a rate and category/rate mismatches are refused before approval.
+
+### Security
+
+- SEC-08 (ADR-0014): the invoice IBAN only selects among admin-verified accounts, never introduces a payee; the grant digest binds payee IBAN and match, and the routed payee is re-checked at the build (TOCTOU between approval and build closed).
+- Reviewers can no longer relabel a valid non-AED currency as AED (`CurrencyRelabelError`), and an approval with a missing supplier TRN is refused (`SupplierTrnMissingError`, 422).

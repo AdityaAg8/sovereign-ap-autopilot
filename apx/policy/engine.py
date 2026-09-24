@@ -6,11 +6,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import timedelta
 
-from apx.common.errors import PolicyDeniedError
+from apx.common.errors import PayeeRefusal, PayeeRefusedError
 from apx.common.types import Money, Route
 from apx.policy.interfaces import (
     ActionRequest,
     AuthorizationDecision,
+    Payee,
+    PayeeMatch,
     PolicyReason,
     PolicyRule,
     PolicyThresholds,
@@ -18,6 +20,7 @@ from apx.policy.interfaces import (
     RoutingInput,
     capabilities_for,
     is_approval_action,
+    pin_payee,
     required_capabilities,
     select_payee,
 )
@@ -91,16 +94,8 @@ class DefaultPolicyEngine:
                 )
             )
 
-        try:
-            select_payee(inp.vendor)
-        except PolicyDeniedError:
-            reasons.append(
-                PolicyReason(
-                    rule=PolicyRule.P1_VERIFIED_IBAN,
-                    route=Route.REVIEW,
-                    message="vendor has no unique admin-verified account",
-                )
-            )
+        payee_reasons, payee = _payee_route_reasons(inp)
+        reasons.extend(payee_reasons)
 
         cooldown = timedelta(days=t.bank_change_review_days)
         if any((inp.at - change.changed_at) < cooldown for change in inp.bank_changes):
@@ -121,7 +116,11 @@ class DefaultPolicyEngine:
                 )
             )
 
-        return RoutingDecision(route=_most_severe(reasons), reasons=tuple(reasons))
+        return RoutingDecision(
+            route=_most_severe(reasons),
+            reasons=tuple(reasons),
+            payee=None if payee is None else pin_payee(payee),
+        )
 
     def authorize(self, request: ActionRequest) -> AuthorizationDecision:
         """Pure capability + P1-P4 + segregation of duties check (I3, K5). Denies approvals when
@@ -144,16 +143,11 @@ class DefaultPolicyEngine:
             )
 
         if is_approval_action(request):
+            invoice_iban = request.invoice.iban if request.invoice is not None else None
             try:
-                select_payee(request.vendor)
-            except PolicyDeniedError:
-                reasons.append(
-                    PolicyReason(
-                        rule=PolicyRule.P1_VERIFIED_IBAN,
-                        route=Route.REVIEW,
-                        message="vendor has no unique admin-verified account",
-                    )
-                )
+                select_payee(request.vendor, invoice_iban=invoice_iban)
+            except PayeeRefusedError as refused:
+                reasons.append(_payee_refusal_reason(refused))
 
             if request.routing is None:
                 reasons.append(
@@ -193,6 +187,69 @@ class DefaultPolicyEngine:
                     )
 
         return AuthorizationDecision(allowed=not reasons, reasons=tuple(reasons))
+
+
+_INVOICE_IBAN_REFUSALS = frozenset(
+    {PayeeRefusal.INVOICE_IBAN_MISSING, PayeeRefusal.INVOICE_IBAN_MALFORMED, PayeeRefusal.NO_MATCH}
+)
+"""Refusals where the extracted invoice IBAN failed to select among several verified accounts."""
+
+IBAN_EDIT_HINT = (
+    "; a reviewer's edit of the IBAN field does not change the selection (only the extracted "
+    "IBAN selects), so reject the invoice and ask the supplier for a corrected one"
+)
+"""Appended to an invoice-IBAN refusal (ADR-0014 Consequences): `edit_field` only appends a
+field row, and `select_payee` reads the extracted `invoices.iban`, so a misread IBAN on a
+multi-account vendor cannot be fixed in review."""
+
+
+def _payee_refusal_reason(refused: PayeeRefusedError) -> PolicyReason:
+    """P1 REVIEW reason for a refused payee selection; the message is a fixed template plus the
+    enum value, never document text (ADR-0008, ADR-0014)."""
+    hint = IBAN_EDIT_HINT if refused.refusal in _INVOICE_IBAN_REFUSALS else ""
+    return PolicyReason(
+        rule=PolicyRule.P1_VERIFIED_IBAN,
+        route=Route.REVIEW,
+        message=(
+            f"no payee could be selected from the admin-verified accounts: {refused.refusal}{hint}"
+        ),
+        payee_refusal=refused.refusal,
+    )
+
+
+def _payee_route_reasons(inp: RoutingInput) -> tuple[list[PolicyReason], Payee | None]:
+    """P1 routing (ADR-0014 §4-5): a refusal, a sole account the invoice IBAN contradicts, and
+    any selection among several verified accounts each route REVIEW. Only a sole verified
+    account that the invoice matches or does not name adds no reason. Also returns the selected
+    payee (None on refusal), which the route decision pins (§7)."""
+    try:
+        payee = select_payee(inp.vendor, invoice_iban=inp.invoice.iban)
+    except PayeeRefusedError as refused:
+        return [_payee_refusal_reason(refused)], None
+    if payee.verified_count >= 2:
+        return [
+            PolicyReason(
+                rule=PolicyRule.P1_VERIFIED_IBAN,
+                route=Route.REVIEW,
+                message=(
+                    "vendor has several admin-verified accounts; the invoice IBAN chose the payee"
+                ),
+                payee_match=payee.match,
+            )
+        ], payee
+    if payee.match is PayeeMatch.SOLE_MISMATCH:
+        return [
+            PolicyReason(
+                rule=PolicyRule.P1_VERIFIED_IBAN,
+                route=Route.REVIEW,
+                message=(
+                    "the invoice IBAN differs from the vendor's only admin-verified account; "
+                    "payment goes to the verified account"
+                ),
+                payee_match=payee.match,
+            )
+        ], payee
+    return [], payee
 
 
 def _above_limit(total: Money, limit: Money) -> bool:

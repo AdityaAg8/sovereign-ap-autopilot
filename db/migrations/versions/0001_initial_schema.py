@@ -68,6 +68,17 @@ def _tables() -> list[Table]:
     return [Base.metadata.tables[name] for name in _TABLE_NAMES]
 
 
+# Columns that later revisions add to the tables above. Freezing table names isn't enough:
+# `create_all()` renders each table's *current* columns, so without this a fresh database would
+# already have them and the owning revision would fail (0007 hit DuplicateColumnError). 0001
+# strips them right after creating the tables. Entry: (table, column, check constraints on the
+# column, owning revision). A new column on one of these tables needs its own revision AND an
+# entry here.
+_LATER_COLUMNS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+    ("invoices", "kind", ("ck_invoices_kind_known",), "0007_invoice_kind"),
+)
+
+
 # asyncpg prepares each statement individually and rejects multiple commands in one
 # `execute()` call, so the function body and the trigger that attaches it are separate
 # strings/`op.execute()` calls rather than one multi-statement block.
@@ -124,6 +135,10 @@ CREATE TRIGGER bank_details_history_sync
 def upgrade() -> None:
     bind: Connection = op.get_bind()
     Base.metadata.create_all(bind, tables=_tables())
+    for table, column, checks, _owner in _LATER_COLUMNS:
+        for check in checks:
+            op.drop_constraint(op.f(check), table, type_="check")  # final name: no re-prefixing
+        op.drop_column(table, column)
     op.execute(_AUDIT_LOG_FUNCTION_SQL)
     op.execute(_AUDIT_LOG_TRIGGER_SQL)
     op.execute(_BANK_DETAILS_HISTORY_FUNCTION_SQL)

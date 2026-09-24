@@ -6,9 +6,12 @@ free-text column appearing only in `UntrustedText`, and citation faithfulness fo
 from __future__ import annotations
 
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from apx.agent.interfaces import (
     VENDOR_MAX_ACCOUNTS,
+    AuditAction,
+    AuditEventView,
     DraftVendorEmailParams,
     ExplainDecisionParams,
     GetInvoiceParams,
@@ -274,7 +277,7 @@ async def test_explain_decision_only_cites_reasons_backed_by_a_returned_audit_ev
     events = [
         audit_event_row(
             audit_id=501,
-            action="policy.route",
+            action="activity:route",
             payload_json={"rule": "fraud_score", "route": "review", "score": 0.91},
         )
     ]
@@ -427,3 +430,90 @@ async def test_draft_vendor_email_creates_a_pending_proposal_never_sent() -> Non
     assert receipt.to_vendor_id == "v1"
     assert len(sink.submitted) == 1
     assert sink.submitted[0].kind == "request_info"
+
+
+# -- audit action vocabulary (typed boundary, ADR-0010) --------------------------------------
+
+_AUDIT_ACTION: TypeAdapter[str] = TypeAdapter(AuditAction)
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["activity:route", "authorize:pay", "decision.approve", "field_edit", "mcp.refusal"],
+)
+def test_audit_event_view_builds_from_real_pipeline_actions(action: str) -> None:
+    row = audit_event_row(action=action)
+
+    view = AuditEventView(
+        audit_id=row["audit_id"], ts=row["ts"], actor=row["actor"], action=row["action"], facts={}
+    )
+
+    assert view.action == action
+
+
+@pytest.mark.parametrize("topic", ["all", "route"])
+async def test_explain_decision_returns_activity_route_event_for_matching_topic(
+    topic: str,
+) -> None:
+    events = [audit_event_row(audit_id=501, action="activity:route")]
+    reader = FakeReader({SQL_GET_INVOICE: [invoice_row()], SQL_EXPLAIN_DECISION_EVENTS: events})
+    toolbox = PgAgentToolbox(reader=reader, sink=SpySink())
+
+    result = await toolbox.explain_decision(
+        ExplainDecisionParams.model_validate({"invoice_id": "inv-1", "topic": topic}),
+        chat_caller(reviewer()),
+    )
+
+    assert [(e.audit_id, e.action) for e in result.events] == [(501, "activity:route")]
+
+
+async def test_explain_decision_filters_activity_route_event_out_of_unrelated_topic() -> None:
+    events = [audit_event_row(audit_id=501, action="activity:route")]
+    reader = FakeReader({SQL_GET_INVOICE: [invoice_row()], SQL_EXPLAIN_DECISION_EVENTS: events})
+    toolbox = PgAgentToolbox(reader=reader, sink=SpySink())
+
+    result = await toolbox.explain_decision(
+        ExplainDecisionParams(invoice_id=InvoiceId("inv-1"), topic="fraud"),
+        chat_caller(reviewer()),
+    )
+
+    assert result.events == ()
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "authorize:pay",
+        "decision.approve",
+        "proposal.submit",
+        "payment_state:approve",
+        "activity:apply_review",
+    ],
+)
+async def test_explain_decision_approval_topic_includes_approval_writes(action: str) -> None:
+    events = [
+        audit_event_row(audit_id=501, action=action),
+        audit_event_row(audit_id=502, action="activity:route"),
+    ]
+    reader = FakeReader({SQL_GET_INVOICE: [invoice_row()], SQL_EXPLAIN_DECISION_EVENTS: events})
+    toolbox = PgAgentToolbox(reader=reader, sink=SpySink())
+
+    result = await toolbox.explain_decision(
+        ExplainDecisionParams(invoice_id=InvoiceId("inv-1"), topic="approval"),
+        chat_caller(reviewer()),
+    )
+
+    assert [(e.audit_id, e.action) for e in result.events] == [(501, action)]
+
+
+@pytest.mark.parametrize("action", ["a.", "a..b", "A:b", "a:" + "b" * 63])
+def test_audit_action_rejects_malformed_or_overlong_values(action: str) -> None:
+    with pytest.raises(ValidationError):
+        _AUDIT_ACTION.validate_python(action)
+
+
+def test_audit_action_accepts_a_64_character_value() -> None:
+    action = "activity:" + "a" * 55
+    assert len(action) == 64
+
+    assert _AUDIT_ACTION.validate_python(action) == action

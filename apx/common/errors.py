@@ -3,6 +3,8 @@ fallbacks, so every failure is explicit and routable (PRD §8, CLAUDE.md standar
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 
 class ApxError(Exception):
     """Base of every apx error."""
@@ -66,6 +68,24 @@ class VramBudgetError(ModelServingError):
     """A stage would exceed the 11.5 GB VRAM budget (§2 C2)."""
 
 
+class GpuProbeError(ModelServingError):
+    """Free GPU or host memory could not be measured (`nvidia-smi` missing, failed or printed
+    something unparsable; `/proc/meminfo` unreadable). A preflight never passes blind."""
+
+
+class GpuProbeTransientError(GpuProbeError):
+    """`nvidia-smi` was found but timed out or exited non-zero (NVML busy, GPU reset in
+    progress): the probe may succeed on a retry, so Temporal retries it (ADR-0013 addendum)."""
+
+
+class InsufficientGpuMemoryError(ModelServingError):
+    """Free VRAM is below a stage's need plus the safety margin (ADR-0013 preflight)."""
+
+
+class InsufficientHostMemoryError(ModelServingError):
+    """Available host RAM is below a stage's need plus the safety margin (ADR-0013 preflight)."""
+
+
 class ModelOutputError(ApxError):
     """Model output violated the JSON schema or was otherwise unusable."""
 
@@ -97,6 +117,44 @@ class AspError(ApxError):
 
 class PolicyDeniedError(ApxError):
     """An action was refused by the policy engine (§6.3)."""
+
+
+class PayeeRefusal(StrEnum):
+    """Why P1 could not select a payee (ADR-0014). Carried by PayeeRefusedError and PolicyReason."""
+
+    UNKNOWN_VENDOR = "unknown_vendor"
+    """The vendor is None."""
+    MASTER_IBAN_MALFORMED = "master_iban_malformed"
+    """A verified admin-callback account's stored IBAN fails `electronic_iban`."""
+    NO_VERIFIED_ACCOUNT = "no_verified_account"
+    """No account has `verified=True` and `source="admin_callback"`."""
+    INVOICE_IBAN_MISSING = "invoice_iban_missing"
+    """Two or more verified accounts and the invoice IBAN is None or blank."""
+    INVOICE_IBAN_MALFORMED = "invoice_iban_malformed"
+    """Two or more verified accounts and the invoice IBAN fails `electronic_iban`."""
+    NO_MATCH = "no_match"
+    """Two or more verified accounts and none equals the invoice IBAN."""
+    AMBIGUOUS_MATCH = "ambiguous_match"
+    """Two or more verified records equal the invoice IBAN (a data-integrity fault)."""
+
+
+class PayeeRefusedError(PolicyDeniedError):
+    """P1 refused to select a payee; `refusal` is the typed reason (ADR-0014)."""
+
+    def __init__(self, refusal: PayeeRefusal, message: str) -> None:
+        super().__init__(message)
+        self.refusal: PayeeRefusal = refusal
+        self._message = message
+
+    def __reduce__(self) -> tuple[type[PayeeRefusedError], tuple[PayeeRefusal, str]]:
+        """Keep the typed refusal across pickling (the default reduce would drop it)."""
+        return (type(self), (self.refusal, self._message))
+
+
+class PayeeChangedError(PolicyDeniedError):
+    """The payee `select_payee` returns at e-invoice build differs from the one pinned when the
+    invoice was routed (a vendor-master or selection change in between, ADR-0014 §7). The build
+    is refused and audited; nothing is paid to either account."""
 
 
 class SegregationOfDutiesError(PolicyDeniedError):

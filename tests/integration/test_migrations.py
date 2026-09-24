@@ -292,3 +292,49 @@ def test_invoice_kind_migration_up_and_down(env_database_url: str) -> None:
         assert asyncio.run(_invoice_kind_column(ASYNCPG_DSN)) == (False, None)
     finally:
         command.downgrade(cfg, "base")
+
+
+async def _execute(dsn: str, sql: str) -> None:
+    conn = await asyncpg.connect(dsn)
+    try:
+        await conn.execute(sql)
+    finally:
+        await conn.close()
+
+
+async def _invoice_check_names(dsn: str) -> set[str]:
+    conn = await asyncpg.connect(dsn)
+    try:
+        rows = await conn.fetch(
+            "SELECT conname FROM pg_constraint "
+            "WHERE conrelid = 'invoices'::regclass AND contype = 'c' AND conname LIKE '%kind_known'"
+        )
+        return {row["conname"] for row in rows}
+    finally:
+        await conn.close()
+
+
+def test_invoice_kind_check_name_is_repaired_by_0009(env_database_url: str) -> None:
+    """The first 0007 let the naming convention re-prefix its final name, creating
+    `ck_invoices_ck_invoices_kind_known`. 0009 renames that to the model's name on such a
+    database, leaves a fresh one alone, and the chain still downgrades to base."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "0008_agent_routed_payee")
+    try:
+        assert asyncio.run(_invoice_check_names(ASYNCPG_DSN)) == {"ck_invoices_kind_known"}
+        # Reproduce a database that ran the old 0007.
+        asyncio.run(
+            _execute(
+                ASYNCPG_DSN,
+                "ALTER TABLE invoices RENAME CONSTRAINT ck_invoices_kind_known "
+                "TO ck_invoices_ck_invoices_kind_known",
+            )
+        )
+        command.upgrade(cfg, "0009_invoice_kind_check_name")
+        assert asyncio.run(_invoice_check_names(ASYNCPG_DSN)) == {"ck_invoices_kind_known"}
+        # Fresh path: down to 0008 (no-op) and back up leaves the correct name untouched.
+        command.downgrade(cfg, "0008_agent_routed_payee")
+        command.upgrade(cfg, "head")
+        assert asyncio.run(_invoice_check_names(ASYNCPG_DSN)) == {"ck_invoices_kind_known"}
+    finally:
+        command.downgrade(cfg, "base")

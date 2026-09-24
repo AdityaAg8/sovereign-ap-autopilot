@@ -214,6 +214,44 @@ the run repeated; only failing twice needs an ADR amendment with the evidence.
 - **Signs.** Amounts are stored as printed and PINT AE credit notes carry positive amounts, so a
   negative subtotal, VAT total, total or line net is an error on either kind.
 
+## Amendment 2 (2026-09-24): the UBL builder has no money-path defaults
+
+`apx/einvoice/builder.py` `build_ubl_xml` raises `EInvoiceError` instead of defaulting:
+- **Currency.** A missing, blank or `XXX` currency is refused, and so is any currency other than
+  AED. A non-AED PINT AE invoice needs the VAT accounting currency (BT-6), a tax-currency
+  `TaxTotal` and the tax exchange rate (BTAE-04, `ibr-159-ae`). `Invoice` and `InvoiceFields`
+  carry none of these, so the builder refuses rather than labelling foreign amounts AED.
+  `check_currency` makes non-AED an `error` (it was a `warning`), so the invoice goes to review
+  and `apply_review` refuses it before the build.
+- **Rate.** There is no statutory-rate fill: an S, Z or AE line without a rate is refused. The
+  validator's category/rate rule (S = 5; Z, E, O = 0; AE 0 or 5) checks rates and never supplies
+  one. An E or O line with a non-zero rate is refused, not silently dropped to 0 VAT.
+  `VAT_CATEGORY_RATE_MISMATCH` joins the classification codes that `apply_review` requires to be
+  resolved.
+- **EndpointID.** The seller and buyer electronic addresses (BT-34, BT-49) are the party's
+  identifier, else its TRN, and are never fabricated. A party with neither is refused, and
+  `check_mandatory_fields` now requires `buyer.trn` (it already required `supplier.trn`).
+  *Revised 2026-09-24 (CR-money, PR #48 review):* requiring the document's buyer TRN was a dead
+  end. It routed REVIEW, but no correction carries a TRN, so the approval passed and the build
+  then failed non-retryably. The buyer is our own organisation, so its TRN now comes from
+  required config: `WorkerSettings.buyer_trn` (`WORKER_BUYER_TRN`). It has no default and must
+  be a valid TRN, or `load_worker_settings` raises `ConfigError` and the worker does not start.
+  `PintAeUblBuilder(buyer_trn=...)` writes it as BT-48 and the BT-49 EndpointID. With a
+  configured TRN, `InvoiceValidator` no longer requires the document's buyer TRN. It
+  cross-checks it instead: a different printed TRN is a `BUYER_TRN_MISMATCH` error, so the
+  invoice routes REVIEW and the reviewer confirms it is addressed to us. The printed value stays
+  in the field rows and is never overwritten. A missing supplier TRN cannot be supplied in
+  review either: the API refuses the approval with `SupplierTrnMissingError` (422, nothing
+  recorded), and `apply_review` refuses any `MISSING_MANDATORY` error as defence in depth.
+  Reviewer currency overrides are also limited. A reviewer may resolve a missing or `XXX`
+  currency. Changing a valid extracted code (for example USD) to AED is refused, with
+  `CurrencyRelabelError` at the API and `MissingCorrectionsError` in `apply_corrections`,
+  because that would relabel foreign amounts as AED without converting them.
+- **Exemption reason.** Not yet resolved: an E line still gets `VATEX-AE-25-1`, because neither
+  `InvoiceFields` nor the extraction contract carries an exemption code (BT-121), and the
+  factory's gold exempt invoices rely on this default. Removing it needs a contract field and
+  gold regeneration, so it is a follow-up.
+
 ## Consequences
 
 - Positive: E, AE, O and credit notes are representable end to end. The money path loses its

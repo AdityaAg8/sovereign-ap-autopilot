@@ -261,6 +261,8 @@ services:
       # are the synthetic buyer every factory invoice is addressed to (factory/layouts.py).
       WORKER_BUYER_ADDRESS: ${WORKER_BUYER_ADDRESS:-Warehouse 12, Al Quoz Industrial Area 3, Dubai, United Arab Emirates, P.O. Box 45210}
       WORKER_BUYER_TRADE_LICENSE: ${WORKER_BUYER_TRADE_LICENSE:-1045821}
+      # Our own TRN, written as the e-invoice buyer (ADR-0012 amendment 2); matches factory/layouts.py BUYER_TRN.
+      WORKER_BUYER_TRN: ${WORKER_BUYER_TRN:-100234567800003}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://phoenix:6006
       # Docker Desktop bind mounts do not deliver inotify events from the host filesystem.
       WATCHFILES_FORCE_POLLING: "true"
@@ -298,6 +300,14 @@ services:
     environment: *apx-env
     volumes: *apx-volumes
     networks: [app]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            # M5.6a preflight: nvidia-smi/NVML only (free VRAM before a stage switch), no compute.
+            - driver: nvidia
+              count: all
+              capabilities: [utility]
     depends_on:
       <<: *apx-deps
       api:

@@ -11,7 +11,7 @@ import logging
 from decimal import Decimal
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from apx.agent.dispatch import PgToolDispatcher
@@ -23,6 +23,7 @@ from apx.agent.toolbox import PgAgentToolbox
 from apx.asp_mock.repository import SqliteAspRepository
 from apx.asp_mock.service import MockAsp
 from apx.audit.chain import PgAuditLog
+from apx.common.errors import ConfigError
 from apx.common.types import Money, Stage
 from apx.db.session import get_session
 from apx.einvoice.interfaces import DocumentTypeCode
@@ -58,6 +59,7 @@ from apx.policy.proposals import DefaultProposalSink, PgProposalStore
 from apx.scan.detector import PdfHiddenContentDetector
 from apx.trust.features import ExtractionFeatureBuilder
 from apx.trust.ltt import CalibratedTrustGate
+from apx.validate.ids import is_valid_trn
 from apx.validate.interfaces import InvoiceValidator
 from apx.workflows.activities import InvoiceActivityDeps
 from apx.workflows.components import (
@@ -89,7 +91,8 @@ log = logging.getLogger("apx.worker")
 
 class WorkerSettings(BaseSettings):
     """`WORKER_*` environment variables. Defaults match `infra/compose.yaml` and
-    `infra/llama-swap.yaml`, so a fresh clone runs with none of them set."""
+    `infra/llama-swap.yaml`; the one required value is `WORKER_BUYER_TRN`, our own
+    organisation's TRN, which has no safe default (ADR-0012 amendment 2)."""
 
     model_config = SettingsConfigDict(env_prefix="WORKER_", extra="ignore")
 
@@ -116,6 +119,10 @@ class WorkerSettings(BaseSettings):
     scan_review: float = Field(default=0.5, ge=0, le=1)
     attack_block: float = Field(default=0.9, ge=0, le=1)
     sod_cooldown_days: int = Field(default=30, ge=0)
+    buyer_trn: str
+    """`WORKER_BUYER_TRN` (required, no default): the buyer on every e-invoice is us, so BT-48
+    and the BT-49 EndpointID come from here, never from the document. The document's buyer TRN
+    is only cross-checked (a mismatch routes REVIEW, `check_buyer_trn`)."""
     buyer_trade_license: str | None = None
     buyer_address: str | None = None
     asp_db: Path = Path("data/asp/asp.sqlite")
@@ -123,6 +130,30 @@ class WorkerSettings(BaseSettings):
     parsed_dir: Path = Path("data/parsed")
     """`WORKER_PARSED_DIR`: content-addressed parse store (page PNGs); every worker must reach
     it, so in Compose it sits under the shared `data/` bind mount."""
+
+    @field_validator("buyer_trn")
+    @classmethod
+    def _valid_buyer_trn(cls, value: str) -> str:
+        trn = value.strip()
+        if not is_valid_trn(trn):
+            raise ValueError(
+                "WORKER_BUYER_TRN must be a valid UAE TRN (15 digits, starting 1, ending 03)"
+            )
+        return trn
+
+
+def load_worker_settings() -> WorkerSettings:
+    """`WorkerSettings()` from the environment, or a `ConfigError` naming what is wrong (for
+    example a missing `WORKER_BUYER_TRN`), so the worker refuses to start misconfigured."""
+    try:
+        # Required fields come from the environment, which mypy cannot see.
+        return WorkerSettings()  # type: ignore[call-arg]
+    except ValidationError as exc:
+        problems = "; ".join(
+            f"WORKER_{'.'.join(str(p) for p in err['loc']).upper()}: {err['msg']}"
+            for err in exc.errors()
+        )
+        raise ConfigError(f"invalid worker settings: {problems}") from exc
 
 
 class GpuServing:
@@ -208,7 +239,7 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
         feature_builder=ExtractionFeatureBuilder(),
         # No calibrator is fitted yet (M7.4): λ̂ = None means nothing is auto-accepted.
         trust_gate=CalibratedTrustGate(AgreementScore(), None),
-        validator=InvoiceValidator(),
+        validator=InvoiceValidator(buyer_trn=settings.buyer_trn),
         fraud_engine=RuleFraudEngine(
             (
                 DuplicateInvoiceRule(),
@@ -232,6 +263,7 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
             )
         ),
         ubl_builder=PintAeUblBuilder(
+            buyer_trn=settings.buyer_trn,
             buyer_trade_license=settings.buyer_trade_license,
             buyer_address=settings.buyer_address,
         ),
@@ -291,7 +323,7 @@ async def run(settings: WorkerSettings) -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    asyncio.run(run(WorkerSettings()))
+    asyncio.run(run(load_worker_settings()))
 
 
 if __name__ == "__main__":

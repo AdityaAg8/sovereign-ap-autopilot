@@ -10,6 +10,7 @@
 
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -30,7 +31,16 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
+let providedClient: ApiClient | null = null;
+
+/** Hands the API client to this provider from a route bundle that already includes it (the
+ * signed-in shell), so restoring the session there skips the on-demand chunk fetch below. */
+export function provideApiClient(client: ApiClient): void {
+  providedClient = client;
+}
+
 async function apiClient(): Promise<ApiClient> {
+  if (providedClient) return providedClient;
   const { getApiClient } = await import("@/lib/api/client");
   return getApiClient();
 }
@@ -61,8 +71,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (ok) => {
           if (cancelled) return;
           if (ok) {
-            setSession(candidate);
-            setStatus("authenticated");
+            // A transition, so React mounts the signed-in shell and the route's page in yielding
+            // slices rather than one long task right after hydration (TBT, M5.4a).
+            startTransition(() => {
+              setSession(candidate);
+              setStatus("authenticated");
+            });
             return;
           }
           // The adapter rejected the session (expired/malformed): discard it for good.

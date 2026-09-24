@@ -8,16 +8,22 @@
 
 import { Check, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useLoadOnInteraction } from "@/lib/deferred-control";
 import { classifiedLabel, fieldLabel } from "@/lib/invoice-fields";
 import { useRegisterShortcuts } from "@/lib/shortcuts/registry";
+
+// Shortcut hints are text, so they keep the label's full color (AA 4.5:1); a faint keycap
+// border, not reduced opacity, is what sets them apart from the label.
+const KBD = "ms-1 rounded border border-current/30 px-1 text-[0.6875rem] leading-4";
 
 const SHORTCUTS = [
   { combo: "a", description: "Approve" },
   { combo: "f", description: "Jump to fix the first field needing review" },
   { combo: "r", description: "Reject" },
 ] as const;
+
+const loadTooltip = () => import("@/components/invoice/blocked-reason-tooltip");
 
 export interface ApproveError {
   /** The server's `detail`, shown verbatim when it names no fields. */
@@ -44,6 +50,8 @@ export function ReviewActionBar({
   onReject: () => void;
 }) {
   useRegisterShortcuts("Review actions", SHORTCUTS);
+  // A hover hint has no press to carry over: it only needs loading before the first hover.
+  const tooltip = useLoadOnInteraction(loadTooltip);
   useHotkeys([
     {
       combo: "a",
@@ -62,7 +70,7 @@ export function ReviewActionBar({
       aria-describedby={approveError ? "approve-error" : undefined}
       className="gap-1.5"
     >
-      <Check className="size-4" /> Approve <kbd className="ms-1 opacity-60">A</kbd>
+      <Check className="size-4" /> Approve <kbd className={KBD}>A</kbd>
     </Button>
   );
 
@@ -86,12 +94,15 @@ export function ReviewActionBar({
       </div>
       <div className="flex items-center gap-2 px-4 py-3">
         {approveBlockedReason ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>{approveButton}</span>
-            </TooltipTrigger>
-            <TooltipContent>{approveBlockedReason}</TooltipContent>
-          </Tooltip>
+          // Same `<span>` wrapper before and after the tooltip's chunk arrives (on the first
+          // interaction, i.e. before any hover could open it), so nothing moves at the swap.
+          tooltip.module ? (
+            <tooltip.module.BlockedReasonTooltip reason={approveBlockedReason}>
+              {approveButton}
+            </tooltip.module.BlockedReasonTooltip>
+          ) : (
+            <span>{approveButton}</span>
+          )
         ) : (
           approveButton
         )}
@@ -101,7 +112,7 @@ export function ReviewActionBar({
           onClick={onFix}
           className="gap-1.5"
         >
-          <Pencil className="size-4" /> Fix <kbd className="ms-1 opacity-60">F</kbd>
+          <Pencil className="size-4" /> Fix <kbd className={KBD}>F</kbd>
         </Button>
         <Button
           variant="destructive"
@@ -109,7 +120,7 @@ export function ReviewActionBar({
           onClick={onReject}
           className="ms-auto gap-1.5"
         >
-          <X className="size-4" /> Reject <kbd className="ms-1 opacity-60">R</kbd>
+          <X className="size-4" /> Reject <kbd className={KBD}>R</kbd>
         </Button>
       </div>
     </div>

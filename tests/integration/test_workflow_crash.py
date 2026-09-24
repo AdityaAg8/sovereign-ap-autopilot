@@ -30,7 +30,7 @@ from temporalio.testing import WorkflowEnvironment
 
 from apx.asp_mock.interfaces import ArchiveRecord, AspReceipt, AspSubmission
 from apx.audit.interfaces import AuditEntry, AuditEvent
-from apx.common.invoice import Invoice, Party
+from apx.common.invoice import Invoice, InvoiceKind, InvoiceLine, Party, VatCategory
 from apx.common.master import BankDetailChange, Vendor
 from apx.common.types import IdempotencyKey, InvoiceId, Language, Money, Route, VendorId
 from apx.db.enums import DbInvoiceStatus
@@ -266,7 +266,17 @@ class FakeExtractionPipeline:
 class FakeInvoiceBuilder:
     async def build(self, result: ExtractionResult, inp: InvoiceWorkflowInput) -> Invoice:
         party = Party(name="Acme Supplies LLC", trn=None, address=None, country="AE")
-        total = Money(amount=Decimal("100.00"), currency="AED")
+        net = Money(amount=Decimal("100.00"), currency="AED")
+        # ADR-0012: the build derives BT-3 from a resolved kind and every line's VAT category
+        # and refuses to guess, so an AUTO invoice must carry both.
+        line = InvoiceLine(
+            description="Steel bolts",
+            quantity=Decimal("1"),
+            unit_price=net,
+            net_amount=net,
+            vat_category=VatCategory.STANDARD,
+            vat_rate=Decimal("5"),
+        )
         return Invoice(
             id=inp.invoice_id,
             document_sha256=inp.document_sha256,
@@ -278,11 +288,12 @@ class FakeInvoiceBuilder:
             buyer=party,
             vendor_id=None,
             po_number=None,
-            lines=(),
-            subtotal=total,
-            vat_total=Money(amount=Decimal("0.00"), currency="AED"),
-            total=total,
+            lines=(line,),
+            subtotal=net,
+            vat_total=Money(amount=Decimal("5.00"), currency="AED"),
+            total=Money(amount=Decimal("105.00"), currency="AED"),
             iban=None,
+            kind=InvoiceKind.INVOICE,
         )
 
 

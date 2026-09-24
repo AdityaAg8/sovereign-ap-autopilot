@@ -200,11 +200,14 @@ def test_check_currency_accepts_consistent_aed() -> None:
     assert check_currency(_invoice()) == []
 
 
-def test_check_currency_flags_non_aed_as_warning() -> None:
+def test_check_currency_flags_non_aed_as_error() -> None:
+    """Error, not warning: the PINT AE builder refuses a non-AED document, so a warning would let
+    an approval through only for the e-invoice build to fail afterwards (ADR-0012)."""
     invoice = _invoice(currency="USD")
     violations = check_currency(invoice)
     assert [v.code for v in violations] == [ViolationCode.CURRENCY_INVALID]
-    assert violations[0].severity == "warning"
+    assert violations[0].severity == "error"
+    assert not validate_invoice(invoice, today=date(2025, 6, 1)).passed
 
 
 def test_check_currency_flags_mixed_currencies_as_error() -> None:
@@ -240,6 +243,15 @@ def test_check_mandatory_fields_flags_missing_supplier_trn() -> None:
     violations = check_mandatory_fields(invoice)
     assert [v.code for v in violations] == [ViolationCode.MISSING_MANDATORY]
     assert violations[0].field == "supplier.trn"
+
+
+def test_check_mandatory_fields_flags_missing_buyer_trn() -> None:
+    """The buyer TRN is the e-invoice's buyer electronic address (BT-49), never fabricated."""
+    invoice = _invoice(buyer=_party(None, "Buyer"))
+    violations = check_mandatory_fields(invoice)
+    assert [v.code for v in violations] == [ViolationCode.MISSING_MANDATORY]
+    assert violations[0].field == "buyer.trn"
+    assert violations[0].severity == "error"
 
 
 def test_check_mandatory_fields_flags_no_lines() -> None:

@@ -2,7 +2,7 @@
 
 Sovereign AP Autopilot turns supplier invoices (PDF or scan, EN/AR) into validated UAE PINT AE
 e-invoices on one 12 GB laptop GPU, with no outbound network at runtime. Source of truth: PRD §3,
-§4, §6. Decisions: `docs/adr/0001`–`0006`.
+§4, §6. Decisions: `docs/adr/0001`–`0015` (index at the end of this file).
 
 ## Components
 
@@ -15,15 +15,16 @@ e-invoices on one 12 GB laptop GPU, with no outbound network at runtime. Source 
 | `apx/extract` | `interfaces.py` | Field schema, tool-free Extractor A/B and arbiter, grounding of values onto parse words |
 | `apx/trust` | `interfaces.py` | Per-field features, isotonic calibration, Learn-then-Test threshold |
 | `apx/validate` | `interfaces.py` | VAT math, TRN, IBAN, mandatory fields, 3-way match |
-| `apx/fraud` | `interfaces.py` | Typology rules, isolation forest, page similarity |
-| `apx/policy` | `interfaces.py` | Capabilities, SoD, P1–P5 routing, action authorisation, proposals |
+| `apx/fraud` | `interfaces.py`, `page_similarity.py` | Typology rules, isolation forest, page similarity. Fraud owns the `PageEmbedder` port; `InMemoryPageSimilarityIndex` embeds pages through it and serves `DuplicateInvoiceRule.evaluate_similarity` (0.9 cosine threshold). An unavailable embedder raises, never passes (M8.1; not yet wired into the workflow) |
+| `apx/policy` | `interfaces.py` | Capabilities, SoD, P1–P5 routing, action authorisation, proposals. P1 `select_payee(vendor, invoice_iban)` picks among admin-verified accounts only, and `route` pins the result as `RoutingDecision.payee` (ADR-0014) |
 | `apx/einvoice` | `interfaces.py` | PINT AE UBL 2.1 builder, schematron validation |
 | `apx/asp_mock` | `interfaces.py` | Exactly-once receipts and archive by idempotency key |
 | `apx/agent` | `interfaces.py` | Exception agent, ops chat, read/propose tools, MCP server |
 | `apx/audit` | `interfaces.py` | Hash-chained audit log, verifier |
-| `apx/llm` | `interfaces.py` | llama-swap client, model registry (MLflow aliases), GPU stage scheduler |
+| `apx/llm` | `interfaces.py`, `preflight.py`, `embedding.py` | llama-swap client, model registry (MLflow aliases), GPU stage scheduler. `preflight.py`: VRAM/RAM headroom check before every stage switch and the trainer (ADR-0013 addendum). `embedding.py`: `HttpPageEmbedder`, the local page-embedding client that structurally satisfies `apx.fraud.interfaces.PageEmbedder` |
 | `apx/api` | `interfaces.py` | REST + SSE, JWT, roles; service boundary for the web UI |
 | `apx/workflows` | `interfaces.py` | `InvoiceWorkflow` statuses, step names, activities |
+| `ml/promotion` | `decide.py`, `evidence.py`, `retrain.py`, `errors.py` | Offline M10.2 champion/challenger pipeline behind `make retrain`: pure decider on gates G1-G11, then ordered side effects through injected protocols (ADR-0015). Not imported by `apx` |
 
 Import direction (no cycles): `common` has no apx imports; `llm`, `parse`, `scan`, `validate`,
 `fraud`, `audit`, `einvoice` import only `common` (plus the `db` infrastructure layer where a
@@ -31,6 +32,9 @@ module ships its own persistence adapter, e.g. `audit`'s Postgres chain writer -
 domain module); `extract` adds `llm`, `parse`; `trust` adds
 `extract`; `policy` adds `trust`, `validate`, `fraud`, `scan`; `asp_mock` adds `einvoice`;
 `agent` adds `llm`, `policy`; `workflows` imports the pipeline modules; `api` adds `workflows`.
+Ports keep this direction: `fraud` never imports `llm`. It owns `PageEmbedder` and `PageVector`,
+`apx.llm.embedding.HttpPageEmbedder` satisfies them structurally, and a composition root wires
+the two (not yet wired into the workflow). `ml/promotion` imports `apx.common`, `apx.audit` and `evals`, and `apx` never imports `ml`.
 
 ## Data flow
 
@@ -79,7 +83,9 @@ validation, fraud and policy all pass (§6.1).
 4. **Agent → state.** Agent tools have `effect` `read` or `propose`; a `Proposal` executes only
    after a human with the right capability clicks and `PolicyEngine.authorize` allows it (P5, I3).
 5. **Bank details.** Payment IBANs come only from `BankAccount` with `verified=True` and
-   `source="admin_callback"` (P1), never from the invoice's `iban` field.
+   `source="admin_callback"` (P1). The invoice's `iban` field can only select among those
+   accounts, never introduce one. A selection among several, or an invoice IBAN that differs
+   from a sole verified account, routes REVIEW (ADR-0014).
 6. **Runtime → network.** App containers sit on a Compose network with `internal: true`; the only
    model endpoint is llama-swap on that network (C1, C6, ADR-0001).
 
@@ -110,3 +116,32 @@ tokenizers) have no Hub sha256 by API design, so they are verified by size and p
 
 Native Windows 11 + Git Bash + GNU make + Docker Desktop (WSL2 backend, GPU passthrough); ML
 training in a uv environment with CUDA. See ADR-0006 for the deviation from PRD C3.
+
+## Payee pin (P1, ADR-0014 §7)
+
+`route` runs `select_payee` and stores `pin_payee(...)` as `RoutingDecision.payee`: masked IBAN,
+match, verified count and `iban_sha256`, never the raw IBAN. The approval grant's
+`subject_digest` binds the payee IBAN and match (ADR-0014 §6). `SqlInvoiceRecords.routed` persists the pin
+in the `policy_route` decision, which the agent reads through `v_agent_invoices` (migration
+`0008_agent_routed_payee`). `build_einvoice` receives the pin, re-selects on the live master and
+builds only if the digest and match are unchanged. Otherwise it audits `activity:payee_changed`
+and raises a non-retryable `PayeeChangedError`, and nothing is paid.
+
+## Decision index
+
+| ADR | Decision | Amendments |
+|---|---|---|
+| [0001](adr/0001-local-only-runtime.md) | Local-only runtime | 2026-09-22 `gateway` and `edge` network |
+| [0002](adr/0002-serving-and-vram-staging.md) | Serving and VRAM staging with llama-swap groups | amended by 0013 |
+| [0003](adr/0003-trust-boundary.md) | Trust boundary: typed extractor output, `UntrustedText`, I1/I2 | |
+| [0004](adr/0004-trust-gate-method.md) | Trust gate: calibrated P(correct), Learn-then-Test | |
+| [0005](adr/0005-eval-protocol.md) | Eval protocol: fixed splits, leakage test, scoreboard | M5.1 |
+| [0006](adr/0006-host-deviation-native-windows.md) | Host: native Windows 11 + Docker Desktop | Smart App Control addendum |
+| [0008](adr/0008-typed-boundary-and-capabilities.md) | Typed boundary and capability model | K5 amended by 0014 |
+| [0009](adr/0009-extractor-b-training-and-trust-features.md) | Extractor B training and trust features | M7.2 outcome |
+| [0010](adr/0010-agent-tool-contracts.md) | Agent tool contracts, prompts, MCP | |
+| [0011](adr/0011-training-loop.md) | Extractor B training loop | 1-3 (2026-09-23); 4: `gpu.lock` liveness by flock |
+| [0012](adr/0012-extraction-contract-and-b-training-inputs.md) | Extraction contract and B training inputs | 1: review corrections; 2: no money-path defaults in the UBL builder, `WORKER_BUYER_TRN` |
+| [0013](adr/0013-live-serving-budget-and-backpressure.md) | Live serving budget and backpressure | M5.6a preflight headroom addendum |
+| [0014](adr/0014-p1-multiple-verified-accounts.md) | P1 with several verified accounts: the invoice IBAN selects, never introduces | §7 payee pin, routing to build |
+| [0015](adr/0015-promotion-gates.md) | M10.2 promotion gates for an Extractor B challenger | partial-apply recovery |

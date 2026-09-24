@@ -197,7 +197,8 @@ eval-chat-dry:
 	uv run python -m evals.chat --dry-run
 
 retrain:
-	@echo "not implemented yet (M10.2)"; exit 1
+	@echo "==> retrain: export corrections, LoRA challenger, shadow eval vs champion, promote or reject (ADR-0015)"
+	uv run python -m ml.promotion.retrain
 
 seed:
 	@echo "==> load the factory ERP (seed 2026) into Postgres: users, vendors, verified IBANs, POs"

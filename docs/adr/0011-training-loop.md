@@ -161,8 +161,10 @@ During the run (`GuardedSFTTrainer` + `SpikeGuard`):
 
 - Preflight: `nvidia-smi` must report < 1 GiB used and no compute process visible, and
   `data/ml/gpu.lock` (O_EXCL, holding pid, job and start time) must be free. Otherwise it raises
-  `GpuBusyError` with the hint to run `make gpu-free`. `make train-b` runs `gpu-free` first. A
-  stale lock (dead pid) is reported, never silently taken.
+  `GpuBusyError` with the hint to run `make gpu-free`. `make train-b` runs `gpu-free` first.
+  Stale-lock handling is in Amendment 4 (2026-09-24) below: the old "stale lock (dead pid) is
+  reported, never silently taken" rule is replaced because the pid is 1 in every trainer
+  container.
 - The trainer container sits only on the internal `app` network (ADR-0009 §1.5), with
   `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `HF_DATASETS_OFFLINE=1`, `report_to="none"` (our
   MLflow logger only, to `http://mlflow:5000`) and any telemetry opt-out the pinned Unsloth
@@ -329,3 +331,43 @@ target, exact lengths), `test_mask_tokenizer.py` (compact suffix masked). Traine
 `input_ids` length, images included) and `test_mask_real_tokenizer.py` (compact suffix on the
 real tokenizer). Data prep passes the 5% per-source quarantine gate. `make train-b-probe`
 exits 0 with an L0 whole-card peak ≤ 11.2 GiB in `probe.json`.
+
+## Amendment 4 (2026-09-24): `gpu.lock` liveness by kernel flock (supersedes §6 stale-lock rule)
+
+Problem: each `make train-b` runs in a fresh `docker compose run` container where the trainer is
+pid 1, so a pid (even with host and container identity) cannot tell a live run from a dead one:
+pid 1 always looks alive in the checker's own container, and a different container id says
+nothing about whether the other run is still going. nvidia-smi cannot decide it either: the lock
+is held through data prep and model import for minutes before any CUDA allocation, and inside a
+container nvidia-smi may not list other containers' processes.
+
+- Holder: creates `data/ml/gpu.lock` with O_EXCL, takes an exclusive `flock` on it and keeps that
+  fd open for the whole job (`ml/extractor_b/gpu.py`). The file holds format 2 metadata (pid, job,
+  created-at, boot id, hostname, container id) for messages only. The kernel drops the flock when
+  the holder exits or dies (reboot included); forked children inherit it and keep the lock held.
+- Checker: the lock is stale only if its own non-blocking `LOCK_EX` succeeds. A held flock is
+  HELD whatever the host, container, boot or pid says. A stale lock is reclaimed with a warning
+  log line. Every inspect, create, reclaim and release runs under a blocking flock on the sibling
+  `gpu.lock.guard` (kept on disk on purpose), so two racing reclaimers never both hold the lock
+  and a release never deletes a new holder's file; the holder's flock is dropped last, after the
+  unlink.
+- nvidia-smi stays as the general "GPU is free" preflight (llama-server and other GPU users); it
+  is not a liveness proof and the reclaim decision does not depend on it.
+- Filesystem: `data/ml` must be a local filesystem shared by bind mount (`infra/compose.yaml`
+  mounts `../data/ml`), so host and containers share one kernel lock table. NFS and other network
+  filesystems emulate flock as POSIX byte-range locks with different semantics: unsupported.
+  Where flock is unavailable (Windows), a lock is never reclaimed.
+- Unreadable locks (empty or partial metadata) are classified by their flock (amended after the
+  PR #48 review). A holder that crashes between the O_EXCL create and the metadata write leaves
+  an empty file. A live writer holds the guard from create to fsync, and classification runs
+  under the guard, so a free flock on an unreadable lock means that holder is gone: it is STALE
+  and reclaimed. A held flock is HELD. Without flock support it stays manual.
+- Legacy (format 1, pid only, written before this amendment) locks are never reclaimed, and
+  neither are unreadable locks where flock is unavailable: their holders took no flock, and no
+  age limit is safe for multi-day runs. The error
+  gives the manual step: confirm no trainer runs (`docker ps --filter name=extractor-b-trainer`
+  is empty and no train job runs on the host), then `rm data/ml/gpu.lock`. `make gpu-free` only
+  stops services and does not clear it.
+- Proof: `tests/unit/ml/test_gpu_lock_stale.py` (held across containers, free flock reclaimed,
+  thread and process races with one winner, a real child holding then killed, an empty lock
+  reclaimed or held by its flock, legacy and no-flock refusals) and `tests/unit/ml/test_gpu_preflight.py`.

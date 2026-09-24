@@ -105,7 +105,8 @@ SQL_SEARCH_INVOICES_TOTAL_DESC = SqlStatement(
 SQL_GET_INVOICE = SqlStatement("""
     SELECT invoice_id, status, route, vendor_id, vendor_name, invoice_number_raw, issue_date,
            due_date, po_number_raw, currency, subtotal, vat_total, total, received_at,
-           payee_masked, document_iban_matches_payee, fields_json, proposals_json, reasons_json
+           payee_masked, document_iban_matches_payee, payee_match, payee_refusal, fields_json,
+           proposals_json, reasons_json
     FROM v_agent_invoices
     WHERE invoice_id = :invoice_id
     LIMIT :limit

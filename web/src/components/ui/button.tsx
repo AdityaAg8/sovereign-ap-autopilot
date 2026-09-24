@@ -18,12 +18,12 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        // Affirmative actions (approve): DESIGN.md reserves --success for "auto-route, approved",
-        // so this mirrors `destructive`'s tinted-fill treatment in the success hue rather than the
-        // generic `default` (primary) button — whose light-on-dark fill in dark mode reads as a
-        // washed-out, disabled-looking pastel next to this vivid, unambiguously-active tint.
+        // Affirmative actions (approve): DESIGN.md reserves --success for "auto-route, approved".
+        // A solid fill with --success-foreground text (≥ 7:1 in both themes) — a translucent tint
+        // on the dark canvas read as a dimmed, disabled-looking button, and only the disabled
+        // state (opacity-50 from the base class) may look that way.
         success:
-          "bg-success/10 text-success hover:bg-success/20 focus-visible:border-success/40 focus-visible:ring-success/20 dark:bg-success/20 dark:hover:bg-success/30 dark:focus-visible:ring-success/40",
+          "bg-success text-success-foreground hover:bg-success/90 focus-visible:border-success focus-visible:ring-success/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

@@ -3,16 +3,14 @@ outcome (I4) and issues a Grant bound to the current subject digest (ADR-0008 K6
 
 from __future__ import annotations
 
-from pydantic import JsonValue
-
 from apx.audit.interfaces import AuditEvent, AuditLog
 from apx.common.errors import PolicyDeniedError, SegregationOfDutiesError
 from apx.policy.interfaces import (
     ActionRequest,
     Grant,
     PolicyEngine,
-    PolicyReason,
     PolicyRule,
+    reasons_payload,
     subject_digest,
 )
 
@@ -23,10 +21,6 @@ def _entity_for(request: ActionRequest) -> str:
     if request.vendor is not None:
         return f"vendor:{request.vendor.id}"
     return "action"
-
-
-def _reasons_payload(reasons: tuple[PolicyReason, ...]) -> list[JsonValue]:
-    return [{"rule": r.rule.value, "route": r.route.value, "message": r.message} for r in reasons]
 
 
 class DefaultPolicyGuard:
@@ -49,7 +43,7 @@ class DefaultPolicyGuard:
                 entity=_entity_for(request),
                 payload={
                     "allowed": decision.allowed,
-                    "reasons": _reasons_payload(decision.reasons),
+                    "reasons": reasons_payload(decision.reasons),
                 },
             )
         )

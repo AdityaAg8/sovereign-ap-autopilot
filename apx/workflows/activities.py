@@ -16,6 +16,7 @@ from pydantic import JsonValue
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from apx.agent.interfaces import AgentContext, ExceptionAgent
 from apx.agent.runner import record_review_note
@@ -27,6 +28,8 @@ from apx.common.errors import (
     ModelServingError,
     ParsedArtifactIntegrityError,
     ParsedArtifactMissingError,
+    PayeeChangedError,
+    PayeeRefusedError,
 )
 from apx.common.invoice import Invoice
 from apx.common.master import Vendor
@@ -48,7 +51,17 @@ from apx.parse.interfaces import (
     ParsedDocumentRef,
     ParsedDocumentStore,
 )
-from apx.policy.interfaces import PolicyEngine, RoutingDecision, RoutingInput
+from apx.policy.interfaces import (
+    Payee,
+    PolicyEngine,
+    RoutedPayee,
+    RoutingDecision,
+    RoutingInput,
+    payee_refusal_of,
+    pin_payee,
+    reasons_payload,
+    select_payee,
+)
 from apx.scan.interfaces import Scanner, ScanReport
 from apx.trust.interfaces import FeatureBuilder, TrustDecision, TrustGate
 from apx.validate.interfaces import ValidationReport, Validator, ViolationCode
@@ -71,10 +84,18 @@ _CLASSIFICATION_CODES = frozenset(
         ViolationCode.INVOICE_TYPE_MISSING,
         ViolationCode.VAT_CATEGORY_MISSING,
         ViolationCode.VAT_RATE_MISSING,
+        ViolationCode.VAT_CATEGORY_RATE_MISMATCH,
         ViolationCode.CURRENCY_INVALID,
     }
 )
-"""ADR-0012 values an approved review must have resolved before an e-invoice is built."""
+"""ADR-0012 values an approved review must have resolved before an e-invoice is built. A
+category/rate mismatch is included: the builder refuses it (an E/O line with a non-zero rate
+would otherwise lose its VAT), so approving it would only fail later, at the build."""
+
+_UNREVIEWABLE_CODES = frozenset({ViolationCode.MISSING_MANDATORY})
+"""Values an approved review cannot supply (no correction carries them, e.g. a missing supplier
+TRN) and the e-invoice build refuses. `apply_review` stops them before the build; the API
+already refuses such an approval (`SupplierTrnMissingError`), so this is defence in depth."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,15 +135,14 @@ class InvoiceActivityDeps:
 
 
 def verified_payment_iban(vendor: Vendor | None, claimed: str | None) -> str | None:
-    """The account to pay: the vendor's verified current account matching the invoice's claimed
-    IBAN, else its only verified account. None (so the UBL builder refuses) when the vendor is
-    unknown or has no single verified account to choose; the claimed IBAN is never used as-is."""
-    if vendor is None:
+    """The account to pay in the UBL: `select_payee(vendor, invoice_iban=claimed).iban`, the one
+    P1 decision (ADR-0014), or None on PayeeRefusedError so the UBL builder keeps refusing an
+    Invoice without one (EInvoiceError). The claimed IBAN only selects among the vendor's
+    admin-verified accounts and is never used as-is."""
+    try:
+        return select_payee(vendor, invoice_iban=claimed).iban
+    except PayeeRefusedError:
         return None
-    verified = [account.iban for account in vendor.bank_accounts if account.verified]
-    if claimed is not None and claimed in verified:
-        return claimed
-    return verified[0] if len(verified) == 1 else None
 
 
 class DefaultInvoiceActivities:
@@ -257,7 +277,7 @@ class DefaultInvoiceActivities:
             {
                 v.code.value
                 for v in report.violations
-                if v.code in _CLASSIFICATION_CODES and v.severity == "error"
+                if v.code in _CLASSIFICATION_CODES | _UNREVIEWABLE_CODES and v.severity == "error"
             }
         )
         await self._audit(
@@ -307,11 +327,21 @@ class DefaultInvoiceActivities:
             bank_changes=bank_changes,
         )
         decision = self._deps.policy_engine.route(routing_input)
-        await self._deps.records.routed(invoice.id, decision.route, trust)
+        # Persists the route and the pinned payee (masked, or the refusal) that the agent view
+        # and the review UI show, so they read select_payee's choice (ADR-0014 §7).
+        await self._deps.records.routed(invoice.id, decision, trust)
+        refusal = payee_refusal_of(decision)
         await self._audit(
             "route",
             invoice.id,
-            {"route": decision.route.value, "reasons": [r.rule.value for r in decision.reasons]},
+            {
+                "route": decision.route.value,
+                "reasons": [r.rule.value for r in decision.reasons],
+                "detail": reasons_payload(decision.reasons),
+                "payee_refusal": None if refusal is None else refusal.value,
+                "payee_match": None if decision.payee is None else decision.payee.match.value,
+                "payee": None if decision.payee is None else decision.payee.masked_iban,
+            },
         )
         return decision
 
@@ -356,9 +386,55 @@ class DefaultInvoiceActivities:
             )
         )
 
-    @activity.defn(name="build_einvoice")
-    async def build_einvoice(self, invoice: Invoice) -> EInvoiceDocument:
+    async def _pinned_payee_iban(self, invoice: Invoice, pinned: RoutedPayee | None) -> str | None:
+        """ADR-0014 §7 (TOCTOU): the IBAN to pay, re-selected from the live vendor master, only if
+        it is the payee pinned at routing (same IBAN digest and match; both None when P1 refused
+        then and now). Any other outcome is audited and raised as a non-retryable
+        `PayeeChangedError`: nothing is built, so neither account is paid."""
         vendor, _ = await self._deps.vendors.lookup(invoice.vendor_id)
+        payee: Payee | None = None
+        refusal: str | None = None
+        try:
+            payee = select_payee(vendor, invoice_iban=invoice.iban)
+        except PayeeRefusedError as refused:
+            refusal = refused.refusal.value
+        live = None if payee is None else pin_payee(payee)
+        if pinned is None:
+            same = live is None
+        else:
+            same = (
+                live is not None
+                and live.iban_sha256 == pinned.iban_sha256
+                and live.match is pinned.match
+            )
+        if same:
+            return None if payee is None else payee.iban
+        await self._audit(
+            "payee_changed",
+            invoice.id,
+            {
+                "pinned": None if pinned is None else pinned.masked_iban,
+                "pinned_match": None if pinned is None else pinned.match.value,
+                "live": None if live is None else live.masked_iban,
+                "live_match": None if live is None else live.match.value,
+                "live_refusal": refusal,
+            },
+        )
+        exc = PayeeChangedError(
+            f"invoice {invoice.id}: the payee selected now differs from the one pinned at "
+            "routing (vendor master or selection changed); the e-invoice is not built"
+        )
+        # Raised as a non-retryable ApplicationError of the same type name: a retry would only
+        # re-read the same master (and NON_RETRYABLE_ERRORS is owned elsewhere).
+        raise ApplicationError(str(exc), type=type(exc).__name__, non_retryable=True) from exc
+
+    @activity.defn(name="build_einvoice")
+    async def build_einvoice(
+        self, invoice: Invoice, pinned_payee: RoutedPayee | None
+    ) -> EInvoiceDocument:
+        """PINT AE UBL for the approved (or AUTO) invoice. `pinned_payee` is the route decision's
+        `RoutingDecision.payee`; the live selection must equal it (`_pinned_payee_iban`)."""
+        payment_iban = await self._pinned_payee_iban(invoice, pinned_payee)
         type_code = document_type_code(invoice.kind, (ln.vat_category for ln in invoice.lines))
         schematron = (
             self._deps.schematron if type_code.is_invoice else self._deps.credit_note_schematron
@@ -368,7 +444,7 @@ class DefaultInvoiceActivities:
         document = self._deps.ubl_builder.build(
             invoice,
             type_code,
-            verified_payment_iban=verified_payment_iban(vendor, invoice.iban),
+            verified_payment_iban=payment_iban,
         )
         result = schematron.validate(document.xml)
         fatal = [f for f in result.failures if f.flag == "fatal"]

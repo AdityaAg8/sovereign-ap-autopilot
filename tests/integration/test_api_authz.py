@@ -216,6 +216,23 @@ async def _create_verified_vendor(
     await session.flush()
 
 
+# ADR-0012: the classified values an approval needs, as the workflow's records.save writes
+# them (NULL when the extractors disagreed; `classified=False`).
+_CLASSIFIED_FIELDS: dict[str, str] = {
+    "invoice_type_code": "380",
+    "line_items[1].vat_category": "Z",
+    "line_items[1].vat_rate": "0",
+}
+# Every model-sourced field row `_create_invoice` seeds: the classified values plus the grounded
+# currency and supplier TRN (BT-31), which an approval requires from the extraction itself
+# (`SupplierTrnMissingError`: a reviewer's edit cannot supply it).
+_SEEDED_FIELDS: dict[str, str] = {
+    **_CLASSIFIED_FIELDS,
+    "currency": "AED",
+    "supplier_trn": "100000000000003",
+}
+
+
 async def _create_invoice(
     session: AsyncSession,
     *,
@@ -242,21 +259,14 @@ async def _create_invoice(
         )
     )
     await session.flush()
-    # ADR-0012: the classified values an approval needs, as the workflow's records.save writes
-    # them (NULL when the extractors disagreed).
-    classification = {
-        "invoice_type_code": "380",
-        "currency": "AED",
-        "line_items[1].vat_category": "Z",
-        "line_items[1].vat_rate": "0",
-    }
-    for name, value in classification.items():
+    for name, value in _SEEDED_FIELDS.items():
+        kept = classified or name not in _CLASSIFIED_FIELDS
         session.add(
             Field(
                 invoice_id=invoice_id,
                 name=name,
-                value=value if classified or name == "currency" else None,
-                normalized_value=value if classified or name == "currency" else None,
+                value=value if kept else None,
+                normalized_value=value if kept else None,
                 source=FieldSource.EXTRACTOR_A,
             )
         )
@@ -503,7 +513,9 @@ async def _field_edit_scenario() -> None:
 
     async with get_session() as session:
         field_row = (
-            await session.execute(select(Field).where(Field.invoice_id == invoice_id))
+            await session.execute(
+                select(Field).where(Field.invoice_id == invoice_id, Field.name == "total")
+            )
         ).scalar_one()
         assert field_row.value == "1234.56"
         assert field_row.source.value == "human"
@@ -987,7 +999,11 @@ async def _ops_dashboard_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
     kpis = snap["kpis"]
     # 1. Hand-derived for this seed.
     assert kpis["stp_rate"] == pytest.approx(1 / 4)
-    assert kpis["auto_accept_error_rate"] == pytest.approx(2 / 5)
+    # 2 automated-source labels over the 5 explicit ops-a fields plus the rows every
+    # `_create_invoice` seeds (all extractor-sourced).
+    automated_fields = 5 + len(statuses) * len(_SEEDED_FIELDS)
+    assert kpis["automated_fields"] == automated_fields
+    assert kpis["auto_accept_error_rate"] == pytest.approx(2 / automated_fields)
     assert kpis["llm_latency_p50_ms"] == pytest.approx(300)
     assert kpis["llm_latency_p95_ms"] == pytest.approx(880)  # 400 + 0.8 * (1000 - 400)
     assert kpis["attacks_blocked"] == 1 and kpis["queue_size"] == 2

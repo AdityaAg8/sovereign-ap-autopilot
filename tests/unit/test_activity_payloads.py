@@ -23,7 +23,14 @@ from apx.extract.interfaces import ExtractionResult
 from apx.fraud.interfaces import FraudReport
 from apx.parse.interfaces import ParsedDocument, ParsedDocumentRef
 from apx.policy.engine import DefaultPolicyEngine
-from apx.policy.interfaces import PolicyThresholds, RoutingDecision, RoutingInput
+from apx.policy.interfaces import (
+    PayeeMatch,
+    PolicyThresholds,
+    RoutedPayee,
+    RoutingDecision,
+    RoutingInput,
+    payee_iban_digest,
+)
 from apx.scan.cap import MAX_FLAGS_PER_KIND
 from apx.scan.detector import PdfHiddenContentDetector
 from apx.scan.interfaces import ScanFlagKind, ScanReport
@@ -59,6 +66,12 @@ FIXTURES: dict[type[Any], Callable[[], object]] = {
     ValidationReport: fx.validation_report,
     FraudReport: fx.fraud_report,
     RoutingDecision: fx.routing_decision,
+    RoutedPayee | None: lambda: RoutedPayee(
+        masked_iban="****3456",
+        match=PayeeMatch.MATCHED,
+        verified_count=2,
+        iban_sha256=payee_iban_digest("AE070331234567890123456"),
+    ),
     EInvoiceDocument: fx.einvoice_document,
     AspReceipt: fx.asp_receipt,
     ArchiveRecord: fx.archive_record,

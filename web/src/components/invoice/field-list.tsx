@@ -6,7 +6,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { FieldRow } from "@/components/invoice/field-row";
 import type { FieldEdit, FieldValue } from "@/lib/api/types";
 import { fieldLabel, lineFieldName, parseLineField, vatRateGuidance } from "@/lib/invoice-fields";

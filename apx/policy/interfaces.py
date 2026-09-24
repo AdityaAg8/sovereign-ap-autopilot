@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
@@ -14,7 +15,7 @@ from typing import Final, Literal, Protocol
 
 from pydantic import JsonValue
 
-from apx.common.errors import PolicyDeniedError
+from apx.common.errors import PayeeRefusal, PayeeRefusedError
 from apx.common.invoice import Invoice
 from apx.common.master import BankAccount, BankDetailChange, User, Vendor
 from apx.common.types import (
@@ -128,11 +129,40 @@ class PolicyThresholds(Frozen):
     bank_change_review_days: int = 30
 
 
+class PayeeMatch(StrEnum):
+    """How the invoice IBAN related to the payee `select_payee` chose (ADR-0014)."""
+
+    MATCHED = "matched"
+    """The invoice IBAN equals the selected account."""
+    SOLE_UNCLAIMED = "sole_unclaimed"
+    """Exactly one verified account and the invoice IBAN is None or blank."""
+    SOLE_MISMATCH = "sole_mismatch"
+    """Exactly one verified account and the invoice IBAN differs from it or is malformed."""
+
+
+class RoutedPayee(Frozen):
+    """The P1 payee pinned at routing (ADR-0014 §7): `select_payee`'s choice when the invoice
+    was routed, carried through the workflow and persisted with the route decision. It holds no
+    raw IBAN: the build compares `iban_sha256` with a fresh selection, and readers (agent view,
+    review UI) only ever see `masked_iban`."""
+
+    masked_iban: str
+    """`"****"` plus the last 4 characters of `Payee.iban`."""
+    match: PayeeMatch
+    verified_count: int
+    iban_sha256: Sha256Hex
+    """SHA-256 (hex) of `Payee.iban` in electronic format, UTF-8."""
+
+
 class PolicyReason(Frozen):
     rule: PolicyRule
     route: Route
     message: str
     """System-written template text. Never interpolates document-derived free text (ADR-0008)."""
+    payee_refusal: PayeeRefusal | None = None
+    """Set on a P1 reason when `select_payee` refused (ADR-0014)."""
+    payee_match: PayeeMatch | None = None
+    """Set on a P1 reason raised for a non-trivial payee selection (ADR-0014)."""
 
 
 class RoutingInput(Frozen):
@@ -153,6 +183,9 @@ class RoutingDecision(Frozen):
 
     route: Route
     reasons: tuple[PolicyReason, ...]
+    payee: RoutedPayee | None = None
+    """P1's selection at routing time; None when `select_payee` refused (the P1 reason then
+    carries `payee_refusal`) or for a decision rebuilt from a stored route (`apx.api`)."""
 
 
 class Proposal(Frozen):
@@ -312,29 +345,174 @@ def is_payment_affecting(request: ActionRequest) -> bool:
     return False
 
 
-def select_payee(vendor: Vendor | None) -> BankAccount:
-    """P1: the vendor's unique account with `verified=True` and `source="admin_callback"`.
-    Raises PolicyDeniedError (rule P1) if the vendor is unknown, no account qualifies or more
-    than one does. Never reads `Invoice.iban`."""
+class Payee(Frozen):
+    """The P1 payee (ADR-0014). `account` is always one of `vendor.bank_accounts` with
+    `verified=True` and `source="admin_callback"`; the invoice IBAN only selected it."""
+
+    account: BankAccount
+    iban: str
+    """`electronic_iban(account.iban)`: the value paid, digested and written into the UBL."""
+    match: PayeeMatch
+    verified_count: int
+    """Number of verified admin-callback account records (>= 1)."""
+
+
+_ELECTRONIC_IBAN_RE: Final = re.compile(r"[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}")
+
+
+def electronic_iban(raw: str) -> str | None:
+    """ISO 13616 electronic format, or None if `raw` is not a well-formed IBAN (ADR-0014 §2).
+
+    ASCII only (checked before case-folding), U+0020 SPACE is the only separator removed, then
+    upper-case and `[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}`. Tabs, NBSP, hyphens, zero-width characters,
+    non-ASCII digits and lookalike letters are rejected, never stripped or transliterated, so
+    untrusted text cannot become a verified IBAN through characters a reviewer cannot see.
+    Mod-97 is deliberately not checked: selection is exact equality with an admin-verified record.
+    Not the same as `apx.fraud.normalize.normalize_iban`, which strips separators for fuzzy fraud
+    matching and must never be used for payment; the two are kept apart on purpose."""
+    if not raw.isascii():
+        return None
+    candidate = raw.replace(" ", "").upper()
+    if _ELECTRONIC_IBAN_RE.fullmatch(candidate) is None:
+        return None
+    return candidate
+
+
+def select_payee(vendor: Vendor | None, *, invoice_iban: str | None) -> Payee:
+    """P1 (ADR-0014): the payee among the vendor's admin-verified accounts. Raises
+    PayeeRefusedError with a PayeeRefusal. The invoice IBAN only selects, never introduces.
+
+    One verified account is always the payee (match records how the invoice relates to it).
+    Two or more need the invoice IBAN to equal exactly one of them in electronic format."""
     if vendor is None:
-        raise PolicyDeniedError("no vendor: cannot select a payee (P1)")
-    verified = [
-        account
-        for account in vendor.bank_accounts
-        if account.verified and account.source == "admin_callback"
-    ]
-    if len(verified) != 1:
-        raise PolicyDeniedError(
-            f"vendor {vendor.id} has {len(verified)} admin-verified accounts, need exactly 1 (P1)"
+        raise PayeeRefusedError(
+            PayeeRefusal.UNKNOWN_VENDOR, "no vendor: cannot select a payee (P1)"
         )
-    return verified[0]
+    verified: list[tuple[BankAccount, str]] = []
+    for account in vendor.bank_accounts:
+        if not (account.verified and account.source == "admin_callback"):
+            continue
+        normalized = electronic_iban(account.iban)
+        if normalized is None:
+            raise PayeeRefusedError(
+                PayeeRefusal.MASTER_IBAN_MALFORMED,
+                f"vendor {vendor.id} has an admin-verified account with a malformed IBAN (P1)",
+            )
+        verified.append((account, normalized))
+
+    if not verified:
+        raise PayeeRefusedError(
+            PayeeRefusal.NO_VERIFIED_ACCOUNT,
+            f"vendor {vendor.id} has no admin-verified account (P1)",
+        )
+
+    blank = invoice_iban is None or invoice_iban.strip() == ""
+    claimed = None if invoice_iban is None or blank else electronic_iban(invoice_iban)
+
+    if len(verified) == 1:
+        account, iban = verified[0]
+        if blank:
+            match = PayeeMatch.SOLE_UNCLAIMED
+        elif claimed == iban:
+            match = PayeeMatch.MATCHED
+        else:
+            match = PayeeMatch.SOLE_MISMATCH
+        return Payee(account=account, iban=iban, match=match, verified_count=1)
+
+    count = len(verified)
+    if blank:
+        raise PayeeRefusedError(
+            PayeeRefusal.INVOICE_IBAN_MISSING,
+            f"vendor {vendor.id} has {count} admin-verified accounts and the invoice names "
+            "none (P1)",
+        )
+    if claimed is None:
+        raise PayeeRefusedError(
+            PayeeRefusal.INVOICE_IBAN_MALFORMED,
+            f"vendor {vendor.id} has {count} admin-verified accounts and the invoice IBAN "
+            "is malformed (P1)",
+        )
+    matches = [(account, iban) for account, iban in verified if iban == claimed]
+    if not matches:
+        raise PayeeRefusedError(
+            PayeeRefusal.NO_MATCH,
+            f"vendor {vendor.id} has {count} admin-verified accounts and none equals the "
+            "invoice IBAN (P1)",
+        )
+    if len(matches) > 1:
+        raise PayeeRefusedError(
+            PayeeRefusal.AMBIGUOUS_MATCH,
+            f"vendor {vendor.id} has {len(matches)} admin-verified records equal to the "
+            "invoice IBAN (P1)",
+        )
+    account, iban = matches[0]
+    return Payee(account=account, iban=iban, match=PayeeMatch.MATCHED, verified_count=count)
+
+
+def payee_iban_digest(iban: str) -> Sha256Hex:
+    """SHA-256 (hex) of an electronic-format IBAN; how a pinned payee is compared (§7)."""
+    return Sha256Hex(hashlib.sha256(iban.encode("utf-8")).hexdigest())
+
+
+def pin_payee(payee: Payee) -> RoutedPayee:
+    """The `RoutedPayee` for `payee`: masked, digested, never the raw IBAN (ADR-0014 §7)."""
+    return RoutedPayee(
+        masked_iban="****" + payee.iban[-4:],
+        match=payee.match,
+        verified_count=payee.verified_count,
+        iban_sha256=payee_iban_digest(payee.iban),
+    )
+
+
+def reasons_payload(reasons: tuple[PolicyReason, ...]) -> list[JsonValue]:
+    """Audit/record form of `reasons`; the typed P1 payee fields are written only when set
+    (ADR-0014)."""
+    payload: list[JsonValue] = []
+    for r in reasons:
+        item: dict[str, JsonValue] = {
+            "rule": r.rule.value,
+            "route": r.route.value,
+            "message": r.message,
+        }
+        if r.payee_refusal is not None:
+            item["payee_refusal"] = r.payee_refusal.value
+        if r.payee_match is not None:
+            item["payee_match"] = r.payee_match.value
+        payload.append(item)
+    return payload
+
+
+def payee_refusal_of(decision: RoutingDecision) -> PayeeRefusal | None:
+    """The typed P1 refusal among `decision.reasons`, if `select_payee` refused at routing."""
+    return next((r.payee_refusal for r in decision.reasons if r.payee_refusal is not None), None)
+
+
+def payee_record(decision: RoutingDecision) -> dict[str, JsonValue]:
+    """The persisted, reader-safe form of the routed payee: masked IBAN, match and count, or the
+    refusal. Never the raw IBAN or its digest (ADR-0014 §7, migration 0008)."""
+    payee = decision.payee
+    if payee is None:
+        refusal = payee_refusal_of(decision)
+        return {"refusal": None if refusal is None else refusal.value}
+    return {
+        "masked_iban": payee.masked_iban,
+        "match": payee.match.value,
+        "verified_count": payee.verified_count,
+    }
+
+
+def routing_record(decision: RoutingDecision) -> list[JsonValue]:
+    """`decisions.reasons` for a `policy_route` row: every reason, then one `{"payee": ...}`
+    element (`payee_record`). `v_agent_invoices` splits the two apart (migration 0008)."""
+    return [*reasons_payload(decision.reasons), {"payee": payee_record(decision)}]
 
 
 def subject_digest(request: ActionRequest) -> Sha256Hex:
     """SHA-256 of canonical JSON (sorted keys, compact separators, UTF-8) over the payment
-    subject: action, invoice id, total, currency, vendor id, payee IBAN from `select_payee` for
-    approvals, target bank change, proposal id and payload. Excludes actor and time, so any edit
-    to these values between grant and write is detected (TOCTOU)."""
+    subject: action, invoice id, total, currency, vendor id, for approvals the normalized payee
+    IBAN and payee match from `select_payee` (ADR-0014 §6), target bank change, proposal id and
+    payload. Excludes actor and time, so any edit to these values between grant and write is
+    detected (TOCTOU). Raises PayeeRefusedError when an approval's payee selection refuses."""
     invoice = request.invoice
     vendor = request.vendor
     subject: dict[str, object] = {
@@ -345,7 +523,9 @@ def subject_digest(request: ActionRequest) -> Sha256Hex:
         "vendor_id": vendor.id if vendor is not None else None,
     }
     if is_approval_action(request):
-        subject["payee_iban"] = select_payee(vendor).iban
+        payee = select_payee(vendor, invoice_iban=invoice.iban if invoice is not None else None)
+        subject["payee_iban"] = payee.iban
+        subject["payee_match"] = payee.match.value
     change = request.bank_change
     subject["bank_change"] = (
         None

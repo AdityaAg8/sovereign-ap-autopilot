@@ -44,7 +44,7 @@ git ignores.
 | Clean (3) | Extracted by two models, grounded to the words on the page, validated and checked for fraud. With no calibrated trust gate yet (M7.4), every invoice is held for a person rather than paid automatically. | Review queue: each field shows its value, its box on the page and a confidence. |
 | Bilingual (2) | Arabic-first invoices. Party names printed only in Arabic keep their Arabic script. | Invoice page: the supplier field in Arabic, boxed on the page image. |
 | Poisoned (2) | PDFs carrying hidden instructions to the model. The scanner flags text a reader cannot see, and above the block threshold the invoice is blocked and can never be paid. The extraction models read every document tool-free, so hidden instructions have nothing to act on. | Operations: the blocked tile. Invoice page: the scan flags and evidence. |
-| Bank change | The vendor switched its IBAN days before issuing this invoice. The fraud rule flags it, and payment always goes to the vendor master's verified account, never to the IBAN printed on the invoice. | Invoice page: the `bank_detail_change` flag and its plain-language explanation. |
+| Bank change | The vendor switched its IBAN days before issuing this invoice. The fraud rule flags it, and payment always goes to an admin-verified account in the vendor master; the IBAN printed on the invoice can only pick among those, never add one (ADR-0014). | Invoice page: the `bank_detail_change` flag and its plain-language explanation. |
 | Duplicate | The first clean invoice resubmitted as a new file. Same number, vendor and amount, so it is flagged as a duplicate. | Invoice page: the `duplicate_invoice` flag and its explanation. |
 
 ## Things to try

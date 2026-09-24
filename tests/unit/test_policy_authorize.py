@@ -9,11 +9,14 @@ from datetime import UTC, datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
+from apx.common.errors import PayeeRefusal
+from apx.common.master import Vendor
 from apx.common.types import Role, Route
 from apx.policy.engine import DefaultPolicyEngine
 from apx.policy.interfaces import (
     ActionRequest,
     Capability,
+    PolicyRule,
     PolicyThresholds,
     RoutingDecision,
     capabilities_for,
@@ -21,6 +24,7 @@ from apx.policy.interfaces import (
     select_payee,
 )
 from tests.unit._policy_factories import (
+    make_bank_account,
     make_bank_change,
     make_invoice,
     make_user,
@@ -81,7 +85,7 @@ def test_allowed_approval_implies_every_k5_condition(
 
     if decision.allowed:
         assert required_capabilities(request, thresholds) <= capabilities_for(roles)
-        assert select_payee(vendor) is not None  # must not raise (P1)
+        assert select_payee(vendor, invoice_iban=invoice.iban) is not None  # must not raise (P1)
         assert routing is not None and routing.route != Route.BLOCK
         assert not (same_actor_changed_bank and days_ago < thresholds.sod_cooldown_days)
 
@@ -181,4 +185,55 @@ def test_change_bank_details_needs_only_the_capability() -> None:
         routing=None,
     )
     decision = DefaultPolicyEngine(thresholds).authorize(request)
+    assert decision.allowed
+
+
+def _approval(vendor: Vendor, iban: str | None) -> ActionRequest:
+    invoice = make_invoice(total="100", vendor_id=vendor.id).model_copy(update={"iban": iban})
+    return ActionRequest(
+        actor=make_user(user_id="approver-1", roles=frozenset({Role.APPROVER})),
+        action=Capability.APPROVE_PAYMENT,
+        invoice=invoice,
+        vendor=vendor,
+        at=_AT,
+        routing=RoutingDecision(route=Route.REVIEW, reasons=()),
+    )
+
+
+def test_a_payee_refusal_denies_approval_with_the_typed_reason() -> None:
+    """ADR-0014: two verified accounts and an invoice IBAN matching neither refuses P1."""
+    vendor = make_vendor(
+        accounts=(
+            make_bank_account(iban="AE070331234567890000001"),
+            make_bank_account(iban="AE070331234567890000002"),
+        )
+    )
+    decision = DefaultPolicyEngine(_thresholds()).authorize(
+        _approval(vendor, "AE460090000000123456789")
+    )
+    assert not decision.allowed
+    p1 = [r for r in decision.reasons if r.rule is PolicyRule.P1_VERIFIED_IBAN]
+    assert [r.payee_refusal for r in p1] == [PayeeRefusal.NO_MATCH]
+
+
+def test_two_verified_accounts_with_a_match_can_be_approved() -> None:
+    vendor = make_vendor(
+        accounts=(
+            make_bank_account(iban="AE070331234567890000001"),
+            make_bank_account(iban="AE070331234567890000002"),
+        )
+    )
+    decision = DefaultPolicyEngine(_thresholds()).authorize(
+        _approval(vendor, "ae07 0331 2345 6789 0000 002")
+    )
+    assert decision.allowed
+    assert decision.reasons == ()
+
+
+def test_a_sole_verified_account_with_a_mismatching_invoice_iban_can_be_approved() -> None:
+    """ADR-0014 §4: authorize does not deny SOLE_MISMATCH; a human approving it is the review."""
+    vendor = make_vendor(accounts=(make_bank_account(iban="AE070331234567890000001"),))
+    decision = DefaultPolicyEngine(_thresholds()).authorize(
+        _approval(vendor, "AE460090000000123456789")
+    )
     assert decision.allowed

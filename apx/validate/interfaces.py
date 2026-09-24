@@ -42,6 +42,8 @@ class ViolationCode(StrEnum):
     VAT_CATEGORY_MISSING = "vat_category_missing"
     VAT_RATE_MISSING = "vat_rate_missing"
     VAT_CATEGORY_RATE_MISMATCH = "vat_category_rate_mismatch"
+    # --- ADR-0012 amendment 2: the buyer is our own organisation (WORKER_BUYER_TRN) ----------
+    BUYER_TRN_MISMATCH = "buyer_trn_mismatch"
 
 
 class Violation(Frozen):
@@ -117,6 +119,16 @@ _REVERSE_CHARGE_RATES: Final[frozenset[Decimal]] = frozenset({_ZERO, STANDARD_VA
 """PINT AE 1.0.4 (official example `Doc-level-charge-AE-category.xml`): an AE line states 0% or
 the 5% the buyer self-accounts for; the VAT this invoice collects on it is 0 either way
 (`ibr-162-ae`, `aligned-ibrp-ae-09-ae`)."""
+
+
+def vat_rate_fits_category(category: VatCategory, rate: Decimal) -> bool:
+    """ADR-0012's category/rate rule (S needs 5; Z, E and O need 0; AE states 0 or 5), the one
+    `check_vat` reports as `VAT_CATEGORY_RATE_MISMATCH`. It checks a rate, never supplies one."""
+    if category is VatCategory.STANDARD:
+        return rate == STANDARD_VAT_RATE
+    if category is VatCategory.REVERSE_CHARGE:
+        return rate in _REVERSE_CHARGE_RATES
+    return rate == _ZERO
 
 
 def _round_aed(amount: Decimal) -> Decimal:
@@ -347,8 +359,9 @@ def check_dates(invoice: Invoice, *, today: date | None = None) -> list[Violatio
 def check_currency(invoice: Invoice) -> list[Violation]:
     """Every `Money` amount on the invoice must share one currency code. PINT AE also requires a
     tax-accounting exchange rate (BTAE-04, `ibr-159-ae`) whenever that currency is not AED; the
-    canonical `Invoice` carries no exchange-rate field, so a non-AED invoice is flagged for
-    review (warning) rather than fully reconciled here."""
+    canonical `Invoice` carries no exchange-rate field and the PINT AE builder refuses a non-AED
+    document, so a non-AED invoice is an error (routes to review, blocks the build) rather than
+    a warning that would let approval through only for the build to fail (ADR-0012)."""
     amounts: list[tuple[str, Money]] = [
         ("subtotal", invoice.subtotal),
         ("vat_total", invoice.vat_total),
@@ -388,9 +401,9 @@ def check_currency(invoice: Invoice) -> list[Violation]:
                 message=(
                     f"invoice currency is {currency}, not AED; PINT AE requires a tax "
                     "accounting exchange rate (BTAE-04) that the canonical invoice does not "
-                    "carry, so this needs manual review"
+                    "carry, so no e-invoice can be built for it"
                 ),
-                severity="warning",
+                severity="error",
             )
         ]
     return []
@@ -435,12 +448,14 @@ def check_document_type(invoice: Invoice) -> list[Violation]:
     return violations
 
 
-def check_mandatory_fields(invoice: Invoice) -> list[Violation]:
+def check_mandatory_fields(invoice: Invoice, *, buyer_trn: str | None = None) -> list[Violation]:
     """Presence checks for the canonical `Invoice`'s own required business terms. The raw
     51-mandatory-field PINT AE checklist (`apx.extract.schema.HEADER_FIELD_BT`) is extraction's
     concern; by the time an `Invoice` exists here it has already passed the trust gate (§6.1),
     so this only catches values that type-check as present but are semantically empty, plus the
-    invoice-line cardinality rule (an Invoice line group, IBG-25, must occur at least once)."""
+    invoice-line cardinality rule (an Invoice line group, IBG-25, must occur at least once).
+    With `buyer_trn` (our own organisation's configured TRN) the document's buyer TRN is not
+    required: the e-invoice takes the configured one and `check_buyer_trn` cross-checks."""
     violations: list[Violation] = []
 
     def _require(field: str, value: str | None) -> None:
@@ -458,6 +473,10 @@ def check_mandatory_fields(invoice: Invoice) -> list[Violation]:
     _require("supplier.name", invoice.supplier.name)
     _require("supplier.trn", invoice.supplier.trn)
     _require("buyer.name", invoice.buyer.name)
+    if buyer_trn is None:
+        # The buyer's TRN is the e-invoice's buyer electronic address (BT-49, `cbc:EndpointID`),
+        # which the PINT AE builder never fabricates.
+        _require("buyer.trn", invoice.buyer.trn)
 
     if not invoice.lines:
         violations.append(
@@ -474,13 +493,38 @@ def check_mandatory_fields(invoice: Invoice) -> list[Violation]:
     return violations
 
 
-def validate_invoice(invoice: Invoice, *, today: date | None = None) -> ValidationReport:
+def check_buyer_trn(invoice: Invoice, buyer_trn: str) -> list[Violation]:
+    """ADR-0012 amendment 2: the buyer is our own organisation, so the e-invoice's buyer TRN is
+    the configured `buyer_trn`. A document that names a different buyer TRN is an error (it may
+    be addressed to someone else) and goes to review; it is never silently overwritten. A
+    document with no buyer TRN is fine: the configured one is used."""
+    printed = invoice.buyer.trn
+    if printed is None or not printed.strip() or printed.strip() == buyer_trn.strip():
+        return []
+    return [
+        Violation(
+            code=ViolationCode.BUYER_TRN_MISMATCH,
+            field="buyer.trn",
+            message=(
+                "the document's buyer TRN differs from our configured buyer TRN; the e-invoice "
+                "uses the configured TRN, so confirm the invoice is addressed to us"
+            ),
+            severity="error",
+        )
+    ]
+
+
+def validate_invoice(
+    invoice: Invoice, *, today: date | None = None, buyer_trn: str | None = None
+) -> ValidationReport:
     """Runs every M4.1 field-level check and merges the violations (§10 M4.1). 3-way match
     (M4.2) is layered on separately via `three_way_match`, once a `PurchasingLookup` is wired
-    in."""
+    in. `buyer_trn` is our organisation's configured TRN (`WorkerSettings.buyer_trn`); without
+    it the document's own buyer TRN is required instead."""
     violations = (
         *check_document_type(invoice),
-        *check_mandatory_fields(invoice),
+        *check_mandatory_fields(invoice, buyer_trn=buyer_trn),
+        *([] if buyer_trn is None else check_buyer_trn(invoice, buyer_trn)),
         *check_vat(invoice),
         *check_trn(invoice),
         *check_iban(invoice),
@@ -492,10 +536,14 @@ def validate_invoice(invoice: Invoice, *, today: date | None = None) -> Validati
 
 class InvoiceValidator:
     """Concrete `Validator`: field-level checks only. 3-way match needs a `PurchasingLookup`
-    that M4.2 wires in separately."""
+    that M4.2 wires in separately. The worker passes `buyer_trn` (our own organisation's TRN,
+    required config); None keeps the document-only checks (evals, fixtures)."""
+
+    def __init__(self, *, buyer_trn: str | None = None) -> None:
+        self._buyer_trn = buyer_trn
 
     def validate(self, invoice: Invoice) -> ValidationReport:
-        return validate_invoice(invoice)
+        return validate_invoice(invoice, buyer_trn=self._buyer_trn)
 
 
 def three_way_match(

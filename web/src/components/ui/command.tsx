@@ -34,12 +34,16 @@ function CommandDialog({
   children,
   className,
   showCloseButton = false,
+  onOpenAutoFocus,
+  shouldFilter,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
   className?: string;
   showCloseButton?: boolean;
+  onOpenAutoFocus?: React.ComponentProps<typeof DialogContent>["onOpenAutoFocus"];
+  shouldFilter?: boolean;
 }) {
   return (
     <Dialog {...props}>
@@ -50,11 +54,12 @@ function CommandDialog({
       <DialogContent
         className={cn("top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0", className)}
         showCloseButton={showCloseButton}
+        onOpenAutoFocus={onOpenAutoFocus}
       >
         {/* cmdk's Input/List/Group/Item all read from the Command root's context store — without
             it CommandInput crashes ("Cannot read properties of undefined (reading 'subscribe')").
             Upstream shadcn/ui wraps children here; this generated version didn't. */}
-        <Command>{children}</Command>
+        <Command shouldFilter={shouldFilter}>{children}</Command>
       </DialogContent>
     </Dialog>
   );

@@ -23,7 +23,7 @@ from apx.common.master import BankAccount, Vendor
 from apx.common.types import InvoiceId, Language, Money, Route, VendorId
 from apx.einvoice.interfaces import EInvoiceDocument, SchematronResult
 from apx.extract.interfaces import ExtractionResult
-from apx.policy.interfaces import RoutingDecision
+from apx.policy.interfaces import RoutedPayee, RoutingDecision, pin_payee, select_payee
 from apx.validate.interfaces import InvoiceValidator
 from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
 from apx.workflows.components import PintAeUblBuilder
@@ -98,6 +98,16 @@ class _Directory:
         return Vendor(id=VENDOR, name="Gulf Steel", trn=None, bank_accounts=(account,)), ()
 
 
+def _review_routing() -> RoutingDecision:
+    """REVIEW, with the payee the engine would pin for `_Directory`'s sole account (§7)."""
+    account = BankAccount(
+        iban=IBAN, verified=True, verified_by=None, verified_at=None, source="admin_callback"
+    )
+    vendor = Vendor(id=VENDOR, name="Gulf Steel", trn=None, bank_accounts=(account,))
+    payee = pin_payee(select_payee(vendor, invoice_iban=None))
+    return RoutingDecision(route=Route.REVIEW, reasons=(), payee=payee)
+
+
 @dataclass
 class _Rules:
     seen: list[bytes] = field(default_factory=list)
@@ -149,7 +159,7 @@ def _real(audit: _Audit, records: _Records, invoice_rules: _Rules, credit_rules:
             fraud_engine=unused,
             vendors=cast(Any, _Directory()),
             policy_engine=unused,
-            ubl_builder=PintAeUblBuilder(buyer_trade_license="TL-1"),
+            ubl_builder=PintAeUblBuilder(buyer_trn="100000000000103", buyer_trade_license="TL-1"),
             schematron=invoice_rules,
             credit_note_schematron=credit_rules,
             asp_client=unused,
@@ -163,10 +173,10 @@ def _real(audit: _Audit, records: _Records, invoice_rules: _Rules, credit_rules:
 
 def _activities(fake: _Fakes, real: Any) -> Sequence[Callable[..., object]]:
     @activity.defn(name="build_einvoice")
-    async def build_einvoice(invoice: Invoice) -> EInvoiceDocument:
+    async def build_einvoice(invoice: Invoice, pinned: RoutedPayee | None) -> EInvoiceDocument:
         fake.calls.append("build_einvoice")
         fake.einvoice_attempts += 1
-        return cast(EInvoiceDocument, await real.build_einvoice(invoice))
+        return cast(EInvoiceDocument, await real.build_einvoice(invoice, pinned))
 
     @activity.defn(name="apply_review")
     async def apply_review(invoice: Invoice, corrections: ReviewCorrections) -> Invoice:
@@ -214,7 +224,7 @@ async def _run(env: WorkflowEnvironment, fake: _Fakes, real: Any, decision: Revi
 async def test_disagreement_review_approve_with_corrections_builds_the_einvoice(
     temporal_env: WorkflowEnvironment,
 ) -> None:
-    fake = _Fakes(route_decision=RoutingDecision(route=Route.REVIEW, reasons=()))
+    fake = _Fakes(route_decision=_review_routing())
     audit, records, invoice_rules, credit_rules = _Audit(), _Records(), _Rules(), _Rules()
     real = _real(audit, records, invoice_rules, credit_rules)
 
@@ -235,7 +245,7 @@ async def test_disagreement_review_approve_with_corrections_builds_the_einvoice(
 async def test_approve_without_corrections_fails_once_non_retryably(
     temporal_env: WorkflowEnvironment,
 ) -> None:
-    fake = _Fakes(route_decision=RoutingDecision(route=Route.REVIEW, reasons=()))
+    fake = _Fakes(route_decision=_review_routing())
     real = _real(_Audit(), _Records(), _Rules(), _Rules())
 
     with pytest.raises(WorkflowFailureError):
@@ -246,6 +256,9 @@ async def test_approve_without_corrections_fails_once_non_retryably(
 
 
 # --- pure corrections helpers ---------------------------------------------------------------
+
+_EXTRACTED: dict[str, str | None] = {"supplier_trn": "100000000000003", "currency": None}
+"""The model-sourced values the workflow's invoice was built from (supplier TRN present)."""
 
 
 def test_corrections_from_fields_names_every_missing_value() -> None:
@@ -258,7 +271,8 @@ def test_corrections_from_fields_names_every_missing_value() -> None:
                 "line_items[1].vat_rate": None,
                 "line_items[2].vat_category": "bogus",
                 "line_items[2].vat_rate": "0",
-            }
+            },
+            extracted=_EXTRACTED,
         )
     message = str(err.value)
     for name in (
@@ -277,12 +291,62 @@ def test_corrections_from_fields_parses_a_complete_set() -> None:
             "currency": "aed",
             "line_items[1].vat_category": "AE",
             "line_items[1].vat_rate": "5%",
-        }
+        },
+        extracted=_EXTRACTED,
     )
     assert corrections.kind is InvoiceKind.INVOICE
     assert corrections.currency == "AED"
     assert corrections.lines == (
         LineCorrection(index=1, vat_category=VatCategory.REVERSE_CHARGE, vat_rate=Decimal("5")),
+    )
+
+
+_COMPLETE_FIELDS: dict[str, str | None] = {
+    "invoice_type_code": "380",
+    "currency": "AED",
+    "line_items[1].vat_category": "S",
+    "line_items[1].vat_rate": "5",
+}
+
+
+@pytest.mark.parametrize("currency", ["USD", "eur"])
+def test_corrections_from_fields_refuses_a_non_aed_currency(currency: str) -> None:
+    """The approval path (`ApiService._review_corrections`, before `record_approval`) refuses
+    a currency the PINT AE builder would refuse, instead of failing after the approval."""
+    with pytest.raises(MissingCorrectionsError, match=r"currency \(must be AED"):
+        corrections_from_fields({**_COMPLETE_FIELDS, "currency": currency}, extracted=_EXTRACTED)
+
+
+@pytest.mark.parametrize(
+    ("category", "rate"),
+    [("E", "5"), ("O", "0.01"), ("S", "0"), ("S", "10"), ("Z", "5"), ("AE", "10")],
+)
+def test_corrections_from_fields_refuses_a_rate_that_does_not_fit_the_category(
+    category: str, rate: str
+) -> None:
+    fields = {
+        **_COMPLETE_FIELDS,
+        "line_items[1].vat_category": category,
+        "line_items[1].vat_rate": rate,
+    }
+    with pytest.raises(MissingCorrectionsError, match=r"line_items\[1\]\.vat_rate \("):
+        corrections_from_fields(fields, extracted=_EXTRACTED)
+
+
+@pytest.mark.parametrize(
+    ("category", "rate"), [("S", "5"), ("Z", "0"), ("E", "0"), ("O", "0"), ("AE", "0"), ("AE", "5")]
+)
+def test_corrections_from_fields_accepts_every_fitting_category_rate(
+    category: str, rate: str
+) -> None:
+    fields = {
+        **_COMPLETE_FIELDS,
+        "line_items[1].vat_category": category,
+        "line_items[1].vat_rate": rate,
+    }
+    corrections = corrections_from_fields(fields, extracted=_EXTRACTED)
+    assert corrections.lines == (
+        LineCorrection(index=1, vat_category=VatCategory(category), vat_rate=Decimal(rate)),
     )
 
 
@@ -303,3 +367,20 @@ async def test_apply_review_refuses_a_still_unresolved_currency() -> None:
     bad = CORRECTIONS.model_copy(update={"currency": "XXX"})
     with pytest.raises(MissingCorrectionsError):
         await real.apply_review(invoice, bad)
+
+
+async def test_apply_review_refuses_a_category_rate_mismatch() -> None:
+    """An exempt line at 5% contradicts its category and the builder would refuse it, so the
+    approved review is stopped here, before the e-invoice build (VAT_CATEGORY_RATE_MISMATCH)."""
+    real = _real(_Audit(), _Records(), _Rules(), _Rules())
+    mismatch = LineCorrection(index=1, vat_category=VatCategory.EXEMPT, vat_rate=Decimal("5"))
+    bad = CORRECTIONS.model_copy(update={"lines": (mismatch,)})
+    with pytest.raises(MissingCorrectionsError, match="vat_category_rate_mismatch"):
+        await real.apply_review(_unresolved_invoice(), bad)
+
+
+async def test_apply_review_refuses_a_non_aed_currency() -> None:
+    real = _real(_Audit(), _Records(), _Rules(), _Rules())
+    bad = CORRECTIONS.model_copy(update={"currency": "USD"})
+    with pytest.raises(MissingCorrectionsError, match="currency_invalid"):
+        await real.apply_review(_unresolved_invoice(), bad)

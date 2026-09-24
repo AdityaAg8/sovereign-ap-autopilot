@@ -25,7 +25,7 @@ class TrainingError(ApxError):
 
 class GpuBusyError(TrainingError):
     """The GPU has memory in use, a visible compute process or a held `gpu.lock`. Run
-    `make gpu-free` and retry; a stale lock is reported, never taken over."""
+    `make gpu-free` and retry. A provably stale lock is reclaimed instead (see `gpu.py`)."""
 
 
 class VramBudgetError(TrainingError):

@@ -9,10 +9,19 @@ from decimal import Decimal
 from hypothesis import given
 from hypothesis import strategies as st
 
+from apx.common.errors import PayeeRefusal
 from apx.common.types import Route
 from apx.policy.engine import DefaultPolicyEngine
-from apx.policy.interfaces import PolicyThresholds, RoutingInput
+from apx.policy.interfaces import (
+    PayeeMatch,
+    PolicyReason,
+    PolicyRule,
+    PolicyThresholds,
+    RoutingDecision,
+    RoutingInput,
+)
 from tests.unit._policy_factories import (
+    make_bank_account,
     make_bank_change,
     make_fraud_report,
     make_invoice,
@@ -185,3 +194,84 @@ def test_a_different_currency_routes_to_review_even_under_the_limit() -> None:
         _clean_input(thresholds, total="10", currency="USD")
     )
     assert decision.route == Route.REVIEW
+
+
+# --- ADR-0014: P1 routing on the payee selection ---------------------------------------------
+
+_A = "AE070331234567890000001"
+_B = "AE070331234567890000002"
+
+
+def _with_invoice_iban(inp: RoutingInput, iban: str | None) -> RoutingInput:
+    return inp.model_copy(update={"invoice": inp.invoice.model_copy(update={"iban": iban})})
+
+
+def _p1_reasons(inp: RoutingInput) -> tuple[RoutingDecision, list[PolicyReason]]:
+    decision = DefaultPolicyEngine(_thresholds()).route(inp)
+    return decision, [r for r in decision.reasons if r.rule is PolicyRule.P1_VERIFIED_IBAN]
+
+
+def test_two_verified_accounts_with_a_match_route_review() -> None:
+    vendor = make_vendor(accounts=(make_bank_account(iban=_A), make_bank_account(iban=_B)))
+    inp = _with_invoice_iban(_clean_input(_thresholds(), vendor=vendor), _B)
+    decision, p1 = _p1_reasons(inp)
+    assert decision.route == Route.REVIEW
+    assert len(p1) == 1
+    assert p1[0].route == Route.REVIEW
+    assert p1[0].payee_match is PayeeMatch.MATCHED
+    assert p1[0].payee_refusal is None
+
+
+def test_a_sole_verified_account_with_a_mismatching_invoice_iban_routes_review() -> None:
+    """The classic BEC signal (A08): "pay a different account" must never go AUTO."""
+    vendor = make_vendor(accounts=(make_bank_account(iban=_A),))
+    inp = _with_invoice_iban(_clean_input(_thresholds(), vendor=vendor), _B)
+    decision, p1 = _p1_reasons(inp)
+    assert decision.route == Route.REVIEW
+    assert [r.payee_match for r in p1] == [PayeeMatch.SOLE_MISMATCH]
+
+
+def test_a_sole_verified_account_with_no_invoice_iban_adds_no_p1_reason() -> None:
+    vendor = make_vendor(accounts=(make_bank_account(iban=_A),))
+    for iban in (None, "  "):
+        decision, p1 = _p1_reasons(
+            _with_invoice_iban(_clean_input(_thresholds(), vendor=vendor), iban)
+        )
+        assert p1 == []
+        assert decision.route == Route.AUTO
+
+
+def test_a_sole_verified_account_matched_by_the_invoice_routes_auto() -> None:
+    vendor = make_vendor(accounts=(make_bank_account(iban=_A),))
+    inp = _with_invoice_iban(
+        _clean_input(_thresholds(), vendor=vendor), "ae07 0331 2345 6789 0000 001"
+    )
+    decision, p1 = _p1_reasons(inp)
+    assert p1 == []
+    assert decision.route == Route.AUTO
+
+
+def test_a_payee_refusal_routes_review_with_the_typed_reason() -> None:
+    two = make_vendor(accounts=(make_bank_account(iban=_A), make_bank_account(iban=_B)))
+    cases = [
+        (_clean_input(_thresholds(), no_vendor=True), PayeeRefusal.UNKNOWN_VENDOR),
+        (
+            _clean_input(_thresholds(), vendor=make_vendor(accounts=())),
+            PayeeRefusal.NO_VERIFIED_ACCOUNT,
+        ),
+        (_clean_input(_thresholds(), vendor=two), PayeeRefusal.INVOICE_IBAN_MISSING),
+        (
+            _with_invoice_iban(_clean_input(_thresholds(), vendor=two), "AE07-0331"),
+            PayeeRefusal.INVOICE_IBAN_MALFORMED,
+        ),
+        (
+            _with_invoice_iban(_clean_input(_thresholds(), vendor=two), "AE460090000000123456789"),
+            PayeeRefusal.NO_MATCH,
+        ),
+    ]
+    for inp, refusal in cases:
+        decision, p1 = _p1_reasons(inp)
+        assert decision.route == Route.REVIEW
+        assert [r.payee_refusal for r in p1] == [refusal]
+        assert p1[0].payee_match is None
+        assert refusal.value in p1[0].message

@@ -5,15 +5,24 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { LazyAssistantPanel } from "@/components/assistant/lazy-assistant-panel";
 import { AssistantProvider } from "@/components/assistant/assistant-context";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { ShortcutsHelpOverlay } from "@/components/shell/shortcuts-help-overlay";
-import { useAuth } from "@/lib/auth/auth-context";
+import { getApiClient, warmApiClient } from "@/lib/api/client";
+import { provideApiClient, useAuth } from "@/lib/auth/auth-context";
 import { ShortcutsProvider } from "@/lib/shortcuts/registry";
 import { PageHeaderProvider, usePageHeader } from "@/lib/shell/page-header-context";
+
+// Every signed-in screen needs the API client straight after hydration (session restore, then the
+// page's first load). Hand it to the auth provider and start the adapter's chunk while the rest of
+// the route's JS is still arriving, instead of fetching both serially once hydration finishes.
+if (typeof window !== "undefined") {
+  provideApiClient(getApiClient());
+  warmApiClient();
+}
 
 function Shell({ children }: { children: ReactNode }) {
   const { title, actions } = usePageHeader();
@@ -26,7 +35,7 @@ function Shell({ children }: { children: ReactNode }) {
       </div>
       <CommandPalette />
       <ShortcutsHelpOverlay />
-      <AssistantPanel />
+      <LazyAssistantPanel />
     </div>
   );
 }

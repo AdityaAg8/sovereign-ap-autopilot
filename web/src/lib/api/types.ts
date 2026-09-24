@@ -57,6 +57,11 @@ export interface Flag {
 
 export interface InvoiceSummary {
   id: string;
+  /** UI extension: the supplier's own invoice number (the extracted `invoice_number` field), the
+   * number an AP clerk actually searches by. apx.api.interfaces.InvoiceSummary does not carry it
+   * yet, so the http adapter reports null rather than a guess; the inbox then shows the internal
+   * `id`, visibly marked as such (inbox-table.tsx's `InvoiceRef`). */
+  invoiceNumber: string | null;
   status: InvoiceStatus;
   route: RouteDecision | null;
   /** Null when the backend hasn't resolved a vendor for this invoice.

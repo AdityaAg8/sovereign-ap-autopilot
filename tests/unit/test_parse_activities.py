@@ -14,13 +14,14 @@ import pytest
 from apx.audit.interfaces import AuditEntry, AuditEvent
 from apx.common.errors import ParsedArtifactIntegrityError
 from apx.common.invoice import Invoice
-from apx.common.types import InvoiceId, Route
+from apx.common.types import InvoiceId
 from apx.db.enums import DbInvoiceStatus
 from apx.extract.interfaces import ExtractionResult, FieldName
 from apx.fraud.interfaces import FraudFlag, FraudReport
 from apx.ingest.interfaces import IngestedDocument
 from apx.parse.interfaces import ParsedDocument, ParsedDocumentRef
 from apx.parse.store import FileParsedDocumentStore
+from apx.policy.interfaces import RoutingDecision
 from apx.trust.interfaces import FieldFeatures, TrustDecision
 from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
 from tests.unit import _payload_fixtures as fx
@@ -99,7 +100,7 @@ class _Records:
         raise NotImplementedError
 
     async def routed(  # pragma: no cover
-        self, invoice_id: InvoiceId, route: Route, trust: TrustDecision
+        self, invoice_id: InvoiceId, routing: RoutingDecision, trust: TrustDecision
     ) -> None:
         raise NotImplementedError
 

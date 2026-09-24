@@ -60,8 +60,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           enableSystem
           disableTransitionOnChange
         >
-          {/* Tooltip and toast providers live in (app)/layout.tsx: only the signed-in screens use
-              them, so /login does not ship Radix Popper or sonner on its critical path. */}
+          {/* The toast viewport lives in (app)/layout.tsx and the tooltip provider beside its only
+              tooltip: only signed-in screens use them, so /login does not ship Radix Popper or
+              sonner on its critical path. */}
           <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>
       </body>

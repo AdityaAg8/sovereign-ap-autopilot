@@ -169,4 +169,48 @@ attacks).
 **Open question for the owner:** should M5.6's e2e population exclude invoices from vendors that
 P1 cannot pay (two verified accounts), or should P1 pick the verified account that matches the
 invoice's printed IBAN? The second is a change to the payment guard (`select_payee` "never reads
-`Invoice.iban`"), so it needs its own ADR.
+`Invoice.iban`"), so it needs its own ADR. *Resolved by ADR-0014 (the second option).*
+
+## Addendum (M5.6a): preflight headroom
+
+Every GPU stage switch, and the Extractor B trainer, now checks for free memory before it loads a
+model (`apx.llm.preflight`, wired in `apx.workflows.gpu_stage` and `ml.extractor_b.gpu_job`).
+This makes a card or host that is already short fail typed, instead of an out-of-memory crash
+partway through a load.
+
+**Needs table** (`MEMORY_NEEDS`, GiB: `nvidia-smi` MiB / 1024, `MemAvailable` kB / 1024²).
+
+| Workload | VRAM | RAM | Source |
+|---|---|---|---|
+| extractor-a | 7.2 | 0 | Measurements above, A alone |
+| extractor-b | 4.4 | 0 | Measurements above, B alone |
+| parse | 4.3 | 0 | 0.35 × 12 GB fraction cap |
+| arbiter | 8.0 | 0 | **unmeasured** estimate |
+| page-similarity | 4.5 | 0 | estimate |
+| guard | 1.0 | 0 | estimate |
+| trainer | 6.0 | 12.0 | trainer budget |
+
+- **Rule:** a workload passes when free VRAM ≥ need + **0.3 GB margin**. When its RAM need is
+  above 0, available RAM must also be ≥ need + 0.3 GB. The margin boundary is inclusive.
+- **RAM:** this ADR budgets VRAM only, so RAM is probed only for the trainer (a 0 need means RAM
+  is not read). Available RAM is `MemAvailable`, capped by the container's cgroup v2 headroom
+  (`memory.max` − `memory.current`) when that limit is set.
+- **Wait:** a stage switch runs the check after the release hooks and re-probes every 1 s for up
+  to **30 s** (`STAGE_PREFLIGHT_WAIT_S`), because VRAM freed by `/unload` can take a moment to
+  come back. The trainer does not wait. The wait stays under the scheduler's lock, since
+  switches must serialize.
+- **Failure modes:**
+  - `InsufficientGpuMemoryError` and `InsufficientHostMemoryError` report the need, the margin
+    and the free amount. They are transient and keep Temporal's default retries.
+  - `GpuProbeError`: `nvidia-smi` is missing or prints something unparsable, or
+    `/proc/meminfo` or the cgroup files are unreadable. It is non-retryable for `parse` and
+    `extract`: the check never passes when it cannot measure, and there is no env switch.
+  - `GpuProbeTransientError` (a `GpuProbeError` subclass): `nvidia-smi` was found but hit its
+    30 s timeout or exited non-zero (NVML busy, a GPU reset in progress). It is not listed as
+    non-retryable (Temporal matches exact class names), so it keeps the default retries; after
+    the last attempt the activity fails with it. (Amended after the PR #48 review.)
+  - All of them are `ModelServingError`s. A refused switch leaves no stage active, so the next
+    caller retries it.
+- **Worker reservation:** the `worker` Compose service reserves the NVIDIA devices with
+  `capabilities: [utility]`, which gives it `nvidia-smi` and NVML but no compute. The runtime
+  mounts `nvidia-smi` at `/usr/bin`, which stays on the apx image's `PATH`.

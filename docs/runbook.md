@@ -42,6 +42,17 @@ llama-swap loads one group at a time: `extract` (Extractor A and B together) or 
 out-of-memory error, something else holds the card: `make gpu-free`, then retry. Training and
 offline evals always start from `make gpu-free`.
 
+Every stage switch and the trainer first check free VRAM (and, for the trainer, RAM) against the
+ADR-0013 needs table plus a 0.3 GB margin. A short card fails typed
+(`InsufficientGpuMemoryError`, retried by Temporal) instead of crashing mid-load. The worker
+reserves the GPU with `capabilities: [utility]` only, for `nvidia-smi`.
+
+**Training lock.** `data/ml/gpu.lock` is held by a kernel `flock` for the whole training job, so a
+lock left by a dead trainer is reclaimed automatically. `make gpu-free` stops services and does
+not clear the lock. A legacy (pid-only) lock, or any lock on a host without flock (Windows), is
+never reclaimed. First confirm no trainer runs (`docker ps --filter name=extractor-b-trainer` is
+empty and no train job runs on the host), then `rm data/ml/gpu.lock` (ADR-0011 amendment 4).
+
 ## Common failures
 
 | Symptom | Cause | Fix |
@@ -52,6 +63,10 @@ offline evals always start from `make gpu-free`.
 | Dropped files are never picked up | Worker not running, or file not a PDF/PNG/JPEG | `docker compose logs worker`; check the ingest error in the log |
 | Invoice stuck at a stage | An activity is retrying (model outage, parse error) | Temporal UI shows the failing activity and its error; the workflow resumes when the dependency is back |
 | Model calls time out | GPU contention or a cold load | `nvidia-smi`; wait for the load or `make gpu-free` and retry |
+| `worker` exits with `ConfigError` on `buyer_trn` | `WORKER_BUYER_TRN` unset or not a valid 15-digit TRN outside Compose | Set it in `.env` (Compose defaults it to the demo company), then restart the worker |
+| Activity fails with `GpuProbeError` | `nvidia-smi` missing in the worker or its output unreadable | Check the worker's GPU `utility` reservation (`infra/compose.yaml`); a timeout or non-zero exit (`GpuProbeTransientError`) is retried |
+| `build_einvoice` fails with `PayeeChangedError` | The vendor's verified accounts or the invoice IBAN changed after routing, or the workflow was routed before the payee pin shipped | Nothing was paid. Re-ingest the invoice so it is re-routed and pinned (ADR-0014 §7) |
+| `make retrain` exits 2 with `RetrainPrerequisiteError` | The production adapters (exporter, trainer, shadow evaluator, MLflow registry, models.lock writer, calibrator invalidator) are not built yet | Expected until they land (ADR-0015 §5) |
 
 ## Audit chain
 

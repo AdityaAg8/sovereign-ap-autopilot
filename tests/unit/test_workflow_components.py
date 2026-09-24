@@ -235,15 +235,21 @@ async def test_fraud_engine_runs_rules_over_the_snapshot_excluding_the_subject()
     assert clean.flags == () and clean.max_score == 0.0
 
 
+OUR_TRN = "100000000000011"
+"""The configured buyer TRN (`WORKER_BUYER_TRN`); equal to `_invoice()`'s buyer TRN."""
+
+
 def test_ubl_pays_the_verified_iban_never_the_claimed_one() -> None:
-    document = PintAeUblBuilder(buyer_trade_license="TL-1").build(
+    document = PintAeUblBuilder(buyer_trn=OUR_TRN, buyer_trade_license="TL-1").build(
         _invoice(), DocumentTypeCode.INVOICE, verified_payment_iban=VERIFIED_IBAN
     )
     assert VERIFIED_IBAN.encode() in document.xml
     assert CLAIMED_IBAN.encode() not in document.xml
     assert document.invoice_id == SHA
     with pytest.raises(EInvoiceError):
-        PintAeUblBuilder().build(_invoice(), DocumentTypeCode.INVOICE, verified_payment_iban=None)
+        PintAeUblBuilder(buyer_trn=OUR_TRN).build(
+            _invoice(), DocumentTypeCode.INVOICE, verified_payment_iban=None
+        )
 
 
 def _vendor(*accounts: tuple[str, bool]) -> Vendor:
@@ -272,6 +278,30 @@ def test_verified_payment_iban_choice() -> None:
     assert verified_payment_iban(two, CLAIMED_IBAN) == CLAIMED_IBAN
     assert verified_payment_iban(two, None) is None
     assert verified_payment_iban(_vendor((CLAIMED_IBAN, False)), CLAIMED_IBAN) is None
+
+
+def test_verified_payment_iban_is_the_policy_payee_selection() -> None:
+    """ADR-0014: the UBL payee is `select_payee(...).iban`, the same decision the policy grant
+    binds, so a normalized claim selects, an unknown claim refuses and a forged
+    `verified=True, source="unverified"` account is never paid."""
+    two = _vendor((VERIFIED_IBAN, True), (CLAIMED_IBAN, True))
+    assert verified_payment_iban(two, "ae46 0090 0000 0012 3456 789") == CLAIMED_IBAN
+    assert verified_payment_iban(two, "AE070331234567890000009") is None
+    forged = Vendor(
+        id=VENDOR,
+        name="Gulf Steel",
+        trn=SUPPLIER_TRN,
+        bank_accounts=(
+            BankAccount(
+                iban=VERIFIED_IBAN,
+                verified=True,
+                verified_by=None,
+                verified_at=None,
+                source="unverified",
+            ),
+        ),
+    )
+    assert verified_payment_iban(forged, VERIFIED_IBAN) is None
 
 
 def test_agreement_score_is_an_unfitted_interim_score() -> None:

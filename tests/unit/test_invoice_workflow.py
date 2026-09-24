@@ -27,7 +27,7 @@ from apx.einvoice.interfaces import DocumentTypeCode, EInvoiceDocument
 from apx.extract.interfaces import ExtractionResult, ExtractorId, ExtractorOutput
 from apx.fraud.interfaces import FraudReport
 from apx.parse.interfaces import ParsedDocumentRef
-from apx.policy.interfaces import PolicyReason, PolicyRule, RoutingDecision
+from apx.policy.interfaces import PolicyReason, PolicyRule, RoutedPayee, RoutingDecision
 from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import TrustDecision
 from apx.validate.interfaces import ValidationReport
@@ -215,7 +215,9 @@ class FakeInvoiceActivities:
         return True
 
     @activity.defn(name="build_einvoice")
-    async def build_einvoice(self, invoice: Invoice) -> EInvoiceDocument:
+    async def build_einvoice(
+        self, invoice: Invoice, pinned_payee: RoutedPayee | None
+    ) -> EInvoiceDocument:
         self.calls.append("build_einvoice")
         return _einvoice_document()
 

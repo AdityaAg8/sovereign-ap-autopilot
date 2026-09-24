@@ -4,30 +4,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { LogOut, MessageSquareText, SearchIcon } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { MessageSquareText, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { AccountMenu } from "@/components/shell/account-menu";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { useAssistant } from "@/components/assistant/assistant-context";
 import { useAuth } from "@/lib/auth/auth-context";
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
 
 function AskButton() {
   const { setOpen } = useAssistant();
@@ -54,8 +36,7 @@ function AskButton() {
 }
 
 export function Topbar({ title, actions }: { title: string; actions?: ReactNode }) {
-  const { user, logout } = useAuth();
-  const router = useRouter();
+  const { user } = useAuth();
 
   return (
     <header className="border-border bg-background/95 sticky top-0 z-20 flex h-14 items-center justify-between gap-4 border-b px-4 backdrop-blur-sm sm:px-6">
@@ -84,32 +65,7 @@ export function Topbar({ title, actions }: { title: string; actions?: ReactNode 
         </Button>
         <AskButton />
         <ThemeToggle />
-        {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm">
-                <Avatar className="size-7">
-                  <AvatarFallback className="text-xs">{initials(user.name)}</AvatarFallback>
-                </Avatar>
-                <span className="sr-only">Signed in as {user.name}, account menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <div className="flex flex-col">
-                  <span className="font-medium">{user.name}</span>
-                  <span className="text-muted-foreground text-xs font-normal capitalize">
-                    {user.roles.join(", ")}
-                  </span>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => void logout().then(() => router.push("/login"))}>
-                <LogOut /> Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {user && <AccountMenu user={user} />}
       </div>
     </header>
   );

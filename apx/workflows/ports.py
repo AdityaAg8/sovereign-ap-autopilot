@@ -11,11 +11,12 @@ from typing import Protocol
 
 from apx.common.invoice import Invoice, InvoiceKind
 from apx.common.master import BankDetailChange, Vendor
-from apx.common.types import InvoiceId, Route, VendorId
+from apx.common.types import InvoiceId, VendorId
 from apx.db.enums import DbInvoiceStatus
 from apx.extract.interfaces import ExtractionResult
 from apx.fraud.interfaces import FraudFlag
 from apx.parse.interfaces import ParsedDocument
+from apx.policy.interfaces import RoutingDecision
 from apx.trust.interfaces import TrustDecision
 from apx.workflows.interfaces import InvoiceWorkflowInput
 
@@ -52,5 +53,11 @@ class InvoiceRecords(Protocol):
     async def save(self, invoice: Invoice, result: ExtractionResult) -> None: ...
     async def set_status(self, invoice_id: InvoiceId, status: DbInvoiceStatus) -> None: ...
     async def set_kind(self, invoice_id: InvoiceId, kind: InvoiceKind) -> None: ...
-    async def routed(self, invoice_id: InvoiceId, route: Route, trust: TrustDecision) -> None: ...
+    async def routed(
+        self, invoice_id: InvoiceId, routing: RoutingDecision, trust: TrustDecision
+    ) -> None:
+        """Store the route, its status, the fields' P(correct) and a `policy_route` decision
+        carrying the reasons and the pinned payee (`apx.policy.interfaces.routing_record`)."""
+        ...
+
     async def flags(self, invoice_id: InvoiceId, flags: Sequence[FraudFlag]) -> None: ...

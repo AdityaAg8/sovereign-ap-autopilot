@@ -75,12 +75,19 @@ _SEARCH_SORT_SQL: Final[dict[str, SqlStatement]] = {
 }
 
 _TOPIC_ACTION_PREFIXES: Final[dict[str, tuple[str, ...]]] = {
-    "route": ("policy.",),
-    "trust": ("trust.",),
-    "validation": ("validation.",),
-    "fraud": ("fraud.",),
-    "scan": ("scan.",),
-    "approval": ("proposal.", "decision.", "approval."),
+    "route": ("activity:route",),
+    "trust": ("activity:trust_gate",),
+    "validation": ("activity:validate",),
+    "fraud": ("activity:fraud",),
+    "scan": ("activity:scan",),
+    "approval": (
+        "proposal.",
+        "decision.",
+        "approval.",
+        "authorize:",
+        "payment_state:",
+        "activity:apply_review",
+    ),
     "all": (),
 }
 
@@ -306,7 +313,8 @@ class PgAgentToolbox:
                 untrusted.append(block)
 
         reasons = tuple(
-            ReasonView(rule=r["rule"], route=r["route"], message=r["message"])
+            # `PolicyRule` values such as "P1" are lower-cased into the `Code` shape.
+            ReasonView(rule=str(r["rule"]).lower(), route=r["route"], message=r["message"])
             for r in (row.get("reasons_json") or [])
         )
         proposals = tuple(
@@ -335,6 +343,8 @@ class PgAgentToolbox:
             vat_total=_money(row.get("vat_total"), str(row.get("currency") or "AED")),
             payee=row.get("payee_masked"),
             document_iban_matches_payee=row.get("document_iban_matches_payee"),
+            payee_match=row.get("payee_match"),
+            payee_refusal=row.get("payee_refusal"),
             # Always 0: there is no invoice line-item table yet, so there is nothing to count
             # (extraction stores only invoice-level `fields`, never per-line rows). Tracked as an
             # M9.3 follow-up in ADR-0010: needs a line-items table plus a `v_agent_invoices`
@@ -401,7 +411,7 @@ class PgAgentToolbox:
             if ids:
                 cited.append(
                     CitedReason(
-                        rule=reason["rule"],
+                        rule=str(reason["rule"]).lower(),
                         route=reason["route"],
                         message=reason["message"],
                         audit_ids=ids,

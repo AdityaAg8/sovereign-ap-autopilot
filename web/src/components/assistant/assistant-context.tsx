@@ -4,8 +4,9 @@
 
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useHotkeys } from "@/hooks/use-hotkeys";
+import { beginOverlayOpen, OVERLAY } from "@/lib/overlay-guard";
 import type { ChatReply, ChatTurn } from "@/lib/api/types";
 
 export interface AssistantMessage extends ChatTurn {
@@ -24,10 +25,23 @@ interface AssistantValue {
 const AssistantContext = createContext<AssistantValue | null>(null);
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
   const [messages, setMessages] = useState<readonly AssistantMessage[]>([]);
+  // Opening holds the keyboard until the panel's question box has focus (lib/overlay-guard.ts):
+  // on a first open its chunk is still loading, and keys typed meanwhile must not reach page
+  // hotkeys such as Approve. The panel claims them back when it takes focus.
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (next && !open) beginOverlayOpen(OVERLAY.assistant);
+      setOpenState(next);
+    },
+    [open],
+  );
   useHotkeys([{ combo: "c", description: "Ask the assistant", handler: () => setOpen(true) }]);
-  const value = useMemo(() => ({ open, setOpen, messages, setMessages }), [open, messages]);
+  const value = useMemo(
+    () => ({ open, setOpen, messages, setMessages }),
+    [open, setOpen, messages],
+  );
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
 }
 

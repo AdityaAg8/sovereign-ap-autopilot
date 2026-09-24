@@ -25,6 +25,10 @@ from apx.workflows.gpu_stage import (
 )
 
 
+def _fits(stage: GpuStage) -> None:
+    """Passing preflight: these tests exercise scheduling on a machine without a GPU."""
+
+
 class _Card:
     """Fake GPU: tracks which stages run and whether two different ones ever ran at once."""
 
@@ -58,6 +62,7 @@ def _scheduler(card: _Card, max_hold_s: float = 60.0) -> GpuStageScheduler:
         max_hold_s=max_hold_s,
         idle_grace_s=0.0,
         poll_s=0.01,
+        preflight=_fits,
     )
 
 
@@ -82,6 +87,7 @@ async def test_active_stage_yields_after_its_hold_expires() -> None:
         idle_grace_s=0.0,
         poll_s=0.01,
         clock=lambda: now[0],
+        preflight=_fits,
     )
     order: list[str] = []
 
@@ -155,6 +161,7 @@ async def test_a_stage_keeps_the_card_across_a_short_gap_between_its_calls() -> 
         idle_grace_s=3.0,
         poll_s=0.005,
         clock=lambda: now[0],
+        preflight=_fits,
     )
     order: list[str] = []
 
@@ -193,7 +200,7 @@ async def test_failed_release_propagates_and_the_next_caller_retries_it() -> Non
 
 
 async def test_staged_llm_client_holds_each_models_own_stage() -> None:
-    scheduler = GpuStageScheduler({}, idle_grace_s=0.0, poll_s=0.01)
+    scheduler = GpuStageScheduler({}, idle_grace_s=0.0, poll_s=0.01, preflight=_fits)
     seen: list[GpuStage | None] = []
 
     class Inner:
@@ -225,7 +232,7 @@ async def test_staged_llm_client_holds_each_models_own_stage() -> None:
 
 
 async def test_parse_page_calls_run_inside_the_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    scheduler = GpuStageScheduler({}, poll_s=0.01)
+    scheduler = GpuStageScheduler({}, poll_s=0.01, preflight=_fits)
     seen: list[GpuStage | None] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -281,7 +288,7 @@ async def test_parse_unload_outcomes(
 
 
 async def test_serial_gate_runs_one_page_at_a_time_inside_the_parse_stage() -> None:
-    scheduler = GpuStageScheduler({}, idle_grace_s=0.0, poll_s=0.01)
+    scheduler = GpuStageScheduler({}, idle_grace_s=0.0, poll_s=0.01, preflight=_fits)
     gate = SerialStageGate(scheduler, GpuStage.PARSE)
     running = 0
     peak = 0

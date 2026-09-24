@@ -15,6 +15,7 @@ import { getApiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/contract";
 import type { ChatReply, ChatStep } from "@/lib/api/types";
 import { invoiceNumberOf } from "@/lib/assistant/suggestions";
+import { claimOverlay, OVERLAY } from "@/lib/overlay-guard";
 import { cn } from "@/lib/utils";
 
 const MAX_CHARS = 2000;
@@ -167,6 +168,10 @@ export function AssistantPanel() {
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           inputRef.current?.focus();
+          // Keys typed while this chunk loaded were held for the question box (overlay-guard).
+          const { text, cancelled } = claimOverlay(OVERLAY.assistant);
+          if (cancelled) setOpen(false);
+          else if (text) setDraft((prev) => (prev + text).slice(0, MAX_CHARS));
         }}
       >
         <header className="border-b px-5 py-4 pe-12">

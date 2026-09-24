@@ -57,8 +57,8 @@ def _recency_score(days_since: int, window_days: int) -> Score:
 class DuplicateInvoiceRule:
     """Exact-key duplicate detection, plus perceptual-hash and (optional) learned-embedding
     near-duplicate detection over page images (PRD §3: "duplicates ... perceptual hash ...
-    Qwen3-VL-Embedding-2B page similarity"). The embedding model is wired in later (M8.2+); this
-    rule only depends on the `PageSimilarityIndex` Protocol so that integration is additive.
+    Qwen3-VL-Embedding-2B page similarity"). The embedding-backed index lives in
+    `apx/fraud/page_similarity.py`; this rule only depends on the `PageSimilarityIndex` Protocol.
     """
 
     window_days: int = 14

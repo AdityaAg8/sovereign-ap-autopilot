@@ -1,9 +1,10 @@
 """Tests for the Extractor B GPU preflight and `gpu.lock` (ADR-0011 §6) with a fake nvidia-smi:
-busy memory or a compute process refuse, a held lock refuses, a stale lock is reported and never
-taken over, and the lock is released after the block."""
+busy memory or a compute process refuse, a legacy pid-only lock is reported with the manual step
+and never taken over, and the lock is released after the block."""
 
 from __future__ import annotations
 
+import fcntl
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -52,30 +53,36 @@ def test_compute_process_is_busy(tmp_path: Path) -> None:
         )
 
 
-def test_held_lock_is_busy(tmp_path: Path) -> None:
+def test_legacy_lock_with_live_pid_is_busy(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     lock.write_text(
         GpuLockInfo(pid=1234, job="eval", started_at=datetime.now(UTC)).model_dump_json(),
         encoding="utf-8",
     )
-    with pytest.raises(GpuBusyError, match="held by job 'eval'"):
+    with pytest.raises(GpuBusyError, match=r"legacy lock .*job 'eval' pid 1234.*looks alive"):
         preflight_gpu(CFG, lock_path=lock, job="t", smi=fake_smi(), alive=lambda pid: True)
 
 
-def test_stale_lock_is_reported_not_taken(tmp_path: Path) -> None:
+def test_legacy_lock_with_dead_pid_is_reported_not_taken(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     original = GpuLockInfo(pid=999_999, job="eval", started_at=datetime.now(UTC)).model_dump_json()
     lock.write_text(original, encoding="utf-8")
-    with pytest.raises(GpuBusyError, match="stale"):
+    with pytest.raises(GpuBusyError, match=r"not running.*never taken over"):
         preflight_gpu(CFG, lock_path=lock, job="t", smi=fake_smi(), alive=lambda pid: False)
     assert lock.read_text(encoding="utf-8") == original
 
 
-def test_unreadable_lock_is_busy(tmp_path: Path) -> None:
+def test_unreadable_lock_with_a_held_flock_is_busy(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     lock.write_text("garbage", encoding="utf-8")
-    with pytest.raises(GpuBusyError, match="unreadable"):
-        preflight_gpu(CFG, lock_path=lock, job="t", smi=fake_smi())
+    fd = os.open(lock, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # a live holder still writing metadata
+        with pytest.raises(GpuBusyError, match="unreadable"):
+            preflight_gpu(CFG, lock_path=lock, job="t", smi=fake_smi())
+    finally:
+        os.close(fd)
+    assert lock.read_text(encoding="utf-8") == "garbage"
 
 
 def test_bad_or_empty_smi_output_is_a_typed_error(tmp_path: Path) -> None:

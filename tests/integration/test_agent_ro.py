@@ -142,7 +142,8 @@ async def _seed(dsn: str) -> None:
             "INSERT INTO decisions (invoice_id, action, route, reasons) "
             "VALUES ($1, 'policy_route', 'review', $2::jsonb)",
             INV1_ID,
-            '[{"rule": "fraud_score", "route": "review", "message": "Fraud score exceeded."}]',
+            '[{"rule": "fraud_score", "route": "review", "message": "Fraud score exceeded."}, '
+            '{"payee": {"masked_iban": "****3456", "match": "matched", "verified_count": 1}}]',
         )
         await conn.execute(
             "INSERT INTO audit_log (actor, action, entity, payload_json, prev_hash, hash) "
@@ -368,6 +369,66 @@ def test_get_invoice_masks_the_payee_and_matches_the_document_iban(agent_engine:
         assert _IBAN not in str(content)
 
     asyncio.run(_run())
+
+
+def test_get_invoice_payee_is_the_routed_selection_not_the_newest_account(
+    agent_engine: Any,
+) -> None:
+    """ADR-0014 §7 (migration 0008): the view's payee is the one `select_payee` pinned in the
+    `policy_route` decision, even when it differs from the vendor's newest verified account
+    (****3456 here); the payee element never leaks into `reasons`, and an unrouted invoice has
+    no payee at all."""
+    inv3 = "3" * 64
+
+    async def _seed_inv3() -> None:
+        conn = await asyncpg.connect(APP_DSN)
+        try:
+            await conn.execute(
+                "INSERT INTO invoices "
+                "(id, document_sha256, vendor_id, language, number, issue_date, currency, "
+                " subtotal, vat_total, total, iban, status, route) "
+                "VALUES ($1, $1, 'v1', 'en', 'INV-3', '2026-01-05', 'AED', 100.00, 5.00, "
+                "105.00, $2, 'awaiting_review', 'review')",
+                inv3,
+                _IBAN,
+            )
+            await conn.execute(
+                "INSERT INTO decisions (invoice_id, action, route, reasons) "
+                "VALUES ($1, 'policy_route', 'review', $2::jsonb)",
+                inv3,
+                '[{"rule": "P1", "route": "review", "message": "payee selected"}, '
+                '{"payee": {"masked_iban": "****4321", "match": "sole_mismatch", '
+                '"verified_count": 1}}]',
+            )
+        finally:
+            await conn.close()
+
+    async def _drop_inv3() -> None:
+        conn = await asyncpg.connect(APP_DSN)
+        try:
+            await conn.execute("DELETE FROM invoices WHERE id = $1", inv3)
+        finally:
+            await conn.close()
+
+    async def _run() -> None:
+        toolbox = PgAgentToolbox(reader=PgSqlReader(agent_engine), sink=_DirectSink(APP_DSN))
+        routed = await toolbox.get_invoice(
+            GetInvoiceParams(invoice_id=InvoiceId(inv3)), _chat_caller()
+        )
+        assert routed.payee == "****4321"
+        assert routed.payee_match == "sole_mismatch"
+        assert routed.document_iban_matches_payee is False
+        assert [r.rule for r in routed.reasons] == ["p1"]
+        unrouted = await toolbox.get_invoice(
+            GetInvoiceParams(invoice_id=InvoiceId(INV2_ID)), _chat_caller()
+        )
+        assert unrouted.payee is None and unrouted.document_iban_matches_payee is None
+
+    asyncio.run(_seed_inv3())
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_drop_inv3())
 
 
 def test_get_invoice_puts_the_script_tag_only_in_untrusted(agent_engine: Any) -> None:

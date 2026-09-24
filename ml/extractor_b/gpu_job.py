@@ -1,5 +1,6 @@
-"""GPU half of the Extractor B run flow (design §4 steps 4-8 and the probe): resolve the run,
-cap VRAM, load the base with LoRA via Unsloth, train with `GuardedSFTTrainer` and log to MLflow.
+"""GPU half of the Extractor B run flow (design §4 steps 4-8 and the probe): check VRAM/RAM
+headroom (ADR-0013), resolve the run, cap VRAM, load the base with LoRA via Unsloth, train with
+`GuardedSFTTrainer` and log to MLflow.
 Runs only inside the trainer image; imported lazily by `train.py` so CI never needs torch."""
 
 from __future__ import annotations
@@ -12,6 +13,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from apx.llm.preflight import (
+    GpuWorkload,
+    HeadroomCheck,
+    check_gpu_headroom,
+    check_workload_headroom,
+)
 from ml.extractor_b.checkpoints import atomic_write_bytes
 from ml.extractor_b.config import effective_lora_r, rung_spec
 from ml.extractor_b.evaluator import HfDevEvaluator
@@ -131,9 +138,18 @@ class _Mlflow:
         self.mlflow.log_metrics(metrics, step=step)
 
 
-def run(args: Args, cfg: TrainConfig, env: dict[str, str]) -> int:
+def run(
+    args: Args,
+    cfg: TrainConfig,
+    env: dict[str, str],
+    *,
+    headroom_check: HeadroomCheck = check_gpu_headroom,
+) -> int:
     from apx.extract.prompt_b import SERVING_RUNG
     from ml.extractor_b.train import EXIT_NO_RUNG, EXIT_OK, EXIT_RUNG_CHANGE, fingerprint_for
+
+    # ADR-0013 preflight: refuse (typed) before any model loads if VRAM or RAM is short.
+    check_workload_headroom(GpuWorkload.TRAINER, check=headroom_check)
 
     if args.probe:
         chosen = _probe(cfg, env)

@@ -33,7 +33,14 @@ from apx.extract.interfaces import (
 from apx.fraud.interfaces import InvoiceHistory
 from apx.fraud.rules import DuplicateInvoiceRule, SplitInvoiceRule
 from apx.policy.engine import DefaultPolicyEngine
-from apx.policy.interfaces import PolicyRule, PolicyThresholds, RoutingInput
+from apx.policy.interfaces import (
+    PolicyRule,
+    PolicyThresholds,
+    RoutedPayee,
+    RoutingInput,
+    pin_payee,
+    select_payee,
+)
 from apx.policy.writer import invoice_for_digest
 from apx.validate.interfaces import ValidationReport, ViolationCode, validate_invoice
 from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
@@ -325,7 +332,7 @@ def test_components_has_no_silent_money_defaults() -> None:
 async def test_ubl_builder_refuses_an_unclassified_line() -> None:
     invoice = await _build(_result(_fields(S), (_line(S, None),)))
     with pytest.raises(EInvoiceError):
-        PintAeUblBuilder().build(
+        PintAeUblBuilder(buyer_trn=BUYER_TRN).build(
             invoice, DocumentTypeCode.INVOICE, verified_payment_iban=VERIFIED_IBAN
         )
 
@@ -403,6 +410,12 @@ class _Audit:
         return None
 
 
+async def _pinned(invoice: Invoice) -> RoutedPayee:
+    """The payee the route decision pins for `invoice` (ADR-0014 §7)."""
+    vendor, _ = await _Directory().lookup(invoice.vendor_id)
+    return pin_payee(select_payee(vendor, invoice_iban=invoice.iban))
+
+
 def _activities(invoice_rules: _Schematron, credit_rules: _Schematron | None) -> Any:
     unused = cast(Any, None)
     deps = InvoiceActivityDeps(
@@ -418,7 +431,7 @@ def _activities(invoice_rules: _Schematron, credit_rules: _Schematron | None) ->
         fraud_engine=unused,
         vendors=cast(Any, _Directory()),
         policy_engine=unused,
-        ubl_builder=PintAeUblBuilder(buyer_trade_license="TL-1"),
+        ubl_builder=PintAeUblBuilder(buyer_trn=BUYER_TRN, buyer_trade_license="TL-1"),
         schematron=cast(Any, invoice_rules),
         credit_note_schematron=cast(Any, credit_rules),
         asp_client=unused,
@@ -451,7 +464,9 @@ async def test_build_einvoice_derives_the_type_code(
         )
     )
     invoice_rules, credit_rules = _Schematron(), _Schematron()
-    document = await _activities(invoice_rules, credit_rules).build_einvoice(invoice)
+    document = await _activities(invoice_rules, credit_rules).build_einvoice(
+        invoice, await _pinned(invoice)
+    )
     assert document.type_code is expected
     assert (len(credit_rules.seen), len(invoice_rules.seen)) == ((1, 0) if credit else (0, 1))
 
@@ -459,10 +474,12 @@ async def test_build_einvoice_derives_the_type_code(
 async def test_build_einvoice_refuses_unknown_kind_and_unwired_credit_rules() -> None:
     unknown = await _build(_result(_fields(S), (_line(S, "5%"),), a_type=None, b_type=None))
     with pytest.raises(EInvoiceError):
-        await _activities(_Schematron(), _Schematron()).build_einvoice(unknown)
+        await _activities(_Schematron(), _Schematron()).build_einvoice(
+            unknown, await _pinned(unknown)
+        )
     credit = unknown.model_copy(update={"kind": InvoiceKind.CREDIT_NOTE})
     with pytest.raises(EInvoiceError):
-        await _activities(_Schematron(), None).build_einvoice(credit)
+        await _activities(_Schematron(), None).build_einvoice(credit, await _pinned(credit))
 
 
 # --- real PINT AE schematron (artifacts) ----------------------------------------------------
@@ -470,9 +487,9 @@ async def test_build_einvoice_refuses_unknown_kind_and_unwired_credit_rules() ->
 
 def _schematron_result(invoice: Invoice) -> tuple[DocumentTypeCode, SchematronResult]:
     type_code = document_type_code(invoice.kind, (ln.vat_category for ln in invoice.lines))
-    document = PintAeUblBuilder(buyer_trade_license="TL-1", buyer_address="Marina, Dubai").build(
-        invoice, type_code, verified_payment_iban=VERIFIED_IBAN
-    )
+    document = PintAeUblBuilder(
+        buyer_trn=BUYER_TRN, buyer_trade_license="TL-1", buyer_address="Marina, Dubai"
+    ).build(invoice, type_code, verified_payment_iban=VERIFIED_IBAN)
     with PintAeSchematronValidator(
         DocumentTypeCode.INVOICE if type_code.is_invoice else DocumentTypeCode.CREDIT_NOTE,
         data_root=require_pint_ae_data_root(),

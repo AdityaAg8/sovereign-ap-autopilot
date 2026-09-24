@@ -233,7 +233,12 @@ class FixtureApiClient implements ApiClient {
           }
         : f,
     );
-    store().set(invoiceId, { ...invoice, fields });
+    // The inbox's invoice-number column reads the summary, so a corrected number shows there too.
+    const summary =
+      edit.field === "invoice_number"
+        ? { ...invoice.summary, invoiceNumber: edit.value.trim() === "" ? null : edit.value }
+        : invoice.summary;
+    store().set(invoiceId, { ...invoice, fields, summary });
     return delay(undefined);
   }
 
