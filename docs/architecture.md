@@ -92,20 +92,30 @@ validation, fraud and policy all pass (§6.1).
 ## GPU stage and VRAM staging
 
 `StageScheduler.stage(stage)` holds a single GPU lock and asks llama-swap to load the group for
-that stage; the previous group is unloaded first (ADR-0002). Budget: peak ≤ 11.5 GB per stage.
+that stage; the previous group is unloaded first (ADR-0002). ADR-0013 sets the budget on the whole
+card, as `nvidia-smi` reports it with the Windows desktop included: at most 11.8 GB of the 12.28 GB
+card per stage, which leaves at most 9.5 GB for a stage's models. Stages never co-reside, and
+inside `extract` Extractor A and B swap (`swap: true`): together they measured 10.3-10.6 GB of
+model memory under a 5-page load, over budget with the usual ~2.3 GB desktop.
 
-| Stage | Resident models (est. VRAM) | Est. peak |
+Before every stage switch, and before the trainer starts, `apx.llm.preflight` compares free VRAM
+(and RAM for the trainer) with the stage's need plus a 0.3 GB margin and fails typed
+(`InsufficientGpuMemoryError`) instead of loading into a full card (ADR-0013 addendum, M5.6a).
+
+| Stage | Resident models | Peak VRAM measured by `make smoke` |
 |---|---|---|
-| `scan` | ModernBERT guard (<1 GB) | ~1 GB |
-| `parse` | PaddleOCR-VL-1.6 (~2 GB) | ~2 GB |
-| `extract` | Qwen3.5-9B A (~7 GB) + Qwen3.5-4B B (~3 GB) | ~10 GB + KV; sequential if measured > 11.5 GB |
-| `arbitrate` | Gemma 4 12B QAT (~7.5 GB) | ~8 GB |
-| `fraud` | Qwen3-Embedding-0.6B (~1.2 GB) | ~1.5 GB |
-| `fraud_page` | Qwen3-VL-Embedding-2B (~4.5 GB), alone | ~5 GB |
-| `agent` | Qwen3.5-9B (~7 GB) + text embeddings | ~8.5 GB |
+| `scan` | ModernBERT guard | 1.41 GB |
+| `parse` | PaddleOCR-VL-1.6 | 3.16 GB |
+| `extract` | Qwen3.5-9B (A) or Qwen3.5-4B (B), one at a time | A 8.42 GB, B 5.56 GB (whole card, ADR-0013 amendment) |
+| `arbitrate` | Gemma 4 12B QAT | 9.74 GB |
+| `fraud` | Qwen3-Embedding-0.6B | 3.09 GB |
+| `fraud_page` | Qwen3-VL-Embedding-2B, alone | 5.94 GB |
+| `agent` | Qwen3.5-9B + text embeddings | not measured separately (same model as A) |
 
-Values are PRD estimates; `make smoke` (M0.5) records measured peaks in `reports/smoke.md`, and any
-stage over budget switches to sequential loading within the stage.
+Peaks come from `reports/smoke.md` (M0.5, 2026-09-22, before ADR-0013) except the `extract` row,
+which ADR-0013 re-measured on the whole card under a 5-page load. `scripts/measure_serving_budget.py`
+re-measures each model the ADR-0013 way before an eval run; any stage whose whole-card peak
+exceeds 11.8 GB switches to sequential loading within the stage.
 
 **Model integrity.** `infra/models.lock.json` pins each repo to a revision SHA. LFS files (weights,
 GGUF, mmproj) carry the Hub's sha256 and `make models` verifies it; small non-LFS files (configs,
@@ -126,6 +136,16 @@ in the `policy_route` decision, which the agent reads through `v_agent_invoices`
 `0008_agent_routed_payee`). `build_einvoice` receives the pin, re-selects on the live master and
 builds only if the digest and match are unchanged. Otherwise it audits `activity:payee_changed`
 and raises a non-retryable `PayeeChangedError`, and nothing is paid.
+
+## Persistence and developer tooling
+
+The Postgres schema is Alembic migrations `0001`-`0009` in `db/migrations/versions/`, applied by the
+`migrate` service on `make up`; the runbook lists what each one does. `0008` makes the agent view
+read the pinned payee, and `0009` repairs a mis-named check constraint left by the first `0007`.
+
+`tools/ops-dashboard/` is a developer console (training progress, GPU budget, services, CI). It is
+not part of the runtime: `apx` never imports it, and it binds 127.0.0.1 and loads nothing from the
+network.
 
 ## Decision index
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Ops dashboard (`tools/ops-dashboard/`, #50): a read-only local console for Extractor B training (step, pace, finish estimate, MLflow loss, evals, checkpoints), GPU memory against the ADR-0013 budget, trainer RAM and CPU, Compose services, pull requests with CI state, recent commits and the changelog. Standard library only, binds 127.0.0.1, loads nothing from the network; parsers covered by `tests/unit/test_ops_dashboard.py`.
 - M10.2 Promotion decider and retrain pipeline (`ml/promotion/`, ADR-0015): champion vs challenger on gates G1-G11 with a +0.5-point UAE F1 bar, compare-and-set on the champion alias, ordered side effects (audit, calibrator invalidation, models.lock, alias) and typed partial-apply reporting; `make retrain` exits 2 with `RetrainPrerequisiteError` until the production adapters exist.
 - M8.1 Page-similarity provider: `apx.llm.embedding.HttpPageEmbedder` (local Qwen3-VL-Embedding-2B client, typed errors, never an empty vector) and `apx.fraud.page_similarity.InMemoryPageSimilarityIndex` serving `DuplicateInvoiceRule.evaluate_similarity`; fraud owns the `PageEmbedder` port and never imports `apx.llm`.
 - M5.6a VRAM/RAM preflight (`apx.llm.preflight`, ADR-0013 addendum): every GPU stage switch and the trainer check free memory against a needs table plus a 0.3 GB margin and fail typed; the worker gets a utility-only GPU reservation for `nvidia-smi`, and probe timeouts or non-zero exits raise the retryable `GpuProbeTransientError`.
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Docs: README rewritten (pipeline diagram, measured highlights with report links, security model, quality-gate status, milestone status, docs index); new `docs/README.md` index; the runbook gains the migrations table (0001-0009), the ops dashboard, a `PayeeRefusal` row and the A/B swap; `docs/architecture.md` states the ADR-0013 whole-card budget, preflight and measured stage peaks; `docs/security.md` marks SEC-15 implemented.
 - ADR-0011 amendment 4: `data/ml/gpu.lock` liveness is a kernel `flock` held for the whole training job; a lock with a free flock (empty metadata included) is reclaimed, legacy and no-flock locks need a manual `rm` after confirming no trainer runs; `make gpu-free` does not clear it.
 - M5.4a Mobile Lighthouse 96/96/96 on the key pages: command palette, shortcut help, assistant and toasts load on first use, Radix controls render a stand-in until first interaction, and pdf.js renders in a worker via OffscreenCanvas.
 - M5.4 Design fixes: inbox columns no longer overlap and show the supplier invoice number, focus rings render inside rows, mono only for numbers and IDs, one Latin-digit amount formatter, solid AA Approve in dark mode.

@@ -6,8 +6,8 @@ hosted deployment and no public attack surface today.
 ## Scope
 
 - The runtime makes no outbound network calls once bootstrapped (PRD §2, §8).
-- The full threat model (assets, trust boundaries, STRIDE table, attacker goals) is
-  written in `docs/security.md` as part of milestone M6 and linked here once it lands.
+- The full threat model (assets, trust boundaries, STRIDE table, attacker goals, control
+  catalogue) is in [`docs/security.md`](docs/security.md).
 - The adversarial invoice suite (`attacks/`) and the injection-boundary design
   (`apx/policy`, `apx/scan`) implement the mitigations tracked by that threat model.
 

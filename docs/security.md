@@ -3,7 +3,8 @@
 Threat model for Sovereign AP Autopilot (M6.1).
 
 - Sources: PRD §2 (C1, C5, C6), §6.2 (I1-I6), §6.3 (P1-P5); ADR-0001 (local-only runtime),
-  ADR-0003 (trust boundary), ADR-0008 (typed boundary and capability model).
+  ADR-0003 (trust boundary), ADR-0008 (typed boundary and capability model), ADR-0014 (P1 with
+  several verified accounts, payee pin from routing to build).
 - Test paths below are planned unless marked *exists*. §8 records each control's status, and
   the builder updates it as tests land.
 
@@ -314,7 +315,7 @@ evidence). Payment-changing ASR must be 0 in both runs.
 | SEC-12 | Agent, chat and MCP only read or propose; no `change_bank` proposals; no writer in `apx.agent` | P5, K3 | M6.5, M9.2 | `tests/unit/test_policy_proposals.py` | partial (P5 kind restriction implemented and tested; `apx.agent` is still an interface stub, so `agent/test_no_write_imports.py`, M9.2, has nothing to check yet) |
 | SEC-13 | `UntrustedText` spotlighting, caps and budget; free text never in instructions | I2, T2-T5 | M6.5, M9.3 | `tests/unit/test_untrusted_boundary.py` | partial (spotlighting, escaping, length and prompt-budget caps implemented and tested; the M9.3 agent-side context canary needs `apx.agent`, not yet built) |
 | SEC-14 | Audited Grants bound to `subject_digest`; writers take only a Grant | I3, K6 | M6.5 | `tests/unit/test_policy_grant.py`, `tests/unit/test_policy_writer_contract.py` | implemented |
-| SEC-15 | Fraud rules: duplicate, split, bank change / IBAN mismatch, vendor impersonation, new vendor high amount, shared IBAN | P4 | M8.1 | `fraud/test_rules.py` | planned |
+| SEC-15 | Fraud rules: duplicate, split, bank change / IBAN mismatch, vendor impersonation, new vendor high amount, shared IBAN; isolation-forest anomalies (M8.2); page similarity through the fraud-owned `PageEmbedder` port, where an unavailable embedder raises and never passes (M8.1, not yet wired into the workflow) | P4 | M8.1, M8.2 | `tests/unit/test_fraud_rules.py`, `tests/unit/test_fraud_anomaly.py`, `tests/unit/test_fraud_page_similarity.py`; recall in `reports/fraud.md` | implemented (page similarity not yet wired) |
 | SEC-16 | Hash-chained audit of every decision, including denials | I4 | M5, M10.4 | `tests/integration/test_audit_chain.py`, `tests/integration/test_audit_anchor.py`, `tests/unit/test_audit_canonical.py`, `tests/unit/test_audit_verify.py`, `tests/unit/test_audit_anchor.py`, `tests/unit/test_audit_cli.py` | implemented |
 | SEC-17 | API authn/authz: pinned-algorithm JWT, server-side policy, bearer header, host allowlist, strict bodies, parameterised SQL | I3 | M5.3 | `api/test_authz_matrix.py`, `api/test_trusted_host.py` | planned |
 | SEC-18 | Web: CSP and security headers, no raw HTML, pdf.js scripting off, LTR isolation of IBAN/amounts, system status separate from document | - | M5.4, M8.3 | `security-headers.spec.ts`, `security-ui.spec.ts` | planned |

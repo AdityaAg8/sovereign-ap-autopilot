@@ -36,8 +36,9 @@ nvidia-smi                               # one GPU stage at a time; see the budg
 
 ## GPU budget (12 GB)
 
-llama-swap loads one group at a time: `extract` (Extractor A and B together) or `arbitrate`
-(the arbiter alone), and unloads an idle group after 10 minutes. The parse container holds about
+llama-swap loads one group at a time: `extract` or `arbitrate` (the arbiter alone), and unloads
+an idle model after 10 minutes. Inside `extract`, Extractor A and B swap: only one is resident at
+a time, because the two together broke the 11.8 GB whole-card budget (ADR-0013). The parse container holds about
 4.3 GB (`PADDLE_GPU_MEM_FRACTION`, default 0.35) while it runs. If a model fails to load with an
 out-of-memory error, something else holds the card: `make gpu-free`, then retry. Training and
 offline evals always start from `make gpu-free`.
@@ -66,7 +67,40 @@ empty and no train job runs on the host), then `rm data/ml/gpu.lock` (ADR-0011 a
 | `worker` exits with `ConfigError` on `buyer_trn` | `WORKER_BUYER_TRN` unset or not a valid 15-digit TRN outside Compose | Set it in `.env` (Compose defaults it to the demo company), then restart the worker |
 | Activity fails with `GpuProbeError` | `nvidia-smi` missing in the worker or its output unreadable | Check the worker's GPU `utility` reservation (`infra/compose.yaml`); a timeout or non-zero exit (`GpuProbeTransientError`) is retried |
 | `build_einvoice` fails with `PayeeChangedError` | The vendor's verified accounts or the invoice IBAN changed after routing, or the workflow was routed before the payee pin shipped | Nothing was paid. Re-ingest the invoice so it is re-routed and pinned (ADR-0014 §7) |
+| Approval refused with `PayeeRefusal` / `approve_payment denied` | P1 could not select a payee (ADR-0014). The refusal names the reason: `no_verified_account`; with several verified accounts, `invoice_iban_missing`, `invoice_iban_malformed` or `no_match`; `ambiguous_match` or `master_iban_malformed` point at bad master data | Nothing was paid. Fix the vendor master through the admin callback process, or correct the invoice IBAN field in review; never add an account from the invoice |
 | `make retrain` exits 2 with `RetrainPrerequisiteError` | The production adapters (exporter, trainer, shadow evaluator, MLflow registry, models.lock writer, calibrator invalidator) are not built yet | Expected until they land (ADR-0015 §5) |
+
+## Database migrations
+
+`make up` runs the one-shot `migrate` service (`alembic upgrade head`) before the API and worker
+start, so a pull that adds a migration is applied on the next `make up`. Migrations live in
+`db/migrations/versions/`:
+
+| Revision | What it does |
+|---|---|
+| `0001_initial_schema` | Users and roles, vendors and admin-verified bank details with history, POs and GRNs, invoices and grounded fields, decisions, approvals, proposals, the append-only `audit_log` |
+| `0002_audit_anchor` | Independent anchor chain over the audit head, so tail truncation is detected |
+| `0003_ingested_documents` | sha256-keyed dedupe record: one `InvoiceWorkflow` per document |
+| `0004_agent_ro_role_and_views` | Read-only `apx_agent_ro` role and the masked views the agent may read |
+| `0005_corrections_metadata` | Model revision on fields and previous values on labels, for the learning loop |
+| `0006_fraud_flags` | Fraud flags with severity, score, evidence and plain-language explanation |
+| `0007_invoice_kind` | `invoices.kind` (invoice or credit note, ADR-0012) |
+| `0008_agent_routed_payee` | `v_agent_invoices` reads the payee P1 pinned at routing, masked (ADR-0014 §7) |
+| `0009_invoice_kind_check_name` | Renames the `invoices.kind` check constraint on databases that ran the first 0007; a no-op on fresh databases |
+
+## Ops dashboard (development)
+
+`tools/ops-dashboard/` is a read-only console for the developer's machine: Extractor B training
+progress and loss, GPU memory against the ADR-0013 budget, Compose services, pull requests and
+CI, recent commits and the changelog. It binds 127.0.0.1:8765, uses only the Python standard
+library and loads nothing from the network.
+
+```bash
+.venv/Scripts/python.exe tools/ops-dashboard/server.py    # then open http://127.0.0.1:8765
+```
+
+A missing `docker`, `nvidia-smi` or `gh` blanks only that panel. Settings and details:
+[`tools/ops-dashboard/README.md`](../tools/ops-dashboard/README.md).
 
 ## Audit chain
 
