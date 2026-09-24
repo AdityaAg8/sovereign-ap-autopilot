@@ -5,19 +5,66 @@ e-invoices, with fraud checks, a provable field error rate and
 injection-proof payments. Architecture: [`docs/architecture.md`](docs/architecture.md);
 decisions: [`docs/adr/`](docs/adr/).
 
-Status: **M0 Foundations** (scaffolding in progress).
-
 ## Quickstart
 
 ```bash
-make bootstrap   # install toolchains and pre-commit hooks
-make up          # start local infra (Postgres, Temporal, Phoenix, MLflow, llama-swap)
+make bootstrap   # install toolchains (uv, pnpm) and pre-commit hooks
+make up          # start the local stack (Postgres, Temporal, Phoenix, MLflow, llama-swap, API)
 make models      # download and verify local model weights
 make smoke       # verify every model loads and serves correctly
-make test        # run the unit test suite
+make seed        # load the factory ERP; sign-in details land in data/seed_credentials.json
+make demo        # web app against the live API on http://localhost:3000
+make status      # one table: services, ports, GPU memory, loaded model, running jobs
 ```
 
-See `make help`-equivalent target list in the [Makefile](Makefile).
+No stack or GPU? `make preview` runs the web UI against built-in fixtures on
+http://localhost:3001; the login page lists the demo accounts (any password works).
+Against the live API (`make demo`) use the accounts in `data/seed_credentials.json`.
+
+## Make targets
+
+| Target | What it does |
+|---|---|
+| `bootstrap` | Install toolchains and pre-commit hooks |
+| `up` / `down` | Start / stop the Docker Compose stack (`infra/compose.yaml`) |
+| `models` | Download and verify model weights |
+| `smoke` | Check every model loads and serves |
+| `gpu-free` | Stop llama-swap, parse and toolbox to free the GPU |
+| `lint` / `fmt` / `typecheck` | ruff + ESLint, formatters, mypy --strict + tsc |
+| `test` / `test-gpu` / `e2e` | Unit tests, GPU tests, end-to-end tests (`e2e` lands with M5.4) |
+| `eval` / `eval-quick` | Full / quick evaluation; regenerates the scoreboard below |
+| `retrain` | Retrain the extractor |
+| `seed` | Load the factory ERP into Postgres |
+| `demo` | Stack + seed + web app on :3000 + staged demo scenarios |
+| `fresh-clone` / `verify-mN` / `verify-all` | Clean-clone check and milestone gates |
+| `status` | Aligned table of compose service health, web/API/dashboard ports, GPU memory, the loaded llama-swap model and active jobs (a `logs/*.log` written in the last 5 min). Honours `NO_COLOR` |
+| `open` | Open the running web UI (:3000, else :3001) in the default browser |
+| `dashboard` | Open Phoenix (:6006), MLflow (:5000) and Temporal UI (:8233) |
+| `preview` | Run the web UI against fixtures on :3001 (Ctrl+C to stop) |
+| `web-stop` | Stop this repo's Next.js server on :3000/:3001 |
+
+Every helper is localhost-only; if `docker`, `nvidia-smi` or `pnpm` is missing it says
+so in one line instead of failing with a stack trace.
+
+## Keyboard shortcuts (web UI)
+
+Press `?` anywhere to see the shortcuts for the current screen. Single-key shortcuts are
+ignored while typing in a text field.
+
+| Keys | Where | Action |
+|---|---|---|
+| `?` | Anywhere | Show keyboard shortcuts |
+| `Ctrl+K` / `Cmd+K` | Anywhere | Open the command palette |
+| `c` | Anywhere | Ask the assistant |
+| `g` then `i` / `r` / `v` / `o` | Anywhere | Go to inbox / review queue / vendors / operations |
+| `j` / `k` | Inbox | Next / previous invoice |
+| `Enter` | Inbox | Open the highlighted invoice |
+| `a` | Invoice | Approve |
+| `f` | Invoice | Jump to the first field needing review |
+| `r` | Invoice | Reject |
+| `Enter` or `e` | Invoice field row | Edit the field |
+| `Enter` / `Esc` | Editing a field | Save / cancel |
+| `Enter` / `Shift+Enter` | Assistant input | Send / new line |
 
 <!-- SCOREBOARD:START -->
 # Scoreboard

@@ -13,7 +13,21 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript", "prettier"),
   {
-    ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts"],
+    // public/pdfjs is vendored, pre-minified pdfjs-dist build output (see pdf-canvas.tsx's
+    // provenance comment) — source-linting it is both meaningless and, for the minified worker,
+    // slow enough to matter.
+    ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "public/**"],
+  },
+  {
+    // Adapter methods implement a shared interface (ApiClient) and intentionally leave some
+    // parameters unused (e.g. the fixture adapter's `subscribeEvents`); underscore-prefixing
+    // documents that instead of suppressing the check for every unused variable.
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
   },
 ];
 

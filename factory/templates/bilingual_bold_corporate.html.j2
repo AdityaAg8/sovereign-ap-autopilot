@@ -1,0 +1,103 @@
+{% import "_shared.html.j2" as s %}
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+{{ s.head_common() }}
+{% include "_css_bold_corporate.html.j2" %}
+<style>
+.split-band { display: flex; border-block-end: 4px solid var(--accent); }
+.split-band .half { flex: 1 1 50%; padding: 8mm; }
+.split-band .half.en { background: var(--dark); color: var(--on-dark); }
+.split-band .half.ar { background: var(--accent); color: var(--dark); }
+.split-band .half.ar table.meta th { color: #4A3A12; }
+.split-band .half.ar table.meta td { color: var(--dark); }
+.split-band .half.ar .doc-title { color: #4A3A12; }
+.split-band .half.ar .supplier-sub { color: #4A3A12; }
+.split-band .num-huge.on-accent { color: var(--dark); }
+.dual-desc div.ar { margin-block-start: 1mm; color: var(--muted); font-size: 8.8pt; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="split-band">
+    <div class="half en">
+      <div class="doc-title">Tax invoice</div>
+      <div class="supplier-name">{{ s.field('supplier_name', supplier_name_en) }}</div>
+      <div class="supplier-sub">{{ s.field_ltr('supplier_address', supplier_address_en) }}</div>
+      <div class="supplier-sub">TRN {{ s.field_ltr('supplier_trn', supplier_trn) }}</div>
+      <div class="num-huge">{{ s.field_ltr('invoice_number', invoice_number) }}</div>
+    </div>
+    <div class="half ar" dir="rtl" lang="ar">
+      <div class="doc-title ar">فاتورة ضريبية</div>
+      <div class="supplier-name">{{ s.field('supplier_name', supplier_name_ar) }}</div>
+      {# M2.4/M3.1 label self-check fix: `supplier_trn` has no language variant -- this is the
+         same value the English half above already tags. See `field_ltr_shadow`'s docstring in
+         _shared.html.j2 (PRD §10 M2.4/M3.1). #}
+      <div class="supplier-sub">الرقم الضريبي {{ s.field_ltr_shadow(supplier_trn) }}</div>
+      <table class="meta">
+        <tr><th>تاريخ الإصدار</th><td>{{ s.field_ltr('issue_date', issue_date_iso) }}</td></tr>
+        <tr><th>تاريخ الاستحقاق</th><td>{{ s.field_ltr('due_date', due_date_iso) }}</td></tr>
+        <tr><th>رقم أمر الشراء</th><td>{{ s.field_ltr('po_number', po_number) }}</td></tr>
+        <tr><th>العملة</th><td>{{ s.field_ltr('currency', currency) }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="content">
+    <section class="parties">
+      <div>
+        <div class="party-label">Bill to / <span class="ar" dir="rtl">إلى</span></div>
+        <div class="party-name">{{ s.field('buyer_name', buyer_name_en) }}</div>
+        <div class="party-name ar" dir="rtl" lang="ar">{{ s.field('buyer_name', buyer_name_ar) }}</div>
+        <div class="party-line">{{ buyer_address_en }}</div>
+        <div class="party-line">TRN {{ s.field_ltr('buyer_trn', buyer_trn) }}</div>
+      </div>
+      <div class="tax-case-note">
+        <div class="tax-case-badge">{{ tax_case_label_en }} / <span dir="rtl" lang="ar">{{ tax_case_label_ar }}</span></div>
+        <p>{{ tax_case_note_en }}</p>
+        <p dir="rtl" lang="ar">{{ tax_case_note_ar }}</p>
+      </div>
+    </section>
+
+    <table class="items">
+      <thead>
+        <tr>
+          <th>Description / <span class="ar" dir="rtl">البيان</span></th>
+          <th class="num">Qty / <span class="ar" dir="rtl">الكمية</span></th>
+          <th class="num">Unit price / <span class="ar" dir="rtl">سعر الوحدة</span></th>
+          <th class="num">VAT / <span class="ar" dir="rtl">الضريبة</span></th>
+          <th class="num">Net amount / <span class="ar" dir="rtl">صافي المبلغ</span></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for line in lines %}
+        <tr class="ap-row">
+          <td class="dual-desc">
+            <div>{{ s.field('description', line.description_en) }}</div>
+            <div class="ar" dir="rtl" lang="ar">{{ s.field('description', line.description_ar) }}</div>
+          </td>
+          <td class="num">{{ s.field_ltr('quantity', line.quantity | qty) }}</td>
+          <td class="num">{{ s.field_ltr('unit_price', line.unit_price | money) }}</td>
+          <td class="num">{{ s.field_ltr('vat_rate', line.vat_rate | pct) }}</td>
+          <td class="num">{{ s.field_ltr('net_amount', line.net_amount | money) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <section class="totals">
+      <table>
+        <tr><th>Subtotal / <span class="ar" dir="rtl">الإجمالي قبل الضريبة</span></th><td>{{ s.field_ltr('subtotal', subtotal | money) }} {{ currency }}</td></tr>
+        <tr><th>VAT total / <span class="ar" dir="rtl">إجمالي الضريبة</span></th><td>{{ s.field_ltr('vat_total', vat_total | money) }} {{ currency }}</td></tr>
+        <tr class="grand"><th>Total due / <span class="ar" dir="rtl">الإجمالي المستحق</span></th><td>{{ s.field_ltr('total', total | money) }} {{ currency }}</td></tr>
+      </table>
+    </section>
+  </div>
+
+  <footer>
+    Payment by bank transfer only, to IBAN {{ s.field_ltr('iban', iban) }}.
+    <span dir="rtl" lang="ar">السداد عن طريق التحويل المصرفي فقط.</span>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,149 @@
+{% import "_shared.html.j2" as s %}
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+{{ s.head_common() }}
+{% include "_css_modern_minimal.html.j2" %}
+<style>
+.lang-divider { border: none; border-block-start: 1px dashed var(--line); margin-block: 8mm; }
+.lang-block.ar { direction: rtl; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="lang-block en">
+    <header>
+      <div>
+        <div class="eyebrow">Tax invoice</div>
+        <div class="supplier-name">{{ s.field('supplier_name', supplier_name_en) }}</div>
+        <div class="supplier-sub">{{ s.field_ltr('supplier_address', supplier_address_en) }}</div>
+        <div class="supplier-sub">TRN {{ s.field_ltr('supplier_trn', supplier_trn) }}</div>
+      </div>
+      <div class="invoice-meta">
+        <div class="num-big">{{ s.field_ltr('invoice_number', invoice_number) }}</div>
+        <table class="meta">
+          <tr><th>Issue date</th><td>{{ s.field_ltr('issue_date', issue_date_display) }}</td></tr>
+          <tr><th>Due date</th><td>{{ s.field_ltr('due_date', due_date_display) }}</td></tr>
+          <tr><th>PO number</th><td>{{ s.field_ltr('po_number', po_number) }}</td></tr>
+          <tr><th>Currency</th><td>{{ s.field_ltr('currency', currency) }}</td></tr>
+        </table>
+      </div>
+    </header>
+    <section class="parties">
+      <div>
+        <div class="eyebrow">Bill to</div>
+        <div class="party-name">{{ s.field('buyer_name', buyer_name_en) }}</div>
+        <div class="party-line">{{ buyer_address_en }}</div>
+        <div class="party-line">TRN {{ s.field_ltr('buyer_trn', buyer_trn) }}</div>
+      </div>
+      <div class="tax-case-note">
+        <div class="tax-case-pill">{{ tax_case_label_en }}</div>
+        <p>{{ tax_case_note_en }}</p>
+      </div>
+    </section>
+    <table class="items">
+      <thead>
+        <tr>
+          <th>Description</th><th class="num">Qty</th><th class="num">Unit price</th>
+          <th class="num">VAT</th><th class="num">Net amount</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for line in lines %}
+        <tr class="ap-row">
+          <td>{{ s.field('description', line.description_en) }}</td>
+          <td class="num">{{ s.field_ltr('quantity', line.quantity | qty) }}</td>
+          <td class="num">{{ s.field_ltr('unit_price', line.unit_price | money) }}</td>
+          <td class="num">{{ s.field_ltr('vat_rate', line.vat_rate | pct) }}</td>
+          <td class="num">{{ s.field_ltr('net_amount', line.net_amount | money) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <section class="totals">
+      <table>
+        <tr><th>Subtotal</th><td>{{ s.field_ltr('subtotal', subtotal | money) }} {{ currency }}</td></tr>
+        <tr><th>VAT total</th><td>{{ s.field_ltr('vat_total', vat_total | money) }} {{ currency }}</td></tr>
+        <tr class="grand"><th>Total due</th><td>{{ s.field_ltr('total', total | money) }} {{ currency }}</td></tr>
+      </table>
+    </section>
+  </div>
+
+  <hr class="lang-divider">
+
+  <div class="lang-block ar" dir="rtl" lang="ar">
+    <header>
+      <div>
+        <div class="eyebrow ar">فاتورة ضريبية</div>
+        <div class="supplier-name">{{ s.field('supplier_name', supplier_name_ar) }}</div>
+        {# M2.4/M3.1 label self-check fix: `supplier_address`, `supplier_trn`, `invoice_number`,
+           `issue_date`, `due_date`, `po_number`, `currency`, `buyer_trn` and every line/totals
+           amount below carry no language variant -- this block re-renders the exact same value
+           the English block above already tagged. Wrapping it in a second `data-field` of the
+           same name here produced two ground-truth boxes for one extraction-schema field
+           (confirmed against M3.1's parse report: 13 `currency` labels scored a low IoU because
+           whichever of the two boxes a downstream consumer picked did not always match the one
+           `apx.parse` found). Every other bilingual layout tags a language-invariant field once;
+           only `supplier_name`/`buyer_name`/`description`, which genuinely differ between the
+           English and Arabic blocks, are tagged in both (PRD §10 M2.4/M3.1). #}
+        <div class="supplier-sub">{{ s.field_ltr_shadow(supplier_address_en) }}</div>
+        <div class="supplier-sub">الرقم الضريبي {{ s.field_ltr_shadow(supplier_trn) }}</div>
+      </div>
+      <div class="invoice-meta">
+        <div class="num-big">{{ s.field_ltr_shadow(invoice_number) }}</div>
+        <table class="meta">
+          <tr><th>تاريخ الإصدار</th><td>{{ s.field_ltr_shadow(issue_date_iso) }}</td></tr>
+          <tr><th>تاريخ الاستحقاق</th><td>{{ s.field_ltr_shadow(due_date_iso) }}</td></tr>
+          <tr><th>رقم أمر الشراء</th><td>{{ s.field_ltr_shadow(po_number) }}</td></tr>
+          <tr><th>العملة</th><td>{{ s.field_ltr_shadow(currency) }}</td></tr>
+        </table>
+      </div>
+    </header>
+    <section class="parties">
+      <div>
+        <div class="eyebrow ar">إلى</div>
+        <div class="party-name">{{ s.field('buyer_name', buyer_name_ar) }}</div>
+        <div class="party-line">{{ buyer_address_en }}</div>
+        <div class="party-line">الرقم الضريبي {{ s.field_ltr_shadow(buyer_trn) }}</div>
+      </div>
+      <div class="tax-case-note">
+        <div class="tax-case-pill">{{ tax_case_label_ar }}</div>
+        <p>{{ tax_case_note_ar }}</p>
+      </div>
+    </section>
+    <table class="items">
+      <thead>
+        <tr>
+          <th class="ar">البيان</th><th class="num ar">الكمية</th><th class="num ar">سعر الوحدة</th>
+          <th class="num ar">الضريبة</th><th class="num ar">صافي المبلغ</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for line in lines %}
+        <tr class="ap-row">
+          <td>{{ s.field('description', line.description_ar) }}</td>
+          <td class="num">{{ s.field_ltr_shadow(line.quantity | qty) }}</td>
+          <td class="num">{{ s.field_ltr_shadow(line.unit_price | money) }}</td>
+          <td class="num">{{ s.field_ltr_shadow(line.vat_rate | pct) }}</td>
+          <td class="num">{{ s.field_ltr_shadow(line.net_amount | money) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <section class="totals">
+      <table>
+        <tr><th>الإجمالي قبل الضريبة</th><td>{{ s.field_ltr_shadow(subtotal | money) }} {{ currency }}</td></tr>
+        <tr><th>إجمالي الضريبة</th><td>{{ s.field_ltr_shadow(vat_total | money) }} {{ currency }}</td></tr>
+        <tr class="grand"><th>الإجمالي المستحق</th><td>{{ s.field_ltr_shadow(total | money) }} {{ currency }}</td></tr>
+      </table>
+    </section>
+  </div>
+
+  <footer>
+    Payment by bank transfer only, to IBAN {{ s.field_ltr('iban', iban) }}.
+    <span dir="rtl" lang="ar">السداد عن طريق التحويل المصرفي فقط.</span>
+  </footer>
+</div>
+</body>
+</html>

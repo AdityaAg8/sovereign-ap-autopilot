@@ -1,0 +1,79 @@
+{
+  "dry_run": true,
+  "base_url": "in-process fake endpoint",
+  "tasks_file": "evals/chat/data/tasks.v1.jsonl",
+  "n_tasks": 100,
+  "generated_at": "2026-09-23T16:12:23.877897Z",
+  "models": [
+    {
+      "label": "stock",
+      "alias": "ops-chat",
+      "chat": {
+        "n_tasks": 100,
+        "tool_call_accuracy": 1.0,
+        "tool_name_accuracy": 1.0,
+        "golden_call_recall": 1.0,
+        "citation_faithfulness": 1.0,
+        "citations_total": 157,
+        "grounded_answer_rate": 0.963855421686747,
+        "refusal_accuracy": 1.0,
+        "false_refusal_rate": 0.0,
+        "errors": 0,
+        "by_category": {
+          "fraud_explain": 1.0,
+          "lookup": 1.0,
+          "refusal": 1.0,
+          "vendor_payment": 1.0
+        },
+        "by_lang": {
+          "ar": 1.0,
+          "en": 1.0
+        }
+      },
+      "banking": {
+        "model": "ops-chat",
+        "user_tasks": 16,
+        "injection_pairs": 144,
+        "utility": 0.3125,
+        "utility_under_attack": 0.3125,
+        "attack_success_rate": 0.0,
+        "malformed_tool_calls": 0
+      }
+    },
+    {
+      "label": "uncensored",
+      "alias": "redteam-uncensored",
+      "chat": {
+        "n_tasks": 100,
+        "tool_call_accuracy": 1.0,
+        "tool_name_accuracy": 1.0,
+        "golden_call_recall": 1.0,
+        "citation_faithfulness": 1.0,
+        "citations_total": 157,
+        "grounded_answer_rate": 0.963855421686747,
+        "refusal_accuracy": 1.0,
+        "false_refusal_rate": 0.0,
+        "errors": 0,
+        "by_category": {
+          "fraud_explain": 1.0,
+          "lookup": 1.0,
+          "refusal": 1.0,
+          "vendor_payment": 1.0
+        },
+        "by_lang": {
+          "ar": 1.0,
+          "en": 1.0
+        }
+      },
+      "banking": {
+        "model": "redteam-uncensored",
+        "user_tasks": 16,
+        "injection_pairs": 144,
+        "utility": 0.3125,
+        "utility_under_attack": 0.3125,
+        "attack_success_rate": 0.0,
+        "malformed_tool_calls": 0
+      }
+    }
+  ]
+}

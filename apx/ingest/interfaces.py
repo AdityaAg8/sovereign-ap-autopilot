@@ -3,6 +3,7 @@ InvoiceWorkflow per new document (PRD §3)."""
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from typing import Annotated, Literal, Protocol
 
@@ -61,4 +62,5 @@ class Ingestor(Protocol):
 
 def sha256_hex(data: bytes) -> Sha256Hex:
     """Return the lowercase hex sha256 of `data`."""
-    raise NotImplementedError
+    digest: Sha256Hex = hashlib.sha256(data).hexdigest()
+    return digest

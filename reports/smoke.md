@@ -23,3 +23,10 @@ VRAM budget per stage: 11.5 GB (PRD C2)
 | fraud_page | 5.94 | yes |
 | parse | 3.16 | yes |
 | scan | 1.41 | yes |
+
+## Amendment 2026-09-23 (ADR-0013): extract group made sequential
+
+Under real 5-page load, A + B co-resident took 10.3-10.6 GB (11.74-11.84 GB whole card with
+a 1.1-1.4 GB desktop), which breaks the budget with the usual ~2.3 GB desktop. Per ADR-0002's
+fallback rule the `extract` group now swaps (one of A/B loaded). Measured stage peaks, whole
+card: A stage 8.42 GB, B stage 5.56 GB (desktop ~1.2 GB). See docs/adr/0013.

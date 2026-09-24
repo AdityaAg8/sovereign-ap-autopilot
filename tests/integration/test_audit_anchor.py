@@ -33,7 +33,7 @@ pytestmark = pytest.mark.integration
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTAINER_NAME = "apx-test-postgres-audit-anchor"
-HOST_PORT = 55434
+HOST_PORT = 55436
 PG_USER = "apx"
 PG_PASSWORD = "apx"
 PG_DB = "apx"

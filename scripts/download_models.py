@@ -104,13 +104,28 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip offline-only models (PRD §4 offline table)",
     )
+    parser.add_argument(
+        "--intent",
+        action="append",
+        default=None,
+        help="Only these lock intents (repeatable), e.g. --intent extractor_b_train_base",
+    )
     args = parser.parse_args(argv)
 
     lock = load_lock(args.lock)
+    if args.intent:
+        unknown = sorted(set(args.intent) - {m["intent"] for m in lock["models"]})
+        if unknown:
+            print(f"error: intents not in {args.lock}: {unknown}", file=sys.stderr)
+            return 1
     failures: list[str] = []
+    done = 0
     for model in lock["models"]:
         if args.runtime_only and not model.get("runtime", False):
             continue
+        if args.intent and model["intent"] not in args.intent:
+            continue
+        done += 1
         print(f"==> {model['intent']} ({model['repo_id']})", flush=True)
         try:
             written = download_model(model, args.models_dir)
@@ -122,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     if failures:
         print(f"error: {len(failures)} model(s) failed verification: {failures}", file=sys.stderr)
         return 1
-    print(f"all {len(lock['models'])} model(s) verified under {args.models_dir}")
+    print(f"all {done} model(s) verified under {args.models_dir}")
     return 0
 
 

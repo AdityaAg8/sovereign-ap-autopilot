@@ -2,9 +2,10 @@
 change, new vendor with a high amount, shared IBAN across vendors and PO price variance (PRD
 §3 apx/fraud, §10 M8.1). Each rule returns `FraudFlag`s carrying a plain-language explanation.
 
-Credit notes are represented, like everywhere else in this codebase, as an `Invoice` whose
-`total.amount` is negative; the exact-amount comparisons below therefore never treat a credit
-note as a duplicate of the invoice it reverses.
+Credit notes are `Invoice`s with `kind is InvoiceKind.CREDIT_NOTE` and amounts as printed
+(ADR-0012), never a negative total. The duplicate and split rules compare only documents of the
+same kind, so a credit note is never a duplicate of, or a split part of, the invoice it reverses.
+A None kind (unresolved, already routed to review) compares with either kind.
 """
 
 from __future__ import annotations
@@ -33,6 +34,12 @@ from apx.fraud.normalize import normalize_iban, normalize_invoice_number
 RULE_ID_DUPLICATE_INVOICE = "duplicate_invoice"
 RULE_ID_NEAR_DUPLICATE_PAGE = "near_duplicate_page"
 RULE_ID_NEAR_DUPLICATE_EMBEDDING = "near_duplicate_embedding"
+
+
+def same_kind(a: Invoice, b: Invoice) -> bool:
+    """True when both documents are the same kind, or either kind is unresolved (None): an
+    unknown kind must not hide a duplicate, so it is compared conservatively."""
+    return a.kind is None or b.kind is None or a.kind is b.kind
 
 
 def _clamp_score(value: float) -> Score:
@@ -72,6 +79,8 @@ class DuplicateInvoiceRule:
         flags: list[FraudFlag] = []
         for other in history.recent_for_vendor(invoice.vendor_id, self.window_days):
             if other.id == invoice.id or other.vendor_id != invoice.vendor_id:
+                continue
+            if not same_kind(other, invoice):
                 continue
             if normalize_invoice_number(other.number) != key_number:
                 continue
@@ -225,6 +234,7 @@ class SplitInvoiceRule:
             for other in history.recent_for_vendor(invoice.vendor_id, self.window_days)
             if other.id != invoice.id
             and other.vendor_id == invoice.vendor_id
+            and same_kind(other, invoice)
             and other.total.currency == self.approval_limit.currency
             and other.total.amount < self.approval_limit.amount
             and abs((other.issue_date - invoice.issue_date).days) <= self.window_days
@@ -434,7 +444,8 @@ class PriceVarianceRule:
                     rule_id=self.rule_id,
                     typology=self.typology,
                     severity=severity,
-                    score=round(_clamp_score(float(variance)), 4),
+                    # Same scale as the other rules: 0.5 just over tolerance, 1.0 at twice it.
+                    score=round(_clamp_score(float(variance / (2 * self.tolerance_pct))), 4),
                     evidence=(
                         f"Line {line.description!r} bills {line.unit_price.amount} "
                         f"{line.unit_price.currency} vs PO {po.number} line {line.po_line_ref} "

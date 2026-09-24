@@ -119,6 +119,29 @@ def test_toolbox_has_no_egress(host_port: str) -> None:
     )
 
 
+@pytest.mark.parametrize("host_port", BLOCKED_TARGETS)
+def test_trainer_has_no_egress(host_port: str) -> None:
+    """The Extractor B trainer (ADR-0011 §6) sits on `app` only; `--no-deps` so the probe does
+    not start mlflow."""
+    _require_docker()
+    _assert_blocked(
+        [
+            "docker",
+            "compose",
+            "--profile",
+            "train",
+            "run",
+            "--rm",
+            "--no-deps",
+            "trainer",
+            "bash",
+            "-c",
+            _probe_script(host_port),
+        ],
+        label="trainer",
+    )
+
+
 def test_gateway_only_reaches_its_proxy_targets() -> None:
     """`gateway` also joins the non-internal `edge` network, so (unlike llama-swap/toolbox)
     it does have outbound routing -- that is deliberate, ADR-0001's amendment documents it.

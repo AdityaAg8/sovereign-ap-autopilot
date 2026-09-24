@@ -1,11 +1,24 @@
-/** Placeholder home page for the M0 scaffold; the real inbox/review UI lands in M5.4. */
+/** Root route: sends signed-in operators to the inbox and everyone else to /login. Auth state is
+ * client-only (dev fixture session), so this redirect can't happen at the server. */
+
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth/auth-context";
+
 export default function Home() {
+  const { status } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "authenticated") router.replace("/inbox");
+    if (status === "unauthenticated") router.replace("/login");
+  }, [status, router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Sovereign AP Autopilot</h1>
-      <p className="text-sm text-neutral-500">
-        Review UI scaffold. The inbox, invoice detail and review queue land in milestone M5.
-      </p>
-    </main>
+    <div className="text-muted-foreground flex h-dvh items-center justify-center text-sm">
+      Loading Sovereign AP Autopilot…
+    </div>
   );
 }

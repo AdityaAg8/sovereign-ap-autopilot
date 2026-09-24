@@ -1,0 +1,78 @@
+{% import "_shared.html.j2" as s %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+{{ s.head_common() }}
+{% include "_css_ledger_classic.html.j2" %}
+</head>
+<body>
+<div class="sheet" lang="ar">
+  <header class="letterhead">
+    <div>
+      <div class="supplier-name ar">{{ s.field('supplier_name', supplier_name_ar) }}</div>
+      <div class="supplier-sub">{{ s.field('supplier_name', supplier_name_en) }}</div>
+      <div class="supplier-sub">العنوان: {{ s.field_ltr('supplier_address', supplier_address_en) }}</div>
+      <div class="supplier-sub">الرقم الضريبي {{ s.field_ltr('supplier_trn', supplier_trn) }}</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="doc-title ar">فاتورة ضريبية</div>
+      <div class="ledger-tab">رقم {{ s.field_ltr('invoice_number', invoice_number) }}</div>
+      <table class="meta">
+        <tr><th>تاريخ الإصدار</th><td>{{ s.field_ltr('issue_date', issue_date_iso) }}</td></tr>
+        <tr><th>تاريخ الاستحقاق</th><td>{{ s.field_ltr('due_date', due_date_iso) }}</td></tr>
+        <tr><th>رقم أمر الشراء</th><td>{{ s.field_ltr('po_number', po_number) }}</td></tr>
+        <tr><th>العملة</th><td>{{ s.field_ltr('currency', currency) }}</td></tr>
+      </table>
+    </div>
+  </header>
+
+  <section class="parties">
+    <div>
+      <div class="party-label ar">إلى</div>
+      <div class="party-name">{{ s.field('buyer_name', buyer_name_ar) }}</div>
+      <div class="party-line">{{ s.field('buyer_name', buyer_name_en) }}</div>
+      <div class="party-line">{{ buyer_address_en }}</div>
+      <div class="party-line">الرقم الضريبي {{ s.field_ltr('buyer_trn', buyer_trn) }}</div>
+    </div>
+    <div class="tax-case-note">
+      <div class="tax-case-label ar">{{ tax_case_label_ar }}</div>
+      <p>{{ tax_case_note_ar }}</p>
+    </div>
+  </section>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th>م</th><th>البيان</th><th class="num">الكمية</th>
+        <th class="num">سعر الوحدة</th><th class="num">الضريبة</th><th class="num">صافي المبلغ</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for line in lines %}
+      <tr class="ap-row">
+        <td>{{ line.index | ltr }}</td>
+        <td>{{ s.field('description', line.description_ar) }}</td>
+        <td class="num">{{ s.field_ltr('quantity', line.quantity | qty) }}</td>
+        <td class="num">{{ s.field_ltr('unit_price', line.unit_price | money) }}</td>
+        <td class="num">{{ s.field_ltr('vat_rate', line.vat_rate | pct) }}</td>
+        <td class="num">{{ s.field_ltr('net_amount', line.net_amount | money) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <section class="totals">
+    <table>
+      <tr><th>الإجمالي قبل الضريبة</th><td>{{ s.field_ltr('subtotal', subtotal | money) }} {{ currency }}</td></tr>
+      <tr><th>إجمالي الضريبة</th><td>{{ s.field_ltr('vat_total', vat_total | money) }} {{ currency }}</td></tr>
+      <tr class="grand"><th>الإجمالي المستحق</th><td>{{ s.field_ltr('total', total | money) }} {{ currency }}</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    السداد عن طريق التحويل المصرفي إلى رقم الآيبان {{ s.field_ltr('iban', iban) }}. تم إصدار هذه
+    الفاتورة بواسطة مُصنّع المستندات الاصطناعية لنظام Sovereign AP Autopilot.
+  </footer>
+</div>
+</body>
+</html>

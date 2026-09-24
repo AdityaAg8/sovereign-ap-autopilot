@@ -365,6 +365,19 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
 - **Pure helper stubs.** `tool_spec`, `authorize_tool`, `mask_iban`, `audit_actor`,
   `parse_citations` and `check_citations`.
 
+### Follow-ups from the M9.2 review (tracked for M9.3)
+
+- **Bank-change audit ids (D6).** `vendor_history`'s `BankChangeView.audit_id` is always `None`
+  in `PgAgentToolbox`: `bank_details_history` (the source of `v_agent_vendor_accounts`'s "change"
+  rows) carries no column linking a row back to the `audit_log` id that recorded the change, so
+  there is no join key `v_agent_vendor_accounts` or the toolbox can select. D6 promises a
+  citable bank-change audit id the same way `explain_decision` cites reasons; closing this needs
+  a schema change (an `audit_id`/`change_id` column on `bank_details_history`, written alongside
+  the audit event) before the view and toolbox can populate it.
+- **`get_invoice.line_count` (D1).** Always `0`: there is no invoice line-item table yet
+  (extraction stores only invoice-level `fields`), so there is nothing to count. Needs a
+  line-items table plus a `v_agent_invoices` column or join before this is exact.
+
 ## Consequences
 
 - Good: the tool surface is closed, typed and listed in one table, and P5 holds by

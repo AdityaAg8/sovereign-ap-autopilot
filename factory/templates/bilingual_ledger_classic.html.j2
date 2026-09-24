@@ -1,0 +1,93 @@
+{% import "_shared.html.j2" as s %}
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+{{ s.head_common() }}
+{% include "_css_ledger_classic.html.j2" %}
+<style>
+.dual-label { display: flex; flex-direction: column; gap: .3mm; }
+.dual-label .ar { font-size: 8.5pt; color: var(--ink-soft); }
+td.desc div.ar { margin-block-start: 1mm; color: var(--ink-soft); font-size: 8.8pt; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header class="letterhead">
+    <div>
+      <div class="supplier-name">{{ s.field('supplier_name', supplier_name_en) }}</div>
+      <div class="supplier-name ar" dir="rtl" lang="ar">{{ s.field('supplier_name', supplier_name_ar) }}</div>
+      <div class="supplier-sub">{{ s.field_ltr('supplier_address', supplier_address_en) }}</div>
+      <div class="supplier-sub">TRN / الرقم الضريبي {{ s.field_ltr('supplier_trn', supplier_trn) }}</div>
+    </div>
+    <div class="invoice-meta">
+      <div class="doc-title">TAX INVOICE</div>
+      <div class="doc-title ar" dir="rtl" lang="ar">فاتورة ضريبية</div>
+      <div class="ledger-tab">No. {{ s.field_ltr('invoice_number', invoice_number) }}</div>
+      <table class="meta">
+        <tr><th class="dual-label">Issue date<span class="ar" dir="rtl">تاريخ الإصدار</span></th><td>{{ s.field_ltr('issue_date', issue_date_display) }}</td></tr>
+        <tr><th class="dual-label">Due date<span class="ar" dir="rtl">تاريخ الاستحقاق</span></th><td>{{ s.field_ltr('due_date', due_date_display) }}</td></tr>
+        <tr><th class="dual-label">PO number<span class="ar" dir="rtl">رقم أمر الشراء</span></th><td>{{ s.field_ltr('po_number', po_number) }}</td></tr>
+        <tr><th class="dual-label">Currency<span class="ar" dir="rtl">العملة</span></th><td>{{ s.field_ltr('currency', currency) }}</td></tr>
+      </table>
+    </div>
+  </header>
+
+  <section class="parties">
+    <div>
+      <div class="party-label">Bill to / إلى</div>
+      <div class="party-name">{{ s.field('buyer_name', buyer_name_en) }}</div>
+      <div class="party-name ar" dir="rtl" lang="ar">{{ s.field('buyer_name', buyer_name_ar) }}</div>
+      <div class="party-line">{{ buyer_address_en }}</div>
+      <div class="party-line">TRN {{ s.field_ltr('buyer_trn', buyer_trn) }}</div>
+    </div>
+    <div class="tax-case-note">
+      <div class="tax-case-label">{{ tax_case_label_en }}</div>
+      <p>{{ tax_case_note_en }}</p>
+      <div class="tax-case-label ar" dir="rtl" lang="ar">{{ tax_case_label_ar }}</div>
+      <p dir="rtl" lang="ar">{{ tax_case_note_ar }}</p>
+    </div>
+  </section>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th class="dual-label">Description<span class="ar" dir="rtl">البيان</span></th>
+        <th class="num dual-label">Qty<span class="ar" dir="rtl">الكمية</span></th>
+        <th class="num dual-label">Unit price<span class="ar" dir="rtl">سعر الوحدة</span></th>
+        <th class="num dual-label">VAT<span class="ar" dir="rtl">الضريبة</span></th>
+        <th class="num dual-label">Net amount<span class="ar" dir="rtl">صافي المبلغ</span></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for line in lines %}
+      <tr class="ap-row">
+        <td>{{ line.index }}</td>
+        <td class="desc">
+          <div>{{ s.field('description', line.description_en) }}</div>
+          <div class="ar" dir="rtl" lang="ar">{{ s.field('description', line.description_ar) }}</div>
+        </td>
+        <td class="num">{{ s.field_ltr('quantity', line.quantity | qty) }}</td>
+        <td class="num">{{ s.field_ltr('unit_price', line.unit_price | money) }}</td>
+        <td class="num">{{ s.field_ltr('vat_rate', line.vat_rate | pct) }}</td>
+        <td class="num">{{ s.field_ltr('net_amount', line.net_amount | money) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <section class="totals">
+    <table>
+      <tr><th class="dual-label">Subtotal<span class="ar" dir="rtl">الإجمالي قبل الضريبة</span></th><td>{{ s.field_ltr('subtotal', subtotal | money) }} {{ currency }}</td></tr>
+      <tr><th class="dual-label">VAT total<span class="ar" dir="rtl">إجمالي الضريبة</span></th><td>{{ s.field_ltr('vat_total', vat_total | money) }} {{ currency }}</td></tr>
+      <tr class="grand"><th class="dual-label">Total due<span class="ar" dir="rtl">الإجمالي المستحق</span></th><td>{{ s.field_ltr('total', total | money) }} {{ currency }}</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    Payment by bank transfer only, to IBAN {{ s.field_ltr('iban', iban) }}.
+    <span dir="rtl" lang="ar">السداد عن طريق التحويل المصرفي فقط.</span>
+  </footer>
+</div>
+</body>
+</html>

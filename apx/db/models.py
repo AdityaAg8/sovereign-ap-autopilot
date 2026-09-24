@@ -287,6 +287,43 @@ class GrnLine(Base):
 
 
 # ---------------------------------------------------------------------------------------
+# Ingest dedupe (PRD §10 M5.5)
+# ---------------------------------------------------------------------------------------
+
+
+class IngestedDocument(Base):
+    """Persisted sha256 dedupe record for `apx.ingest` (mirrors
+    `apx.ingest.interfaces.IngestedDocument`). The primary key on `sha256` is the atomic gate
+    that `apx.ingest.ingestor.Ingestor` uses to guarantee exactly one `InvoiceWorkflow` starts
+    per document, even when the watcher and the API upload path race on the same bytes:
+    whichever concurrent `INSERT ... ON CONFLICT DO NOTHING` wins the row is the only caller
+    that proceeds to start the workflow. `workflow_id` is set once that call succeeds; a row
+    with `workflow_id IS NULL` was rolled back by a failed start (see `Ingestor.ingest`) and its
+    sha256 becomes ingestible again."""
+
+    __tablename__ = "ingested_documents"
+    __table_args__ = (
+        CheckConstraint(f"sha256 ~ '{SHA256_PATTERN}'", name="sha256_is_sha256"),
+        CheckConstraint(
+            "media_type IN ('application/pdf', 'image/png', 'image/jpeg', 'image/tiff')",
+            name="media_type_known",
+        ),
+        CheckConstraint("source IN ('watch', 'upload')", name="source_known"),
+        CheckConstraint("size_bytes > 0", name="size_bytes_positive"),
+    )
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(10), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    workflow_id: Mapped[str | None] = mapped_column(String(150))
+
+
+# ---------------------------------------------------------------------------------------
 # Invoices and grounded fields
 # ---------------------------------------------------------------------------------------
 
@@ -299,6 +336,7 @@ class Invoice(Base):
     __table_args__ = (
         CheckConstraint(f"id ~ '{SHA256_PATTERN}'", name="id_is_sha256"),
         CheckConstraint(f"document_sha256 ~ '{SHA256_PATTERN}'", name="document_sha256_is_sha256"),
+        CheckConstraint("kind IN ('invoice', 'credit_note')", name="kind_known"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -316,6 +354,8 @@ class Invoice(Base):
     vat_total: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     total: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     iban: Mapped[str | None] = mapped_column(String(34))
+    kind: Mapped[str | None] = mapped_column(String(16))
+    """`apx.common.invoice.InvoiceKind` value (ADR-0012); NULL when unresolved or a legacy row."""
     status: Mapped[DbInvoiceStatus] = mapped_column(
         pg_enum(DbInvoiceStatus, "invoice_status"),
         nullable=False,
@@ -356,6 +396,41 @@ class Field(Base, CreatedAtMixin):
     boxes: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     source: Mapped[FieldSource] = mapped_column(
         pg_enum(FieldSource, "field_source"), nullable=False
+    )
+    model_revision: Mapped[str | None] = mapped_column(String(100))
+    """Pinned model revision (`apx.llm.interfaces.ModelSpec.revision`) that produced this
+    value, when known; `None` for rows written before this was tracked or for `source ==
+    FieldSource.HUMAN` rows (a reviewer, not a model). Lets a later correction record which
+    model/revision it is correcting (PRD §10 M10.1)."""
+
+
+# ---------------------------------------------------------------------------------------
+# Fraud flags (M8.3)
+# ---------------------------------------------------------------------------------------
+
+
+class FraudFlag(Base):
+    """One `apx.fraud.interfaces.FraudFlag` raised on an invoice, kept so review can show its
+    plain-language explanation (PRD §10 M8.3). Created by `0006_fraud_flags`."""
+
+    __tablename__ = "fraud_flags"
+    __table_args__ = (
+        CheckConstraint("severity IN ('low', 'medium', 'high')", name="severity_known"),
+        CheckConstraint("score >= 0 AND score <= 1", name="score_in_unit_interval"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    invoice_id: Mapped[str] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rule_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    typology: Mapped[str] = mapped_column(String(40), nullable=False)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    score: Mapped[float] = mapped_column(nullable=False)
+    evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
 
@@ -535,6 +610,13 @@ class IdempotencyRecord(Base):
 
 
 class Label(Base, CreatedAtMixin):
+    """A reviewer's field correction, one row per fix (PRD §10 M10.1). `created_at`
+    (`CreatedAtMixin`) is the correction timestamp and `labeled_by` the reviewer; the
+    `previous_*` columns snapshot the field value being corrected (before/after value,
+    grounding box and the model/revision that produced it) so the row alone is a complete,
+    auditable record of the fix, independent of whether the original `fields` row is ever
+    superseded again later."""
+
     __tablename__ = "labels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -544,6 +626,19 @@ class Label(Base, CreatedAtMixin):
     field_name: Mapped[str | None] = mapped_column(String(100))
     corrected_value: Mapped[str | None] = mapped_column(Text)
     corrected_normalized: Mapped[str | None] = mapped_column(Text)
+    previous_value: Mapped[str | None] = mapped_column(Text)
+    """The field's value immediately before this correction (`None` when there was no prior
+    value, e.g. a field the automated pipeline never produced)."""
+    previous_boxes: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    """Grounding box(es) of the value being corrected, copied from `fields.boxes` (I1: boxes
+    always come from parse words, never invented here)."""
+    previous_source: Mapped[FieldSource | None] = mapped_column(
+        pg_enum(FieldSource, "field_source")
+    )
+    """Which extractor/arbiter/human produced the value being corrected."""
+    previous_model_revision: Mapped[str | None] = mapped_column(String(100))
+    """The model/revision that produced the value being corrected, copied from
+    `fields.model_revision`."""
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     split: Mapped[LabelSplit | None] = mapped_column(pg_enum(LabelSplit, "label_split"))
     labeled_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

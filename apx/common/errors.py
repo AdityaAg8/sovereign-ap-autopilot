@@ -32,8 +32,34 @@ class ParseError(ApxError):
     """Parser failed to produce words and boxes."""
 
 
+class ParsedArtifactMissingError(ParseError):
+    """A stored parse (document JSON or a page PNG) named by a `ParsedDocumentRef` is not on
+    disk. Recoverable: the consuming activity re-parses and checks the result against the ref."""
+
+
+class ParsedArtifactIntegrityError(ParseError):
+    """A stored parse does not match its `ParsedDocumentRef` (corrupt or tampered file, or a
+    re-parse that produced different content). Never repaired silently."""
+
+
 class ModelServingError(ApxError):
     """llama-swap/llama-server or a local transformers model failed or timed out."""
+
+
+class ModelBusyError(ModelServingError):
+    """llama-swap answered 429 (its per-model request limit) or 503 (model still loading) and
+    stayed busy through the client's bounded backoff. Transient: Temporal retries it."""
+
+
+class ModelContextError(ModelServingError):
+    """llama-server refused a prompt that does not fit its per-slot context (HTTP 400/500
+    "exceed(s) the context size"). Deterministic for the same prompt and serving config, so it
+    is never retried; the fix is the serving budget (ADR-0013), not another attempt."""
+
+
+class ModelNotAllowedError(ConfigError):
+    """A request named a model alias outside the runtime allowlist (offline-only models are never
+    reachable from the runtime pipeline, PRD §4)."""
 
 
 class VramBudgetError(ModelServingError):

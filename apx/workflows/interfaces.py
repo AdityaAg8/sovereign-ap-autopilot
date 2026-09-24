@@ -12,7 +12,7 @@ from apx.common.types import Frozen, IdempotencyKey, InvoiceId, Route, Sha256Hex
 from apx.einvoice.interfaces import EInvoiceDocument
 from apx.extract.interfaces import ExtractionResult
 from apx.fraud.interfaces import FraudReport
-from apx.parse.interfaces import ParsedDocument
+from apx.parse.interfaces import ParsedDocumentRef
 from apx.policy.interfaces import RoutingDecision
 from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import TrustDecision
@@ -54,6 +54,9 @@ class InvoiceWorkflowInput(Frozen):
     invoice_id: InvoiceId
     document_sha256: Sha256Hex
     filename: str
+    llm_task_queue: str | None = None
+    """Task queue for the llama-swap activities (extract, review_note), served by a worker with
+    bounded concurrency (ADR-0013). None runs them on the workflow's own queue (tests)."""
 
 
 class InvoiceWorkflowState(Frozen):
@@ -64,19 +67,21 @@ class InvoiceWorkflowState(Frozen):
 
 
 class InvoiceActivities(Protocol):
-    """Activities; each appends to the audit log (I4). Side-effecting ones take a key."""
+    """Activities; each appends to the audit log (I4). Side-effecting ones take a key. Every
+    argument and result must be JSON-safe and small (Temporal payloads): the parse travels as a
+    `ParsedDocumentRef` into `apx.parse.store`, never as the document with its page PNGs."""
 
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport: ...
-    async def parse(self, inp: InvoiceWorkflowInput) -> ParsedDocument: ...
-    async def extract(self, document: ParsedDocument) -> ExtractionResult: ...
+    async def parse(self, inp: InvoiceWorkflowInput) -> ParsedDocumentRef: ...
+    async def extract(self, parsed: ParsedDocumentRef) -> ExtractionResult: ...
     async def trust_gate(
-        self, result: ExtractionResult, document: ParsedDocument
+        self, result: ExtractionResult, parsed: ParsedDocumentRef
     ) -> TrustDecision: ...
     async def build_invoice(
         self, result: ExtractionResult, inp: InvoiceWorkflowInput
     ) -> Invoice: ...
     async def validate(self, invoice: Invoice) -> ValidationReport: ...
-    async def fraud(self, invoice: Invoice, document: ParsedDocument) -> FraudReport: ...
+    async def fraud(self, invoice: Invoice, parsed: ParsedDocumentRef) -> FraudReport: ...
     async def route(
         self,
         invoice: Invoice,
@@ -85,6 +90,7 @@ class InvoiceActivities(Protocol):
         fraud: FraudReport,
         scan: ScanReport,
     ) -> RoutingDecision: ...
+    async def review_note(self, invoice: Invoice, routing: RoutingDecision) -> bool: ...
     async def build_einvoice(self, invoice: Invoice) -> EInvoiceDocument: ...
     async def send_to_asp(self, key: IdempotencyKey, document: EInvoiceDocument) -> AspReceipt: ...
     async def archive(self, key: IdempotencyKey, document: EInvoiceDocument) -> ArchiveRecord: ...

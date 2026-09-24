@@ -7,6 +7,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
+from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -28,10 +29,24 @@ def get_database_url() -> str:
     Raises `apx.common.errors.ConfigError` if the URL is set but does not use the `asyncpg`
     driver (psycopg is blocked on this host; the async engine requires an async driver).
     """
-    url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    url = os.environ.get("DATABASE_URL") or _compose_url()
     if not url.startswith("postgresql+asyncpg://"):
         raise ConfigError(f"DATABASE_URL must use the postgresql+asyncpg:// driver, got: {url!r}")
     return url
+
+
+def _compose_url() -> str:
+    """The Compose `postgres` service, from the same `POSTGRES_USER`/`POSTGRES_PASSWORD`/
+    `POSTGRES_DB` overrides Compose reads from `.env`, so every process sees the database Compose
+    actually created. `POSTGRES_HOST` is `postgres` inside the `app` network; on the host it
+    defaults to localhost (the gateway's passthrough)."""
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        return DEFAULT_DATABASE_URL
+    user = quote(os.environ.get("POSTGRES_USER") or "apx", safe="")
+    password = quote(os.environ["POSTGRES_PASSWORD"], safe="")
+    database = quote(os.environ.get("POSTGRES_DB") or "apx", safe="")
+    host = os.environ.get("POSTGRES_HOST") or "localhost"
+    return f"postgresql+asyncpg://{user}:{password}@{host}:5432/{database}"
 
 
 @lru_cache(maxsize=1)

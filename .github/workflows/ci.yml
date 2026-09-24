@@ -39,7 +39,10 @@ jobs:
       - name: mypy --strict
         run: uv run mypy
 
-      - name: pytest (unit; default selection excludes gpu, integration, artifacts, external)
+      - name: Install Playwright Chromium headless shell (factory renders invoices to PDF)
+        run: uv run playwright install --with-deps --only-shell chromium
+
+      - name: pytest (unit; default selection excludes gpu, integration, artifacts, external, perf)
         run: uv run pytest
 
       - name: fetch pinned PINT AE/SchXslt bundles

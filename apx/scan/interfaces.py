@@ -3,7 +3,7 @@ PDF metadata/attachments/JavaScript, and the ModernBERT injection classifier (PR
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from typing import Annotated, Protocol
 
@@ -41,7 +41,12 @@ class ScanReport(Frozen):
 
     document_sha256: Sha256Hex
     flags: tuple[ScanFlag, ...]
+    """At most `apx.scan.cap.MAX_FLAGS_PER_KIND` per kind, always including each kind's
+    highest-scoring flags, so P4 thresholds see the same maxima as the uncapped scan."""
     injection_score: Score
+    suppressed: Mapping[ScanFlagKind, int] = Field(default_factory=dict)
+    """Flags dropped per kind by the cap (absent kind = none dropped). Keeps the report small
+    enough for a Temporal payload when a PDF carries thousands of hidden characters."""
 
 
 class HiddenContentDetector(Protocol):

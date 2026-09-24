@@ -71,8 +71,13 @@ class InvoiceHistory(Protocol):
 
 
 class FraudRule(Protocol):
-    rule_id: str
-    typology: FraudTypology
+    @property
+    def rule_id(self) -> str: ...
+
+    @property
+    def typology(self) -> FraudTypology:
+        """Read-only, so frozen-dataclass rules satisfy the protocol."""
+        ...
 
     def evaluate(self, invoice: Invoice, history: InvoiceHistory) -> list[FraudFlag]: ...
 

@@ -1,5 +1,6 @@
-"""Interfaces for parsing: pages, words, lines, tables and reading order with boxes. Parse words
-are the sole source of field boxes (PRD §3, §6.2 I1)."""
+"""Interfaces for parsing: pages, words, lines, tables and reading order with boxes, plus the
+small `ParsedDocumentRef` handle that stands in for a stored parse across Temporal activity
+boundaries. Parse words are the sole source of field boxes (PRD §3, §6.2 I1)."""
 
 from __future__ import annotations
 
@@ -56,6 +57,31 @@ class ParsedDocument(Frozen):
     """Line ids in reading order (RTL-aware for Arabic)."""
     languages: frozenset[Language]
     parser_version: str
+
+
+class ParsedDocumentRef(Frozen):
+    """JSON-safe, constant-size handle to a `ParsedDocument` held in a `ParsedDocumentStore`.
+    Workflow activities exchange this instead of the document itself: page PNGs are raw bytes
+    and a multi-page parse exceeds Temporal's ~2 MB payload limit."""
+
+    document_sha256: Sha256Hex
+    content_sha256: Sha256Hex
+    """Digest of the stored parse (words, boxes and every page PNG's sha256); the store key."""
+    parser_version: str
+    page_count: Annotated[int, Field(ge=0)]
+
+
+class ParsedDocumentStore(Protocol):
+    """Content-addressed local store of parses, reachable by every worker process."""
+
+    def put(self, document: ParsedDocument) -> ParsedDocumentRef:
+        """Store `document` (idempotent: the same parse always yields the same ref)."""
+        ...
+
+    def load(self, ref: ParsedDocumentRef) -> ParsedDocument:
+        """Raises ParsedArtifactMissingError when any part is absent, and
+        ParsedArtifactIntegrityError when what is stored does not match `ref`."""
+        ...
 
 
 class DocumentParser(Protocol):

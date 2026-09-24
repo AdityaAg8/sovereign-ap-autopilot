@@ -1,3 +1,7 @@
 .next
 node_modules
 pnpm-lock.yaml
+
+# Vendored pdfjs-dist build output (see pdf-canvas.tsx's provenance comment) — pre-minified and
+# binary assets, not source to format.
+public/pdfjs

@@ -2565,6 +2565,7 @@ dev = [
     { name = "pyyaml" },
     { name = "reportlab" },
     { name = "ruff" },
+    { name = "tokenizers" },
     { name = "types-pyyaml" },
 ]
 
@@ -2605,7 +2606,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "agentdojo", specifier = ">=0.1.35" },
+    { name = "agentdojo", specifier = "==0.1.35" },
     { name = "datasets", specifier = ">=5.0.1" },
     { name = "docile-benchmark", specifier = ">=0.3.5" },
     { name = "huggingface-hub", specifier = ">=0.26" },
@@ -2618,6 +2619,7 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "reportlab", specifier = ">=5.0.1" },
     { name = "ruff", specifier = ">=0.8" },
+    { name = "tokenizers", specifier = ">=0.23" },
     { name = "types-pyyaml", specifier = ">=6.0" },
 ]
 

@@ -1,0 +1,105 @@
+{# "Ledger Classic" family CSS shared by en_/ar_/bilingual_ledger_classic. Deep-navy ink,
+   hand-ledger double rules and a brass accent, evoking a traditional accounting register. Uses
+   CSS logical properties (start/end, inline-start) throughout so the same rules render correctly
+   in both `dir="ltr"` and `dir="rtl"` without a mirrored copy (PRD §10 M2.2). #}
+<style>
+:root {
+  --ink: #1B2A4A;
+  --ink-soft: #3E4E72;
+  --line: #C7CCD8;
+  --accent: #9A7B2F;
+  --accent-soft: #F4EFE2;
+}
+body {
+  font-family: "Noto Sans", "Noto Naskh Arabic", sans-serif;
+  color: var(--ink);
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+[lang="ar"], .ar { font-family: "Noto Naskh Arabic", "Noto Sans", sans-serif; }
+.sheet { max-width: 182mm; margin: 0 auto; padding-block: 6mm; }
+.letterhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10mm;
+  border-block-start: 3px double var(--ink);
+  border-block-end: 1px solid var(--line);
+  padding-block: 6mm;
+}
+.supplier-name { font-size: 13pt; font-weight: 700; }
+.supplier-name.ar { font-size: 14pt; }
+.supplier-sub { color: var(--ink-soft); font-size: 9pt; margin-block-start: 1mm; }
+.invoice-meta { text-align: end; min-width: 62mm; }
+.doc-title { font-weight: 700; letter-spacing: .16em; font-size: 13pt; }
+.doc-title.ar { letter-spacing: normal; }
+.ledger-tab {
+  display: inline-block;
+  margin-block-start: 2mm;
+  padding: 1mm 3mm;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 10pt;
+}
+table.meta { margin-block-start: 3mm; font-size: 9pt; width: 100%; }
+table.meta th { font-weight: 400; color: var(--ink-soft); text-align: start; padding-block: .8mm; }
+table.meta td { text-align: end; padding-block: .8mm; }
+.parties { display: flex; justify-content: space-between; gap: 10mm; margin-block-start: 6mm; }
+.party-label {
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-block-end: 1mm;
+}
+.party-label.ar { letter-spacing: normal; }
+.party-name { font-weight: 700; }
+.party-line { color: var(--ink-soft); font-size: 9.5pt; }
+.tax-case-note {
+  border-inline-start: 3px solid var(--accent);
+  padding-inline-start: 4mm;
+  max-width: 78mm;
+  background: var(--accent-soft);
+  padding: 3mm 4mm;
+}
+.tax-case-label {
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: 8.5pt;
+}
+.tax-case-label.ar { text-transform: none; letter-spacing: normal; }
+.tax-case-note p { margin: 1.5mm 0 0; font-size: 8.5pt; color: var(--ink-soft); }
+table.items { margin-block-start: 6mm; font-size: 9pt; }
+table.items th {
+  background: var(--ink);
+  color: #fff;
+  text-align: start;
+  padding: 2mm;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+table.items th.num, table.items td.num { text-align: end; }
+table.items td { padding: 2mm; border-block-end: 1px solid var(--line); vertical-align: top; }
+.totals { margin-block-start: 4mm; display: flex; justify-content: flex-end; }
+.totals table { width: 78mm; }
+.totals th { text-align: start; font-weight: 400; color: var(--ink-soft); padding-block: 1mm; }
+.totals td { text-align: end; padding-block: 1mm; }
+.totals .grand th, .totals .grand td {
+  border-block-start: 2px solid var(--ink);
+  font-weight: 700;
+  color: var(--ink);
+  padding-block-start: 2mm;
+  font-size: 11pt;
+}
+footer {
+  margin-block-start: 8mm;
+  border-block-start: 1px solid var(--line);
+  padding-block-start: 3mm;
+  font-size: 8.5pt;
+  color: var(--ink-soft);
+}
+</style>

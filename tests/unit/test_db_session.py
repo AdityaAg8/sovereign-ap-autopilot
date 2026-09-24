@@ -47,7 +47,22 @@ def _patch_session_factory(
 
 def test_get_database_url_default_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     assert session_module.get_database_url() == session_module.DEFAULT_DATABASE_URL
+
+
+def test_get_database_url_follows_compose_postgres_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_USER", "ap")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "p@ss/w:rd")
+    monkeypatch.delenv("POSTGRES_DB", raising=False)
+    monkeypatch.setenv("POSTGRES_HOST", "postgres")
+    assert (
+        session_module.get_database_url()
+        == "postgresql+asyncpg://ap:p%40ss%2Fw%3Ard@postgres:5432/apx"
+    )
 
 
 def test_get_database_url_honours_a_valid_env_var(monkeypatch: pytest.MonkeyPatch) -> None:

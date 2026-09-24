@@ -1,0 +1,17 @@
+# Keeps the apx image build context small and secret-free (infra/docker/apx/Dockerfile).
+.git
+.env
+.venv
+.claude
+data
+models
+logs
+reports
+web
+evals
+ml
+attacks
+tests
+**/__pycache__
+**/*.gguf
+**/*.safetensors

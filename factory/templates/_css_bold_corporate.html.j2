@@ -1,0 +1,70 @@
+{# "Bold Corporate" family CSS shared by en_/ar_/bilingual_bold_corporate. A full-width charcoal
+   header band in reverse type, a gold accent used only for the tax-case badge and totals (so the
+   one strong color carries real meaning), and heavy Kufi Arabic headings. Logical properties
+   keep one stylesheet correct in both directions (PRD §10 M2.2). #}
+<style>
+:root {
+  --dark: #1A1A1A;
+  --accent: #C9972B;
+  --on-dark: #F5F1E8;
+  --ink: #1A1A1A;
+  --muted: #6B6459;
+  --zebra: #F7F4EC;
+  --line: #E3DDCE;
+}
+body { font-family: "Noto Sans", "Noto Kufi Arabic", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; }
+[lang="ar"], .ar { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 700; }
+{# M2.4 label self-check fix: must equal the printable content width (A4 210mm minus the two
+   14mm `@page` margins `factory/render.py` prints with) so this layout's on-screen box -- what
+   `factory.render`'s `getClientRects()` measures for every `data-field` label -- lines up with
+   where Chromium's print engine actually places it in the PDF; 190mm made every label on this
+   layout land ~4mm left of and ~2mm above its true PDF position (PRD §10 M2.4). #}
+.sheet { max-width: 182mm; margin: 0 auto; }
+.band {
+  background: var(--dark);
+  color: var(--on-dark);
+  padding: 8mm 10mm;
+  border-block-end: 4px solid var(--accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10mm;
+}
+.supplier-name { font-size: 15pt; font-weight: 700; }
+.supplier-sub { color: #C9C3B4; font-size: 8.5pt; margin-block-start: 2mm; }
+.invoice-meta { text-align: end; }
+.num-huge { font-size: 22pt; font-weight: 700; color: var(--accent); line-height: 1; }
+.doc-title { text-transform: uppercase; letter-spacing: .22em; font-size: 8.5pt; color: #C9C3B4; }
+.doc-title.ar { text-transform: none; letter-spacing: normal; }
+.content { padding: 8mm 10mm; }
+table.meta { margin-block-start: 2mm; font-size: 8.5pt; }
+table.meta th { font-weight: 400; color: #C9C3B4; text-align: start; padding: .6mm 0; padding-inline-end: 5mm; }
+table.meta td { text-align: end; color: var(--on-dark); padding: .6mm 0; }
+.parties { display: flex; justify-content: space-between; gap: 10mm; margin-block: 6mm; }
+.party-label { font-size: 8pt; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.party-label.ar { text-transform: none; letter-spacing: normal; }
+.party-name { font-weight: 700; margin-block-start: 1mm; }
+.party-line { color: var(--muted); font-size: 9pt; }
+.tax-case-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--dark);
+  font-weight: 700;
+  font-size: 9pt;
+  letter-spacing: .04em;
+  padding: 1.6mm 4mm;
+}
+.tax-case-note p { color: var(--muted); font-size: 8.5pt; max-width: 76mm; margin: 2mm 0 0; }
+table.items { margin-block-start: 4mm; font-size: 9pt; }
+table.items th { background: var(--dark); color: var(--on-dark); text-align: start; padding: 2.4mm; font-weight: 700; }
+table.items th.num, table.items td.num { text-align: end; }
+table.items td { padding: 2.4mm; border-block-end: 1px solid var(--line); vertical-align: top; }
+table.items tbody tr:nth-child(even) { background: var(--zebra); }
+.totals { margin-block-start: 5mm; display: flex; justify-content: flex-end; }
+.totals table { width: 78mm; }
+.totals th { text-align: start; font-weight: 400; color: var(--muted); padding-block: 1mm; }
+.totals td { text-align: end; padding-block: 1mm; }
+.totals .grand { background: var(--dark); }
+.totals .grand th, .totals .grand td { color: var(--accent); font-weight: 700; font-size: 12pt; padding: 2mm 3mm; }
+footer { margin-block-start: 8mm; padding: 4mm 10mm; background: var(--zebra); font-size: 8.5pt; color: var(--muted); }
+</style>

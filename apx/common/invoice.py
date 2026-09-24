@@ -20,6 +20,14 @@ class VatCategory(StrEnum):
     OUT_OF_SCOPE = "O"
 
 
+class InvoiceKind(StrEnum):
+    """What the document says it is (BT-3 as titled, ADR-0012). Amounts are always stored as
+    printed, never negated: a credit note is identified by this kind, not by a negative total."""
+
+    INVOICE = "invoice"
+    CREDIT_NOTE = "credit_note"
+
+
 class Party(Frozen):
     """Supplier or buyer."""
 
@@ -36,8 +44,10 @@ class InvoiceLine(Frozen):
     quantity: Decimal
     unit_price: Money
     net_amount: Money
-    vat_category: VatCategory
-    vat_rate: Decimal
+    vat_category: VatCategory | None
+    """None when the extractors did not agree on it (ADR-0012 §1.4); the validator flags it."""
+    vat_rate: Decimal | None
+    """None when the rate is missing or unreadable; the validator flags it."""
     po_line_ref: str | None = None
 
 
@@ -60,3 +70,6 @@ class Invoice(Frozen):
     vat_total: Money
     total: Money
     iban: str | None
+    kind: InvoiceKind | None = None
+    """None when the extractors did not agree on the type (ADR-0012 §1.4); the validator flags
+    it and the e-invoice type code refuses it."""

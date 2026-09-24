@@ -1,6 +1,6 @@
 """CLI logic for `uv run python -m evals.datasets fetch [--set NAME]`: runs the DocILE,
-FATURA, ExtractBench and AgentDojo fetchers and (re)writes data/manifest.json, one dataset
-entry per set, present or deferred (PRD §5 data table, §10 M1.1).
+FATURA, ExtractBench, AgentDojo and prompt-injections fetchers and (re)writes
+data/manifest.json, one dataset entry per set, present or deferred (PRD §5 data table, §10 M1.1).
 """
 
 from __future__ import annotations
@@ -12,7 +12,13 @@ from pathlib import Path
 
 import structlog
 
-from evals.datasets import agentdojo_fetcher, docile_fetcher, extractbench_fetcher, fatura_fetcher
+from evals.datasets import (
+    agentdojo_fetcher,
+    docile_fetcher,
+    extractbench_fetcher,
+    fatura_fetcher,
+    prompt_injections_fetcher,
+)
 from evals.datasets.manifest import DatasetEntry, Manifest, load_manifest, save_manifest
 
 log = structlog.get_logger(__name__)
@@ -27,6 +33,7 @@ FETCHERS: dict[str, Fetcher] = {
     "fatura": fatura_fetcher.fetch,
     "extractbench": extractbench_fetcher.fetch,
     "agentdojo": agentdojo_fetcher.fetch,
+    "prompt_injections": prompt_injections_fetcher.fetch,
 }
 
 

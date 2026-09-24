@@ -1,5 +1,5 @@
 """Alembic async migration runner for the Postgres schema in `apx/db/models.py`. Resolves the
-connection URL from `DATABASE_URL` (falling back to `alembic.ini`'s `sqlalchemy.url`) and runs
+connection URL like the app does (`apx.db.session.get_database_url`, else `alembic.ini`) and runs
 migrations through an `asyncpg` engine so the same driver is used in tests and production
 (PRD §7 db/migrations, §10 M5.1)."""
 
@@ -16,15 +16,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from apx.db.base import Base
 from apx.db.models import *  # noqa: F403 -- registers every table on Base.metadata
+from apx.db.session import get_database_url
 
 # Alembic Config object; provides access to values in alembic.ini.
 config = context.config
 
-# `DATABASE_URL` (set by tests and Compose) wins over the static `alembic.ini` value so the
-# same migrations run against a throwaway test container without editing the ini file.
-database_url = os.environ.get("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# The app's own resolution (`DATABASE_URL`, else the Compose `POSTGRES_*` settings) wins over
+# the static `alembic.ini` value, so migrations reach the same database the app does -- a
+# throwaway test container, the host via the gateway, or `postgres` inside the Compose network.
+if os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_PASSWORD"):
+    config.set_main_option("sqlalchemy.url", get_database_url())
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

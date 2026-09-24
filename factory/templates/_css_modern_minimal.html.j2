@@ -1,0 +1,67 @@
+{# "Modern Minimal" family CSS shared by en_/ar_/bilingual_modern_minimal. White canvas, a
+   single teal accent, generous whitespace and a signature accent rule running down the page
+   margin. Arabic headings use the geometric Noto Kufi Arabic to match the minimal, modern
+   register. Logical properties keep one stylesheet correct in both directions (PRD §10 M2.2). #}
+<style>
+:root {
+  --ink: #15181C;
+  --muted: #6B7280;
+  --accent: #0E7C7B;
+  --accent-soft: #E4F5F4;
+  --line: #E7E9EC;
+}
+body { font-family: "Noto Sans", "Noto Kufi Arabic", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.6; }
+[lang="ar"], .ar { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
+.sheet {
+  max-width: 182mm;
+  margin: 0 auto;
+  padding-block: 8mm;
+  border-inline-start: 3px solid var(--accent);
+  padding-inline-start: 10mm;
+}
+.eyebrow { text-transform: uppercase; letter-spacing: .18em; font-size: 8pt; color: var(--accent); font-weight: 700; }
+.eyebrow.ar { text-transform: none; letter-spacing: normal; }
+header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10mm; margin-block-end: 10mm; }
+.supplier-name { font-size: 16pt; font-weight: 700; margin-block-start: 1mm; }
+.supplier-sub { color: var(--muted); font-size: 9pt; margin-block-start: 2mm; }
+.invoice-meta { text-align: end; }
+.invoice-meta .num-big { font-size: 14pt; font-weight: 700; color: var(--accent); }
+table.meta { margin-block-start: 3mm; font-size: 9pt; }
+table.meta th { font-weight: 400; color: var(--muted); text-align: start; padding: .8mm 0; padding-inline-end: 6mm; }
+table.meta td { text-align: end; padding: .8mm 0; }
+.parties { display: flex; justify-content: space-between; gap: 10mm; margin-block: 8mm; padding-block: 6mm; border-block: 1px solid var(--line); }
+.party-name { font-weight: 700; margin-block-start: 1mm; }
+.party-line { color: var(--muted); font-size: 9pt; }
+.tax-case-pill {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 8.5pt;
+  padding: 1.2mm 3mm;
+  border-radius: 100px;
+  margin-block-end: 2mm;
+}
+.tax-case-note p { color: var(--muted); font-size: 8.5pt; max-width: 76mm; margin: 0; }
+table.items { margin-block-start: 4mm; font-size: 9pt; }
+table.items th {
+  text-align: start;
+  padding-block: 2mm;
+  border-block-end: 2px solid var(--accent);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+table.items th.ar { text-transform: none; letter-spacing: normal; }
+table.items th.num, table.items td.num { text-align: end; }
+table.items td { padding-block: 2.4mm; border-block-end: 1px solid var(--line); vertical-align: top; }
+.totals { margin-block-start: 6mm; display: flex; justify-content: flex-end; }
+.totals table { width: 78mm; }
+.totals th { text-align: start; font-weight: 400; color: var(--muted); padding-block: 1mm; }
+.totals td { text-align: end; padding-block: 1mm; }
+.totals .grand th { color: var(--ink); font-weight: 700; }
+.totals .grand td { color: var(--accent); font-weight: 700; font-size: 13pt; }
+footer { margin-block-start: 10mm; color: var(--muted); font-size: 8.5pt; }
+</style>

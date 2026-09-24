@@ -14,6 +14,8 @@
 # a 120s ceiling intermittently failed with "health check timed out after 2m0s".
 healthCheckTimeout: 300
 logLevel: info
+# Upstream llama-server output too (slot counts, context errors) -- the evidence ADR-0013 used.
+logToStdout: both
 
 macros:
   # Flags verified against `llama-server --help` in the pinned image (infra/compose.yaml's
@@ -35,11 +37,21 @@ models:
   extractor-a:
     name: "Extractor A (Qwen3.5-9B)"
     description: "PRD §4: extraction, exception agent and ops chat (extract/agent stages)."
+    # 2 slots of 12288 tokens (3 crashed under load). Prompt caching is off: Qwen3.5 is a hybrid
+    # recurrent model and partial prefix reuse across slots killed llama-server; every invoice
+    # prompt is unique, so the cache bought nothing anyway.
+    # ADR-0013 (measured 2026-09-23, 5-page invoices): prompt max 7226 tokens + completion max
+    # 2712 = 9938 < 12288 per slot. Resident ~6.35 GB alone (weights dominate: q8_0 KV, image
+    # token caps and -ub 256 each moved the total by < 0.2 GB, within desktop noise).
+    # --parallel must equal WORKER_EXTRACTOR_A_SLOTS (apx.workflows.main).
     cmd: |
       ${llama-server}
       --model /models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf
       --mmproj /models/unsloth/Qwen3.5-9B-GGUF/mmproj-F16.gguf
-      --ctx-size 8192
+      --ctx-size 24576
+      --parallel 2
+      --no-cache-prompt
+      --cache-ram 0
     aliases: ["exception-agent", "ops-chat"]
     checkEndpoint: /health
     ttl: 600
@@ -47,11 +59,17 @@ models:
   extractor-b:
     name: "Extractor B (Qwen3.5-4B + LoRA)"
     description: "PRD §4: extraction stage, our LoRA lands in M3.2 as a --lora flag."
+    # ADR-0013: an explicit --parallel is required. Unset, this llama.cpp build picks 4 slots
+    # sharing ONE unified 8192-token cache (n_slots=4, kv_unified=true), so concurrent 3-page
+    # prompts overflowed it ("Context size has been exceeded", "failed to process mtmd chunk").
+    # Now 2 slots of 8192 each: prompt max 3105 (3 images at SERVING_RUNG L0) + completion max
+    # 2227 = 5332. Resident ~4.1 GB alone. --parallel must equal WORKER_EXTRACTOR_B_SLOTS.
     cmd: |
       ${llama-server}
       --model /models/unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf
       --mmproj /models/unsloth/Qwen3.5-4B-GGUF/mmproj-F16.gguf
-      --ctx-size 8192
+      --ctx-size 16384
+      --parallel 2
     checkEndpoint: /health
     ttl: 600
 
@@ -66,19 +84,40 @@ models:
     checkEndpoint: /health
     ttl: 600
 
-# Groups map 1:1 onto pipeline stages (PRD §3): extract needs A and B loaded together
-# (~10 GB, under the 11.5 GB budget); arbitrate only runs after extract disagrees, so it
-# evicts the extract group rather than sharing the GPU with it.
+  redteam-uncensored:
+    name: "Red-team agent (Qwen3.5-9B uncensored)"
+    description: "PRD §4: offline only (M6.3/M9.5 stock-vs-uncensored agent comparison), never in the runtime pipeline."
+    cmd: |
+      ${llama-server}
+      --model /models/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+      --ctx-size 12288
+      --no-cache-prompt
+      --cache-ram 0
+    checkEndpoint: /health
+    ttl: 600
+
+# Groups map onto pipeline stages (PRD §3). ADR-0013: A and B together measured 10.3-10.6 GB
+# resident (peak 11.74-11.84 GB whole-card with a 1.1-1.4 GB desktop), which cannot hold the
+# 11.8 GB budget once the desktop takes its usual ~2.3 GB. So the extract group swaps: only one
+# of A/B is ever loaded (peak = A ~6.6 GB + desktop), and the worker's GpuStageScheduler batches
+# calls per model so llama-swap swaps per batch, not per request. Arbitrate evicts it likewise.
+# concurrencyLimit stays at llama-swap's default (10, then an immediate 429): the worker keeps
+# its own in-flight calls at the slot counts (apx.llm.slots), so 429 now only means a foreign
+# caller (ops chat, an eval) is saturating a model, and the client backs off on it.
 routing:
   router:
     use: group
     settings:
       groups:
         extract:
-          swap: false
+          swap: true
           exclusive: true
           members: [extractor-a, extractor-b]
         arbitrate:
           swap: true
           exclusive: true
           members: [arbiter]
+        redteam:
+          swap: true
+          exclusive: true
+          members: [redteam-uncensored]

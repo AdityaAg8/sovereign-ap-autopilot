@@ -7,9 +7,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from apx.common.invoice import Invoice, InvoiceLine, Language, Party, VatCategory
+from apx.common.invoice import Invoice, InvoiceLine, Party, VatCategory
 from apx.common.master import BankAccount, BankDetailChange, User, Vendor
-from apx.common.types import InvoiceId, Money, Role, UserId, VendorId
+from apx.common.types import InvoiceId, Language, Money, Role, UserId, VendorId
 from apx.fraud.interfaces import FraudReport
 from apx.trust.interfaces import TrustDecision
 from apx.validate.interfaces import ValidationReport

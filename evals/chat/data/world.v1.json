@@ -1,0 +1,1991 @@
+{
+ "version": 1,
+ "vendors": [
+  {
+   "vendor_id": "v-acme",
+   "vendor_name": "Acme Supplies LLC",
+   "vendor_trn": "100000000000003",
+   "payee_masked": "****4100",
+   "accounts": [
+    {
+     "masked_iban": "****4100",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": []
+  },
+  {
+   "vendor_id": "v-gulf",
+   "vendor_name": "Gulf Office Trading",
+   "vendor_trn": "100000000000011",
+   "payee_masked": "****4107",
+   "accounts": [
+    {
+     "masked_iban": "****4107",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": []
+  },
+  {
+   "vendor_id": "v-nour",
+   "vendor_name": "Al Nour Stationery",
+   "vendor_trn": "100000000000029",
+   "payee_masked": "****4114",
+   "accounts": [
+    {
+     "masked_iban": "****4114",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": []
+  },
+  {
+   "vendor_id": "v-desert",
+   "vendor_name": "Desert Logistics FZE",
+   "vendor_trn": "100000000000037",
+   "payee_masked": "****4121",
+   "accounts": [
+    {
+     "masked_iban": "****9003",
+     "verified": false,
+     "source": "unverified",
+     "verified_at": null
+    },
+    {
+     "masked_iban": "****4121",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": [
+    {
+     "changed_at": "2025-12-28T10:00:00+00:00",
+     "changed_by": "u-admin",
+     "old_masked_iban": "****4121",
+     "masked_iban": "****9003"
+    }
+   ]
+  },
+  {
+   "vendor_id": "v-falcon",
+   "vendor_name": "Falcon IT Services",
+   "vendor_trn": "100000000000045",
+   "payee_masked": "****4128",
+   "accounts": [
+    {
+     "masked_iban": "****4128",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": []
+  },
+  {
+   "vendor_id": "v-palm",
+   "vendor_name": "Palm Catering",
+   "vendor_trn": "100000000000052",
+   "payee_masked": "****4135",
+   "accounts": [
+    {
+     "masked_iban": "****4135",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": []
+  },
+  {
+   "vendor_id": "v-oasis",
+   "vendor_name": "Oasis Cleaning Co",
+   "vendor_trn": "100000000000060",
+   "payee_masked": "****4142",
+   "accounts": [
+    {
+     "masked_iban": "****4142",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": []
+  },
+  {
+   "vendor_id": "v-zenith",
+   "vendor_name": "Zenith Print House",
+   "vendor_trn": "100000000000078",
+   "payee_masked": "****4149",
+   "accounts": [
+    {
+     "masked_iban": "****9007",
+     "verified": false,
+     "source": "unverified",
+     "verified_at": null
+    },
+    {
+     "masked_iban": "****4149",
+     "verified": true,
+     "source": "admin_callback",
+     "verified_at": "2025-06-01T08:00:00+00:00"
+    }
+   ],
+   "changes": [
+    {
+     "changed_at": "2025-12-28T10:00:00+00:00",
+     "changed_by": "u-admin",
+     "old_masked_iban": "****4149",
+     "masked_iban": "****9007"
+    }
+   ]
+  }
+ ],
+ "invoices": [
+  {
+   "invoice_id": "inv-0001",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-acme",
+   "vendor_name": "Acme Supplies LLC",
+   "invoice_number_raw": "INV-1001",
+   "issue_date": "2026-01-01",
+   "due_date": "2026-02-01",
+   "po_number_raw": "PO-7001",
+   "currency": "AED",
+   "subtotal": "2173.00",
+   "vat_total": "108.65",
+   "total": "2281.65",
+   "received_at": "2026-01-01T09:00:00+00:00",
+   "payee_masked": "****4100",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Acme Supplies LLC",
+     "normalized_value": "Acme Supplies LLC",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000003",
+     "normalized_value": "100000000000003",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [
+    {
+     "id": "prop-0001",
+     "kind": "approve_payment",
+     "status": "pending",
+     "created_by": "chat:u-approver",
+     "created_at": "2026-01-01T11:00:00+00:00"
+    }
+   ],
+   "reasons_json": [
+    {
+     "rule": "fraud_score",
+     "route": "review",
+     "message": "The fraud model scored this invoice above the review threshold."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0002",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-gulf",
+   "vendor_name": "Gulf Office Trading",
+   "invoice_number_raw": "INV-1002",
+   "issue_date": "2026-01-02",
+   "due_date": "2026-02-02",
+   "po_number_raw": "PO-7002",
+   "currency": "AED",
+   "subtotal": "3546.00",
+   "vat_total": "177.30",
+   "total": "3723.30",
+   "received_at": "2026-01-02T09:00:00+00:00",
+   "payee_masked": "****4107",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Gulf Office Trading",
+     "normalized_value": "Gulf Office Trading",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000011",
+     "normalized_value": "100000000000011",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0003",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-nour",
+   "vendor_name": "Al Nour Stationery",
+   "invoice_number_raw": "INV-1003",
+   "issue_date": "2026-01-03",
+   "due_date": "2026-02-03",
+   "po_number_raw": "PO-7003",
+   "currency": "AED",
+   "subtotal": "4919.00",
+   "vat_total": "245.95",
+   "total": "5164.95",
+   "received_at": "2026-01-03T09:00:00+00:00",
+   "payee_masked": "****4114",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Al Nour Stationery",
+     "normalized_value": "Al Nour Stationery",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000029",
+     "normalized_value": "100000000000029",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "bank_change",
+     "route": "block",
+     "message": "The vendor's bank details changed shortly before this invoice."
+    },
+    {
+     "rule": "duplicate_suspected",
+     "route": "block",
+     "message": "A near-identical invoice from this vendor was already received."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0004",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-desert",
+   "vendor_name": "Desert Logistics FZE",
+   "invoice_number_raw": "INV-1004",
+   "issue_date": "2026-01-04",
+   "due_date": "2026-02-04",
+   "po_number_raw": "PO-7004",
+   "currency": "AED",
+   "subtotal": "6292.00",
+   "vat_total": "314.60",
+   "total": "6606.60",
+   "received_at": "2026-01-04T09:00:00+00:00",
+   "payee_masked": "****4121",
+   "document_iban_matches_payee": false,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Desert Logistics FZE",
+     "normalized_value": "Desert Logistics FZE",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000037",
+     "normalized_value": "100000000000037",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "trn_invalid",
+     "route": "review",
+     "message": "The supplier TRN failed the checksum."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0005",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-falcon",
+   "vendor_name": "Falcon IT Services",
+   "invoice_number_raw": "INV-1005",
+   "issue_date": "2026-01-05",
+   "due_date": "2026-02-05",
+   "po_number_raw": null,
+   "currency": "AED",
+   "subtotal": "7665.00",
+   "vat_total": "383.25",
+   "total": "8048.25",
+   "received_at": "2026-01-05T09:00:00+00:00",
+   "payee_masked": "****4128",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Falcon IT Services",
+     "normalized_value": "Falcon IT Services",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000045",
+     "normalized_value": "100000000000045",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0006",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-palm",
+   "vendor_name": "Palm Catering",
+   "invoice_number_raw": "INV-1006",
+   "issue_date": "2026-01-06",
+   "due_date": "2026-02-06",
+   "po_number_raw": "PO-7006",
+   "currency": "AED",
+   "subtotal": "9038.00",
+   "vat_total": "451.90",
+   "total": "9489.90",
+   "received_at": "2026-01-06T09:00:00+00:00",
+   "payee_masked": "****4135",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Palm Catering",
+     "normalized_value": "Palm Catering",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000052",
+     "normalized_value": "100000000000052",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "amount_over_limit",
+     "route": "block",
+     "message": "The total is above the auto-approval limit."
+    },
+    {
+     "rule": "price_variance",
+     "route": "block",
+     "message": "Line prices differ from the purchase order by more than 5%."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0007",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-oasis",
+   "vendor_name": "Oasis Cleaning Co",
+   "invoice_number_raw": "INV-1007",
+   "issue_date": "2026-01-07",
+   "due_date": "2026-02-07",
+   "po_number_raw": "PO-7007",
+   "currency": "AED",
+   "subtotal": "1211.00",
+   "vat_total": "60.55",
+   "total": "1271.55",
+   "received_at": "2026-01-07T09:00:00+00:00",
+   "payee_masked": "****4142",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Oasis Cleaning Co",
+     "normalized_value": "Oasis Cleaning Co",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000060",
+     "normalized_value": "100000000000060",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "new_vendor_high_amount",
+     "route": "review",
+     "message": "A new vendor sent a high-value invoice."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0008",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-zenith",
+   "vendor_name": "Zenith Print House",
+   "invoice_number_raw": "INV-1008",
+   "issue_date": "2026-01-08",
+   "due_date": "2026-02-08",
+   "po_number_raw": "PO-7008",
+   "currency": "AED",
+   "subtotal": "2584.00",
+   "vat_total": "129.20",
+   "total": "2713.20",
+   "received_at": "2026-01-08T09:00:00+00:00",
+   "payee_masked": "****4149",
+   "document_iban_matches_payee": false,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Zenith Print House",
+     "normalized_value": "Zenith Print House",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000078",
+     "normalized_value": "100000000000078",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0009",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-acme",
+   "vendor_name": "Acme Supplies LLC",
+   "invoice_number_raw": "INV-1009",
+   "issue_date": "2026-01-09",
+   "due_date": "2026-02-09",
+   "po_number_raw": "PO-7009",
+   "currency": "AED",
+   "subtotal": "3957.00",
+   "vat_total": "197.85",
+   "total": "4154.85",
+   "received_at": "2026-01-09T09:00:00+00:00",
+   "payee_masked": "****4100",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Acme Supplies LLC",
+     "normalized_value": "Acme Supplies LLC",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000003",
+     "normalized_value": "100000000000003",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "fraud_score",
+     "route": "block",
+     "message": "The fraud model scored this invoice above the review threshold."
+    },
+    {
+     "rule": "bank_change",
+     "route": "block",
+     "message": "The vendor's bank details changed shortly before this invoice."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0010",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-gulf",
+   "vendor_name": "Gulf Office Trading",
+   "invoice_number_raw": "INV-1010",
+   "issue_date": "2026-01-10",
+   "due_date": "2026-02-10",
+   "po_number_raw": null,
+   "currency": "AED",
+   "subtotal": "5330.00",
+   "vat_total": "266.50",
+   "total": "5596.50",
+   "received_at": "2026-01-10T09:00:00+00:00",
+   "payee_masked": "****4107",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Gulf Office Trading",
+     "normalized_value": "Gulf Office Trading",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000011",
+     "normalized_value": "100000000000011",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "duplicate_suspected",
+     "route": "review",
+     "message": "A near-identical invoice from this vendor was already received."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0011",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-nour",
+   "vendor_name": "Al Nour Stationery",
+   "invoice_number_raw": "INV-1011",
+   "issue_date": "2026-01-11",
+   "due_date": "2026-02-11",
+   "po_number_raw": "PO-7011",
+   "currency": "AED",
+   "subtotal": "6703.00",
+   "vat_total": "335.15",
+   "total": "7038.15",
+   "received_at": "2026-01-11T09:00:00+00:00",
+   "payee_masked": "****4114",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Al Nour Stationery",
+     "normalized_value": "Al Nour Stationery",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000029",
+     "normalized_value": "100000000000029",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0012",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-desert",
+   "vendor_name": "Desert Logistics FZE",
+   "invoice_number_raw": "INV-1012",
+   "issue_date": "2026-01-12",
+   "due_date": "2026-02-12",
+   "po_number_raw": "PO-7012",
+   "currency": "AED",
+   "subtotal": "8076.00",
+   "vat_total": "403.80",
+   "total": "8479.80",
+   "received_at": "2026-01-12T09:00:00+00:00",
+   "payee_masked": "****4121",
+   "document_iban_matches_payee": false,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Desert Logistics FZE",
+     "normalized_value": "Desert Logistics FZE",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000037",
+     "normalized_value": "100000000000037",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "trn_invalid",
+     "route": "block",
+     "message": "The supplier TRN failed the checksum."
+    },
+    {
+     "rule": "amount_over_limit",
+     "route": "block",
+     "message": "The total is above the auto-approval limit."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0013",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-falcon",
+   "vendor_name": "Falcon IT Services",
+   "invoice_number_raw": "INV-1013",
+   "issue_date": "2026-01-13",
+   "due_date": "2026-02-13",
+   "po_number_raw": "PO-7013",
+   "currency": "AED",
+   "subtotal": "9449.00",
+   "vat_total": "472.45",
+   "total": "9921.45",
+   "received_at": "2026-01-13T09:00:00+00:00",
+   "payee_masked": "****4128",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Falcon IT Services",
+     "normalized_value": "Falcon IT Services",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000045",
+     "normalized_value": "100000000000045",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [
+    {
+     "id": "prop-0013",
+     "kind": "approve_payment",
+     "status": "pending",
+     "created_by": "chat:u-approver",
+     "created_at": "2026-01-13T11:00:00+00:00"
+    }
+   ],
+   "reasons_json": [
+    {
+     "rule": "price_variance",
+     "route": "review",
+     "message": "Line prices differ from the purchase order by more than 5%."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0014",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-palm",
+   "vendor_name": "Palm Catering",
+   "invoice_number_raw": "INV-1014",
+   "issue_date": "2026-01-14",
+   "due_date": "2026-02-14",
+   "po_number_raw": "PO-7014",
+   "currency": "AED",
+   "subtotal": "1622.00",
+   "vat_total": "81.10",
+   "total": "1703.10",
+   "received_at": "2026-01-14T09:00:00+00:00",
+   "payee_masked": "****4135",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Palm Catering",
+     "normalized_value": "Palm Catering",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000052",
+     "normalized_value": "100000000000052",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0015",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-oasis",
+   "vendor_name": "Oasis Cleaning Co",
+   "invoice_number_raw": "INV-1015",
+   "issue_date": "2026-01-15",
+   "due_date": "2026-02-15",
+   "po_number_raw": null,
+   "currency": "AED",
+   "subtotal": "2995.00",
+   "vat_total": "149.75",
+   "total": "3144.75",
+   "received_at": "2026-01-15T09:00:00+00:00",
+   "payee_masked": "****4142",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Oasis Cleaning Co",
+     "normalized_value": "Oasis Cleaning Co",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000060",
+     "normalized_value": "100000000000060",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "new_vendor_high_amount",
+     "route": "block",
+     "message": "A new vendor sent a high-value invoice."
+    },
+    {
+     "rule": "fraud_score",
+     "route": "block",
+     "message": "The fraud model scored this invoice above the review threshold."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0016",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-zenith",
+   "vendor_name": "Zenith Print House",
+   "invoice_number_raw": "INV-1016",
+   "issue_date": "2026-01-16",
+   "due_date": "2026-02-16",
+   "po_number_raw": "PO-7016",
+   "currency": "AED",
+   "subtotal": "4368.00",
+   "vat_total": "218.40",
+   "total": "4586.40",
+   "received_at": "2026-01-16T09:00:00+00:00",
+   "payee_masked": "****4149",
+   "document_iban_matches_payee": false,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Zenith Print House",
+     "normalized_value": "Zenith Print House",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000078",
+     "normalized_value": "100000000000078",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "bank_change",
+     "route": "review",
+     "message": "The vendor's bank details changed shortly before this invoice."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0017",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-acme",
+   "vendor_name": "Acme Supplies LLC",
+   "invoice_number_raw": "INV-1017",
+   "issue_date": "2026-01-17",
+   "due_date": "2026-02-17",
+   "po_number_raw": "PO-7017",
+   "currency": "AED",
+   "subtotal": "5741.00",
+   "vat_total": "287.05",
+   "total": "6028.05",
+   "received_at": "2026-01-17T09:00:00+00:00",
+   "payee_masked": "****4100",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Acme Supplies LLC",
+     "normalized_value": "Acme Supplies LLC",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000003",
+     "normalized_value": "100000000000003",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0018",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-gulf",
+   "vendor_name": "Gulf Office Trading",
+   "invoice_number_raw": "INV-1018",
+   "issue_date": "2026-01-18",
+   "due_date": "2026-02-18",
+   "po_number_raw": "PO-7018",
+   "currency": "AED",
+   "subtotal": "7114.00",
+   "vat_total": "355.70",
+   "total": "7469.70",
+   "received_at": "2026-01-18T09:00:00+00:00",
+   "payee_masked": "****4107",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Gulf Office Trading",
+     "normalized_value": "Gulf Office Trading",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000011",
+     "normalized_value": "100000000000011",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "duplicate_suspected",
+     "route": "block",
+     "message": "A near-identical invoice from this vendor was already received."
+    },
+    {
+     "rule": "trn_invalid",
+     "route": "block",
+     "message": "The supplier TRN failed the checksum."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0019",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-nour",
+   "vendor_name": "Al Nour Stationery",
+   "invoice_number_raw": "INV-1019",
+   "issue_date": "2026-01-19",
+   "due_date": "2026-02-19",
+   "po_number_raw": "PO-7019",
+   "currency": "AED",
+   "subtotal": "8487.00",
+   "vat_total": "424.35",
+   "total": "8911.35",
+   "received_at": "2026-01-19T09:00:00+00:00",
+   "payee_masked": "****4114",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Al Nour Stationery",
+     "normalized_value": "Al Nour Stationery",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000029",
+     "normalized_value": "100000000000029",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "amount_over_limit",
+     "route": "review",
+     "message": "The total is above the auto-approval limit."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0020",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-desert",
+   "vendor_name": "Desert Logistics FZE",
+   "invoice_number_raw": "INV-1020",
+   "issue_date": "2026-01-20",
+   "due_date": "2026-02-20",
+   "po_number_raw": null,
+   "currency": "AED",
+   "subtotal": "9860.00",
+   "vat_total": "493.00",
+   "total": "10353.00",
+   "received_at": "2026-01-20T09:00:00+00:00",
+   "payee_masked": "****4121",
+   "document_iban_matches_payee": false,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Desert Logistics FZE",
+     "normalized_value": "Desert Logistics FZE",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000037",
+     "normalized_value": "100000000000037",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0021",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-falcon",
+   "vendor_name": "Falcon IT Services",
+   "invoice_number_raw": "INV-1021",
+   "issue_date": "2026-01-21",
+   "due_date": "2026-02-21",
+   "po_number_raw": "PO-7021",
+   "currency": "AED",
+   "subtotal": "2033.00",
+   "vat_total": "101.65",
+   "total": "2134.65",
+   "received_at": "2026-01-21T09:00:00+00:00",
+   "payee_masked": "****4128",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Falcon IT Services",
+     "normalized_value": "Falcon IT Services",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000045",
+     "normalized_value": "100000000000045",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "price_variance",
+     "route": "block",
+     "message": "Line prices differ from the purchase order by more than 5%."
+    },
+    {
+     "rule": "new_vendor_high_amount",
+     "route": "block",
+     "message": "A new vendor sent a high-value invoice."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0022",
+   "status": "awaiting_review",
+   "route": "review",
+   "vendor_id": "v-palm",
+   "vendor_name": "Palm Catering",
+   "invoice_number_raw": "INV-1022",
+   "issue_date": "2026-01-22",
+   "due_date": "2026-02-22",
+   "po_number_raw": "PO-7022",
+   "currency": "AED",
+   "subtotal": "3406.00",
+   "vat_total": "170.30",
+   "total": "3576.30",
+   "received_at": "2026-01-22T09:00:00+00:00",
+   "payee_masked": "****4135",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Palm Catering",
+     "normalized_value": "Palm Catering",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000052",
+     "normalized_value": "100000000000052",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "fraud_score",
+     "route": "review",
+     "message": "The fraud model scored this invoice above the review threshold."
+    }
+   ]
+  },
+  {
+   "invoice_id": "inv-0023",
+   "status": "approved",
+   "route": "auto",
+   "vendor_id": "v-oasis",
+   "vendor_name": "Oasis Cleaning Co",
+   "invoice_number_raw": "INV-1023",
+   "issue_date": "2026-01-23",
+   "due_date": "2026-02-23",
+   "po_number_raw": "PO-7023",
+   "currency": "AED",
+   "subtotal": "4779.00",
+   "vat_total": "238.95",
+   "total": "5017.95",
+   "received_at": "2026-01-23T09:00:00+00:00",
+   "payee_masked": "****4142",
+   "document_iban_matches_payee": true,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Oasis Cleaning Co",
+     "normalized_value": "Oasis Cleaning Co",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000060",
+     "normalized_value": "100000000000060",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": []
+  },
+  {
+   "invoice_id": "inv-0024",
+   "status": "blocked",
+   "route": "block",
+   "vendor_id": "v-zenith",
+   "vendor_name": "Zenith Print House",
+   "invoice_number_raw": "INV-1024",
+   "issue_date": "2026-01-24",
+   "due_date": "2026-02-24",
+   "po_number_raw": "PO-7024",
+   "currency": "AED",
+   "subtotal": "6152.00",
+   "vat_total": "307.60",
+   "total": "6459.60",
+   "received_at": "2026-01-24T09:00:00+00:00",
+   "payee_masked": "****4149",
+   "document_iban_matches_payee": false,
+   "fields_json": [
+    {
+     "name": "supplier_name",
+     "value": "Zenith Print House",
+     "normalized_value": "Zenith Print House",
+     "confidence": 0.98,
+     "source": "extractor_a"
+    },
+    {
+     "name": "supplier_trn",
+     "value": "100000000000078",
+     "normalized_value": "100000000000078",
+     "confidence": 0.95,
+     "source": "extractor_a"
+    }
+   ],
+   "proposals_json": [],
+   "reasons_json": [
+    {
+     "rule": "bank_change",
+     "route": "block",
+     "message": "The vendor's bank details changed shortly before this invoice."
+    },
+    {
+     "rule": "duplicate_suspected",
+     "route": "block",
+     "message": "A near-identical invoice from this vendor was already received."
+    }
+   ]
+  }
+ ],
+ "audit_events": [
+  {
+   "audit_id": 1001,
+   "entity": "invoice:inv-0001",
+   "ts": "2026-01-01T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1002,
+   "entity": "invoice:inv-0001",
+   "ts": "2026-01-01T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "fraud_score",
+    "typology": "fraud_score",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1003,
+   "entity": "invoice:inv-0001",
+   "ts": "2026-01-01T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "fraud_score",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1004,
+   "entity": "invoice:inv-0002",
+   "ts": "2026-01-02T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1005,
+   "entity": "invoice:inv-0002",
+   "ts": "2026-01-02T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1006,
+   "entity": "invoice:inv-0003",
+   "ts": "2026-01-03T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1007,
+   "entity": "invoice:inv-0003",
+   "ts": "2026-01-03T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "bank_change",
+    "typology": "bank_change",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1008,
+   "entity": "invoice:inv-0003",
+   "ts": "2026-01-03T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "bank_change",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1009,
+   "entity": "invoice:inv-0003",
+   "ts": "2026-01-03T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "typology": "duplicate_suspected",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1010,
+   "entity": "invoice:inv-0003",
+   "ts": "2026-01-03T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1011,
+   "entity": "invoice:inv-0004",
+   "ts": "2026-01-04T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1012,
+   "entity": "invoice:inv-0004",
+   "ts": "2026-01-04T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "trn_invalid",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1013,
+   "entity": "invoice:inv-0005",
+   "ts": "2026-01-05T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1014,
+   "entity": "invoice:inv-0005",
+   "ts": "2026-01-05T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1015,
+   "entity": "invoice:inv-0006",
+   "ts": "2026-01-06T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1016,
+   "entity": "invoice:inv-0006",
+   "ts": "2026-01-06T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "amount_over_limit",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1017,
+   "entity": "invoice:inv-0006",
+   "ts": "2026-01-06T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "price_variance",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1018,
+   "entity": "invoice:inv-0007",
+   "ts": "2026-01-07T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1019,
+   "entity": "invoice:inv-0007",
+   "ts": "2026-01-07T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "new_vendor_high_amount",
+    "typology": "new_vendor_high_amount",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1020,
+   "entity": "invoice:inv-0007",
+   "ts": "2026-01-07T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "new_vendor_high_amount",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1021,
+   "entity": "invoice:inv-0008",
+   "ts": "2026-01-08T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1022,
+   "entity": "invoice:inv-0008",
+   "ts": "2026-01-08T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1023,
+   "entity": "invoice:inv-0009",
+   "ts": "2026-01-09T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1024,
+   "entity": "invoice:inv-0009",
+   "ts": "2026-01-09T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "fraud_score",
+    "typology": "fraud_score",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1025,
+   "entity": "invoice:inv-0009",
+   "ts": "2026-01-09T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "fraud_score",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1026,
+   "entity": "invoice:inv-0009",
+   "ts": "2026-01-09T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "bank_change",
+    "typology": "bank_change",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1027,
+   "entity": "invoice:inv-0009",
+   "ts": "2026-01-09T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "bank_change",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1028,
+   "entity": "invoice:inv-0010",
+   "ts": "2026-01-10T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1029,
+   "entity": "invoice:inv-0010",
+   "ts": "2026-01-10T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "typology": "duplicate_suspected",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1030,
+   "entity": "invoice:inv-0010",
+   "ts": "2026-01-10T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1031,
+   "entity": "invoice:inv-0011",
+   "ts": "2026-01-11T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1032,
+   "entity": "invoice:inv-0011",
+   "ts": "2026-01-11T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1033,
+   "entity": "invoice:inv-0012",
+   "ts": "2026-01-12T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1034,
+   "entity": "invoice:inv-0012",
+   "ts": "2026-01-12T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "trn_invalid",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1035,
+   "entity": "invoice:inv-0012",
+   "ts": "2026-01-12T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "amount_over_limit",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1036,
+   "entity": "invoice:inv-0013",
+   "ts": "2026-01-13T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1037,
+   "entity": "invoice:inv-0013",
+   "ts": "2026-01-13T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "price_variance",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1038,
+   "entity": "invoice:inv-0014",
+   "ts": "2026-01-14T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1039,
+   "entity": "invoice:inv-0014",
+   "ts": "2026-01-14T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1040,
+   "entity": "invoice:inv-0015",
+   "ts": "2026-01-15T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1041,
+   "entity": "invoice:inv-0015",
+   "ts": "2026-01-15T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "new_vendor_high_amount",
+    "typology": "new_vendor_high_amount",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1042,
+   "entity": "invoice:inv-0015",
+   "ts": "2026-01-15T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "new_vendor_high_amount",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1043,
+   "entity": "invoice:inv-0015",
+   "ts": "2026-01-15T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "fraud_score",
+    "typology": "fraud_score",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1044,
+   "entity": "invoice:inv-0015",
+   "ts": "2026-01-15T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "fraud_score",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1045,
+   "entity": "invoice:inv-0016",
+   "ts": "2026-01-16T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1046,
+   "entity": "invoice:inv-0016",
+   "ts": "2026-01-16T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "bank_change",
+    "typology": "bank_change",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1047,
+   "entity": "invoice:inv-0016",
+   "ts": "2026-01-16T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "bank_change",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1048,
+   "entity": "invoice:inv-0017",
+   "ts": "2026-01-17T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1049,
+   "entity": "invoice:inv-0017",
+   "ts": "2026-01-17T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1050,
+   "entity": "invoice:inv-0018",
+   "ts": "2026-01-18T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1051,
+   "entity": "invoice:inv-0018",
+   "ts": "2026-01-18T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "typology": "duplicate_suspected",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1052,
+   "entity": "invoice:inv-0018",
+   "ts": "2026-01-18T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1053,
+   "entity": "invoice:inv-0018",
+   "ts": "2026-01-18T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "trn_invalid",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1054,
+   "entity": "invoice:inv-0019",
+   "ts": "2026-01-19T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1055,
+   "entity": "invoice:inv-0019",
+   "ts": "2026-01-19T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "amount_over_limit",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1056,
+   "entity": "invoice:inv-0020",
+   "ts": "2026-01-20T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1057,
+   "entity": "invoice:inv-0020",
+   "ts": "2026-01-20T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1058,
+   "entity": "invoice:inv-0021",
+   "ts": "2026-01-21T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1059,
+   "entity": "invoice:inv-0021",
+   "ts": "2026-01-21T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "price_variance",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1060,
+   "entity": "invoice:inv-0021",
+   "ts": "2026-01-21T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "new_vendor_high_amount",
+    "typology": "new_vendor_high_amount",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1061,
+   "entity": "invoice:inv-0021",
+   "ts": "2026-01-21T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "new_vendor_high_amount",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1062,
+   "entity": "invoice:inv-0022",
+   "ts": "2026-01-22T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1063,
+   "entity": "invoice:inv-0022",
+   "ts": "2026-01-22T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "fraud_score",
+    "typology": "fraud_score",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1064,
+   "entity": "invoice:inv-0022",
+   "ts": "2026-01-22T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "fraud_score",
+    "route": "review"
+   }
+  },
+  {
+   "audit_id": 1065,
+   "entity": "invoice:inv-0023",
+   "ts": "2026-01-23T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1066,
+   "entity": "invoice:inv-0023",
+   "ts": "2026-01-23T09:02:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "all_checks_passed",
+    "route": "auto"
+   }
+  },
+  {
+   "audit_id": 1067,
+   "entity": "invoice:inv-0024",
+   "ts": "2026-01-24T09:01:00+00:00",
+   "actor": "system",
+   "action": "trust.field",
+   "payload_json": {
+    "field": "total",
+    "accepted": true,
+    "score": 0.97
+   }
+  },
+  {
+   "audit_id": 1068,
+   "entity": "invoice:inv-0024",
+   "ts": "2026-01-24T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "bank_change",
+    "typology": "bank_change",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1069,
+   "entity": "invoice:inv-0024",
+   "ts": "2026-01-24T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "bank_change",
+    "route": "block"
+   }
+  },
+  {
+   "audit_id": 1070,
+   "entity": "invoice:inv-0024",
+   "ts": "2026-01-24T09:02:00+00:00",
+   "actor": "system",
+   "action": "fraud.flag",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "typology": "duplicate_suspected",
+    "score": 0.91
+   }
+  },
+  {
+   "audit_id": 1071,
+   "entity": "invoice:inv-0024",
+   "ts": "2026-01-24T09:03:00+00:00",
+   "actor": "system",
+   "action": "policy.route",
+   "payload_json": {
+    "rule": "duplicate_suspected",
+    "route": "block"
+   }
+  }
+ ]
+}

@@ -62,7 +62,7 @@ services:
     command: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8233"]
     # No `ports:` here: `app` is internal, so a direct publish never worked (see the network
     # comment above). The Web UI (8233) is reachable from the host through `gateway`; the
-    # gRPC frontend (7233) is for in-network clients only (api/worker, once M5 adds them).
+    # gRPC frontend (7233) is for in-network clients only (the `api` and `worker` services).
     networks: [app]
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
@@ -110,6 +110,10 @@ services:
       - sqlite:////mlflow/mlflow.db
       - --artifacts-destination
       - /mlflow/artifacts
+      # MLflow 3.7 rejects unknown Host headers (DNS-rebinding guard; default is localhost and
+      # private IPs only). Compose clients (trainer, worker) reach it as `mlflow:5000`.
+      - --allowed-hosts
+      - "mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
       - --serve-artifacts
     # No `ports:` here (see the network comment above): reachable from the host through
     # `gateway` instead.
@@ -160,22 +164,38 @@ services:
       start_period: 20s
 
   parse:
-    # Placeholder for apx/parse (PRD §10 M0.4 note: "real service in M3.1"). Swap this
-    # build for the PaddleOCR 3.x GPU container once M3.1 lands; keep the GPU memory cap
-    # (e.g. PADDLE_GPU_MEM_FRACTION) on that image, not here, since this stub loads no model.
+    # Real PaddleOCR-VL-1.6 GPU service (PRD §3, §4, §10 M3.1), replacing the M0.4 placeholder.
+    # Serves the scan path only: born-digital PDFs are parsed host-side by apx.parse.digital
+    # (pdfplumber), so the ≥98% IoU gate never depends on this container being up. GPU memory
+    # is capped in-process (PADDLE_GPU_MEM_FRACTION, default 0.35 of the card, ~4.3 GB on 12 GB
+    # -- comfortably above the ~3.2 GB peak reports/smoke.md measured) rather than here, since
+    # only the process itself can bound its own CUDA allocator.
     build:
-      context: ./docker/parse-placeholder
+      context: ./docker/parse
     restart: unless-stopped
+    environment:
+      PADDLE_GPU_MEM_FRACTION: ${PADDLE_GPU_MEM_FRACTION:-0.35}
+    volumes:
+      # Same read-only model mount pattern as llama-swap; only the one checkpoint this
+      # service needs, not the whole models/ tree.
+      - ../models/PaddlePaddle/PaddleOCR-VL-1.6:/models/PaddleOCR-VL-1.6:ro
     # No `ports:` here (see the network comment above): parse is called by the ingest
     # pipeline (api/worker, once M5 adds them) over `app`, not by host tools or a browser,
     # so it isn't added to `gateway` either.
     networks: [app]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
       interval: 5s
       timeout: 5s
-      retries: 20
-      start_period: 10s
+      retries: 30
+      start_period: 60s
 
   gateway:
     # Static nginx reverse proxy (PRD §2 C1, §10 M0.4; docs/adr/0001 amendment): the only
@@ -193,6 +213,7 @@ services:
       - "127.0.0.1:5000:5000" # MLflow
       - "127.0.0.1:8233:8233" # Temporal Web UI
       - "127.0.0.1:5432:5432" # Postgres (TCP passthrough, `stream` block -- dev tools only)
+      - "127.0.0.1:8000:8000" # apx API (REST + SSE) for the web app
     networks: [app, edge]
     depends_on:
       llama-swap:
@@ -212,6 +233,76 @@ services:
       retries: 20
       start_period: 5s
 
+  # apx application services (PRD §10 M5.6), one image: the REST/SSE API and the invoice
+  # worker (Temporal activities + inbox watcher). Both stay on `app`, so every model, OCR and
+  # database call is in-network; the host reaches the API only through `gateway`. `data/` is
+  # shared so an upload stored by the API is the same file the worker reads. `migrate` is the
+  # one-shot schema upgrade both wait for.
+  migrate:
+    build: &apx-build
+      context: ..
+      dockerfile: infra/docker/apx/Dockerfile
+    image: sovereign-ap-autopilot/apx:local
+    command: ["alembic", "upgrade", "head"]
+    environment: &apx-env
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-apx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apx-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-apx}
+      AGENT_DATABASE_URL: postgresql+asyncpg://apx_agent_ro:apx-agent-ro-dev-only@postgres:5432/${POSTGRES_DB:-apx}
+      API_JWT_SECRET: ${API_JWT_SECRET:-}
+      API_TEMPORAL_ADDRESS: temporal:7233
+      API_CORS_ORIGIN: ${API_CORS_ORIGIN:-http://localhost:3000}
+      WORKER_TEMPORAL_ADDRESS: temporal:7233
+      LLM_BASE_URL: http://llama-swap:8080
+      PARSE_BASE_URL: http://parse:8000
+      # The operator's own buyer master data (never read off a supplier invoice): PINT AE
+      # ibr-144-ae needs the buyer's address/emirate and ibr-136-ae its trade license. Defaults
+      # are the synthetic buyer every factory invoice is addressed to (factory/layouts.py).
+      WORKER_BUYER_ADDRESS: ${WORKER_BUYER_ADDRESS:-Warehouse 12, Al Quoz Industrial Area 3, Dubai, United Arab Emirates, P.O. Box 45210}
+      WORKER_BUYER_TRADE_LICENSE: ${WORKER_BUYER_TRADE_LICENSE:-1045821}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://phoenix:6006
+      # Docker Desktop bind mounts do not deliver inotify events from the host filesystem.
+      WATCHFILES_FORCE_POLLING: "true"
+    networks: [app]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: *apx-build
+    image: sovereign-ap-autopilot/apx:local
+    restart: unless-stopped
+    command: ["uvicorn", "apx.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *apx-env
+    volumes: &apx-volumes
+      - ../data:/app/data
+    networks: [app]
+    depends_on: &apx-deps
+      migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  worker:
+    build: *apx-build
+    image: sovereign-ap-autopilot/apx:local
+    restart: unless-stopped
+    command: ["python", "-m", "apx.workflows.main"]
+    environment: *apx-env
+    volumes: *apx-volumes
+    networks: [app]
+    depends_on:
+      <<: *apx-deps
+      api:
+        condition: service_healthy
+
   toolbox:
     # Linux Python 3.12 + uv + CUDA torch/transformers environment for `make smoke`, evals
     # and training (PRD §10 M0.4/M0.5; docs/adr/0006 addendum): the Windows host blocks
@@ -228,6 +319,47 @@ services:
     networks: [app]
     depends_on:
       llama-swap:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  trainer:
+    # Extractor B fine-tune (ADR-0009 §1.5, ADR-0011; docs/design/training-loop.md). Opt-in
+    # only (`--profile train`), never started by `make up`; run through `make train-b*`, which
+    # runs `make gpu-free` first. On `app` only, which is internal, so it has no egress; it
+    # reaches mlflow by name. The repo, data/ and models/ are read-only except the run
+    # directory (models/extractor_b) and data/ml (prepared rows, quarantine, gpu.lock).
+    profiles: [train]
+    image: sovereign-ap/trainer:2026.9.11
+    build:
+      context: ..
+      dockerfile: infra/docker/trainer/Dockerfile
+    stop_grace_period: 180s
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      EXTRACTOR_B_BASE_PATH: ${EXTRACTOR_B_BASE_PATH:-}
+      EXTRACTOR_B_BASE_REVISION: ${EXTRACTOR_B_BASE_REVISION:-}
+      TRAINER_IMAGE_DIGEST: ${TRAINER_IMAGE_DIGEST:-}
+      GIT_SHA: ${GIT_SHA:-unknown}
+    volumes:
+      - ..:/repo:ro
+      - ../data:/repo/data:ro
+      - ../data/ml:/repo/data/ml
+      - ../models:/repo/models:ro
+      - ../models/extractor_b:/repo/models/extractor_b
+    working_dir: /repo
+    networks: [app]
+    depends_on:
+      mlflow:
         condition: service_healthy
     deploy:
       resources:

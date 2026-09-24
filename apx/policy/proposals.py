@@ -49,3 +49,27 @@ class DefaultProposalSink:
         )
         await self._store.save(proposal)
         return proposal
+
+
+class PgProposalStore:
+    """The `ProposalStore` implementation: inserts the pending proposal into `proposals` in its
+    own transaction. Never updates or executes one."""
+
+    async def save(self, proposal: Proposal) -> None:
+        # Imported here so the P5 sink logic above stays importable without a database driver.
+        from apx.db import models
+        from apx.db.enums import ProposalKind, ProposalStatus
+        from apx.db.session import get_session
+
+        async with get_session() as session:
+            session.add(
+                models.Proposal(
+                    id=proposal.id,
+                    invoice_id=proposal.invoice_id,
+                    kind=ProposalKind(proposal.kind),
+                    payload=proposal.payload,
+                    created_by=str(proposal.created_by),
+                    status=ProposalStatus(proposal.status),
+                    created_at=proposal.created_at,
+                )
+            )

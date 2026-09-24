@@ -11,7 +11,7 @@ repos:
   - repo: local
     hooks:
       - id: mypy
-        name: mypy --strict (apx/ factory/ evals/)
+        name: mypy --strict (apx/ factory/ evals/ attacks/)
         entry: uv run mypy
         language: system
         pass_filenames: false
@@ -48,8 +48,14 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=1024]
+        # web/public/pdfjs/pdf.worker.min.mjs is pdfjs-dist's own pre-minified worker build,
+        # vendored so the pdf.js viewer (PRD §10 M5.4) never depends on a runtime CDN fetch;
+        # it can't be made smaller without breaking it.
+        exclude: ^web/public/pdfjs/
       - id: end-of-file-fixer
+        exclude: ^web/public/pdfjs/
       - id: trailing-whitespace
+        exclude: ^web/public/pdfjs/
       - id: check-merge-conflict
       - id: check-yaml
         args: [--allow-multiple-documents]

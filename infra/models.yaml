@@ -50,6 +50,19 @@ models:
       PRD §4: Qwen3.5-4B GGUF Q4 + mmproj; "our LoRA" is trained later (M3.2+) and is not
       a Hub download.
 
+  - intent: extractor_b_train_base
+    role: "Offline: Extractor B training base (bf16 safetensors the M7.1 LoRA trains on)"
+    stage: offline
+    runtime: false
+    repo_id: Qwen/Qwen3.5-4B
+    revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+    files: null # full snapshot: weights, tokenizer, chat template and image processor configs
+    vram_gb_est: 8.5
+    notes: >-
+      ADR-0012 §4: the `base_model` declared by unsloth/Qwen3.5-4B-GGUF (the extractor_b_base
+      GGUF served today), pinned to a commit so the fingerprint and resume checks are stable.
+      Loaded by ml/extractor_b/train.py from models/Qwen/Qwen3.5-4B; never used at runtime.
+
   - intent: arbiter
     role: "Arbitrate: Extractor A/B disagreement"
     stage: arbitrate

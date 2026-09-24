@@ -1,0 +1,57 @@
+{
+  "description": "buyer_trn_wrong_length",
+  "invoice": {
+    "buyer": {
+      "address": "Corniche Road, Abu Dhabi",
+      "country": "AE",
+      "name": "Emirates Gulf FZE",
+      "trn": "10060070080091234"
+    },
+    "document_sha256": "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4",
+    "due_date": "2025-02-15",
+    "iban": "AE540140000000000001234",
+    "id": "INV-BASE",
+    "issue_date": "2025-01-15",
+    "kind": "invoice",
+    "language": "en",
+    "lines": [
+      {
+        "description": "Office chairs",
+        "net_amount": {
+          "amount": "1000.00",
+          "currency": "AED"
+        },
+        "po_line_ref": null,
+        "quantity": "10",
+        "unit_price": {
+          "amount": "100.00",
+          "currency": "AED"
+        },
+        "vat_category": "S",
+        "vat_rate": "5"
+      }
+    ],
+    "number": "INV-2025-0001",
+    "po_number": null,
+    "subtotal": {
+      "amount": "1000.00",
+      "currency": "AED"
+    },
+    "supplier": {
+      "address": "Sheikh Zayed Road, Dubai",
+      "country": "AE",
+      "name": "Al Reem Trading LLC",
+      "trn": "100200300400503"
+    },
+    "total": {
+      "amount": "1050.00",
+      "currency": "AED"
+    },
+    "vat_total": {
+      "amount": "50.00",
+      "currency": "AED"
+    },
+    "vendor_id": "VEND-0001"
+  },
+  "rule_id": "trn_invalid"
+}

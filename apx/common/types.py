@@ -3,11 +3,14 @@ field values and idempotency keys. Depends on nothing else in apx (PRD §3, §6.
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, NewType
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+
+from apx.common.errors import IdempotencyKeyError
 
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 """Lowercase hex SHA-256 digest; the identity of a document (§5 splits, §3 dedupe)."""
@@ -91,9 +94,17 @@ class FieldValue(Frozen):
     boxes: tuple[BBox, ...] = ()
 
 
+_STEP_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
 def make_idempotency_key(invoice_id: InvoiceId, step: str) -> IdempotencyKey:
     """Build the deterministic `invoice_id:step` key for a side-effecting activity (§6.4).
 
-    Raises apx.common.errors.IdempotencyKeyError if `step` is not a lowercase identifier.
+    Raises apx.common.errors.IdempotencyKeyError if `step` is not a lowercase identifier, or if
+    `invoice_id` contains a colon or whitespace (either would make the key ambiguous to parse).
     """
-    raise NotImplementedError
+    if not _STEP_PATTERN.match(step):
+        raise IdempotencyKeyError(f"step must be a lowercase identifier, got: {step!r}")
+    if ":" in invoice_id or re.search(r"\s", invoice_id):
+        raise IdempotencyKeyError(f"invoice_id must not contain ':' or whitespace: {invoice_id!r}")
+    return f"{invoice_id}:{step}"

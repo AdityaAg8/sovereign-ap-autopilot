@@ -56,6 +56,9 @@ class ChatMessage(Frozen):
     role: Literal["system", "user", "assistant", "tool"]
     content: str | tuple[TextPart | ImagePart, ...]
     tool_call_id: str | None = None
+    tool_calls: tuple[ToolCall, ...] = ()
+    """On an assistant message: the calls it made, replayed so each following `tool` message
+    answers a call the chat template can see."""
 
 
 class ToolSpec(Frozen):
@@ -93,6 +96,9 @@ class ToolRequest(Frozen):
 class TokenLogprob(Frozen):
     token: str
     logprob: float
+    nbytes: int | None = None
+    """UTF-8 byte length of the token as the server reports it. A multi-byte character can split
+    across tokens, so byte lengths (not `len(token)`) align tokens to offsets in the content."""
 
 
 class ToolCall(Frozen):

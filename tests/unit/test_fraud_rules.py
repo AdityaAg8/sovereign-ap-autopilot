@@ -692,6 +692,16 @@ def test_price_variance_flags_a_line_priced_over_tolerance() -> None:
 
     assert len(flags) == 1
     assert flags[0].typology is FraudTypology.PRICE_ANOMALY
+    assert flags[0].score == 1.0  # 50% variance is past twice the 10% tolerance
+
+
+def test_price_variance_score_starts_at_one_half_just_over_tolerance() -> None:
+    rule = PriceVarianceRule(tolerance_pct=Decimal("0.10"))
+    invoice, po = _po_line_invoice(
+        seed="pv9", po_number="PO9", unit_price="115", po_unit_price="100"
+    )
+    flags = rule.evaluate(invoice, FakeHistory(purchase_orders={"PO9": po}))
+    assert [flag.score for flag in flags] == [0.75]
 
 
 def test_price_variance_does_not_flag_a_line_within_tolerance() -> None:

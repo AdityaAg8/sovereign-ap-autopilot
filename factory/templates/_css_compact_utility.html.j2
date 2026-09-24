@@ -1,0 +1,59 @@
+{# "Compact Utility" family CSS shared by en_/ar_/bilingual_compact_utility. Small type, tight
+   margins and zebra-striped rows built to stay legible at up to 40 line items across several
+   printed pages; the line index column is the signature element, set in accent blue tabular
+   figures so a long invoice still reads as an ordered sequence. Logical properties keep one
+   stylesheet correct in both directions (PRD §10 M2.2). #}
+<style>
+:root {
+  --ink: #242B33;
+  --muted: #5B6773;
+  --line: #D7DCE2;
+  --zebra: #F3F5F7;
+  --accent: #3B6E8F;
+}
+body { font-family: "Noto Sans", "Noto Naskh Arabic", sans-serif; color: var(--ink); font-size: 9pt; line-height: 1.4; }
+[lang="ar"], .ar { font-family: "Noto Naskh Arabic", "Noto Sans", sans-serif; }
+{# M2.4 label self-check fix: must equal the printable content width (A4 210mm minus the two
+   14mm `@page` margins `factory/render.py` prints with) so this layout's on-screen box -- what
+   `factory.render`'s `getClientRects()` measures for every `data-field` label -- lines up with
+   where Chromium's print engine actually places it in the PDF; 190mm made every label on this
+   layout land ~4mm left of and ~2mm above its true PDF position (PRD §10 M2.4). #}
+.sheet { max-width: 182mm; margin: 0 auto; padding-block: 5mm; }
+header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; padding-block-end: 3mm; border-block-end: 2px solid var(--accent); }
+.supplier-name { font-size: 12pt; font-weight: 700; color: var(--accent); }
+.supplier-sub { color: var(--muted); font-size: 8pt; }
+.invoice-meta { text-align: end; font-size: 8pt; }
+.doc-title { font-weight: 700; letter-spacing: .08em; font-size: 9pt; color: var(--muted); text-transform: uppercase; }
+.doc-title.ar { text-transform: none; letter-spacing: normal; }
+table.meta { margin-block-start: 1mm; font-size: 8pt; }
+table.meta th { font-weight: 400; color: var(--muted); text-align: start; padding: .3mm 0; padding-inline-end: 4mm; }
+table.meta td { text-align: end; font-weight: 700; padding: .3mm 0; }
+.parties { display: flex; justify-content: space-between; gap: 8mm; margin-block: 3mm; font-size: 8.5pt; }
+.party-label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
+.party-label.ar { text-transform: none; letter-spacing: normal; }
+.party-name { font-weight: 700; }
+.party-line { color: var(--muted); }
+.tax-case-note { font-size: 8pt; color: var(--muted); max-width: 72mm; }
+.tax-case-note .tax-case-label { font-weight: 700; color: var(--accent); }
+table.items { margin-block-start: 2mm; font-size: 8.3pt; }
+table.items th {
+  background: var(--ink);
+  color: #fff;
+  text-align: start;
+  padding: 1.4mm 1.6mm;
+  font-weight: 700;
+  font-size: 7.5pt;
+  text-transform: uppercase;
+}
+table.items th.ar { text-transform: none; }
+table.items th.idx, table.items td.idx { width: 7mm; color: var(--accent); font-weight: 700; text-align: end; }
+table.items th.num, table.items td.num { text-align: end; }
+table.items td { padding: 1.3mm 1.6mm; border-block-end: 1px solid var(--line); vertical-align: top; }
+table.items tbody tr:nth-child(even) { background: var(--zebra); }
+.totals { margin-block-start: 3mm; display: flex; justify-content: flex-end; }
+.totals table { width: 68mm; font-size: 8.5pt; }
+.totals th { text-align: start; font-weight: 400; color: var(--muted); padding-block: .6mm; }
+.totals td { text-align: end; padding-block: .6mm; }
+.totals .grand th, .totals .grand td { border-block-start: 1.5px solid var(--accent); font-weight: 700; color: var(--accent); font-size: 10pt; padding-block-start: 1.5mm; }
+footer { margin-block-start: 4mm; border-block-start: 1px solid var(--line); padding-block-start: 2mm; font-size: 7.5pt; color: var(--muted); }
+</style>

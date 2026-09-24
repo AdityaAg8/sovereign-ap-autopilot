@@ -6,6 +6,8 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from pydantic import ConfigDict
+
 from apx.common.invoice import Invoice
 from apx.common.types import Frozen, InvoiceId, Sha256Hex
 
@@ -13,9 +15,26 @@ from apx.common.types import Frozen, InvoiceId, Sha256Hex
 class DocumentTypeCode(StrEnum):
     INVOICE = "380"
     CREDIT_NOTE = "381"
+    OUT_OF_SCOPE_INVOICE = "480"
+    """PINT AE 'Out of scope of VAT' invoice: required when every line is Exempt (E) and/or Not
+    subject to VAT (O), since `ibr-151-ae` rejects such a document as a 380 Commercial invoice."""
+    OUT_OF_SCOPE_CREDIT_NOTE = "81"
+    """The credit-note counterpart of `OUT_OF_SCOPE_INVOICE` (PINT AE `ibr-122-ae`/`ibr-157-ae`)."""
+
+    @property
+    def is_invoice(self) -> bool:
+        """True for the document types serialised as a UBL `Invoice` (380, 480); false for the
+        `CreditNote` ones (381, 81)."""
+        return self in (DocumentTypeCode.INVOICE, DocumentTypeCode.OUT_OF_SCOPE_INVOICE)
 
 
 class EInvoiceDocument(Frozen):
+    # `xml` crosses the Temporal activity boundary as JSON: base64 keeps any byte sequence
+    # (non-UTF-8 encodings, a BOM) lossless, where pydantic's default UTF-8 mode raises.
+    model_config = ConfigDict(
+        frozen=True, extra="forbid", ser_json_bytes="base64", val_json_bytes="base64"
+    )
+
     invoice_id: InvoiceId
     type_code: DocumentTypeCode
     xml: bytes
@@ -38,8 +57,16 @@ class SchematronResult(Frozen):
 
 
 class UblBuilder(Protocol):
-    def build(self, invoice: Invoice, type_code: DocumentTypeCode) -> EInvoiceDocument:
-        """Build PINT AE UBL 2.1 XML. Raises EInvoiceError on unmappable data."""
+    def build(
+        self,
+        invoice: Invoice,
+        type_code: DocumentTypeCode,
+        *,
+        verified_payment_iban: str | None,
+    ) -> EInvoiceDocument:
+        """Build PINT AE UBL 2.1 XML paying `verified_payment_iban` (the vendor master's
+        admin-verified account, never the invoice's own IBAN). Raises EInvoiceError on unmappable
+        data or, for an Invoice, a missing verified IBAN."""
         ...
 
 

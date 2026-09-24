@@ -261,3 +261,34 @@ def test_models_have_no_undeclared_migration_drift(env_database_url: str) -> Non
         )
     finally:
         command.downgrade(cfg, "base")
+
+
+async def _invoice_kind_column(dsn: str) -> tuple[bool, str | None]:
+    conn = await asyncpg.connect(dsn)
+    try:
+        nullable = await conn.fetchval(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name = 'invoices' AND column_name = 'kind'"
+        )
+        check = await conn.fetchval(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname = 'ck_invoices_kind_known'"
+        )
+        return nullable == "YES", check
+    finally:
+        await conn.close()
+
+
+def test_invoice_kind_migration_up_and_down(env_database_url: str) -> None:
+    """ADR-0012: 0007 adds a nullable `invoices.kind` limited to the `InvoiceKind` values, and
+    its downgrade removes both the column and the check."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "0007_invoice_kind")
+    try:
+        nullable, check = asyncio.run(_invoice_kind_column(ASYNCPG_DSN))
+        assert nullable
+        assert check is not None and "credit_note" in check and "invoice" in check
+        command.downgrade(cfg, "0006_fraud_flags")
+        assert asyncio.run(_invoice_kind_column(ASYNCPG_DSN)) == (False, None)
+    finally:
+        command.downgrade(cfg, "base")

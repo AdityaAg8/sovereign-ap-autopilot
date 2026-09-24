@@ -181,3 +181,31 @@ def test_main_returns_one_when_a_model_fails_verification(
     exit_code = dm.main(["--lock", str(lock_path), "--models-dir", str(models_dir)])
 
     assert exit_code == 1
+
+
+def test_main_intent_filter_downloads_only_that_intent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock = {
+        "models": [
+            {**make_model("org/a", "a.bin", b"a"), "intent": "keep"},
+            {**make_model("org/b", "b.bin", b"b"), "intent": "skip"},
+        ]
+    }
+    lock_path = tmp_path / "models.lock.json"
+    lock_path.write_text(json.dumps(lock), encoding="utf-8")
+    calls: list[str] = []
+
+    def fake_downloader(*, repo_id: str, filename: str, revision: str, local_dir: Path) -> Path:
+        calls.append(repo_id)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        dest = local_dir / filename
+        dest.write_bytes(b"a")
+        return dest
+
+    monkeypatch.setattr(dm, "_default_downloader", fake_downloader)
+    args = ["--lock", str(lock_path), "--models-dir", str(tmp_path / "m")]
+    assert dm.main([*args, "--intent", "keep"]) == 0
+    assert calls == ["org/a"]
+    assert dm.main([*args, "--intent", "nope"]) == 1
+    assert calls == ["org/a"]

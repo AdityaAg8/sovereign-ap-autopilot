@@ -1,0 +1,57 @@
+{
+  "description": "out_of_scope_nonzero_rate",
+  "invoice": {
+    "buyer": {
+      "address": "Corniche Road, Abu Dhabi",
+      "country": "AE",
+      "name": "Emirates Gulf FZE",
+      "trn": "100600700800903"
+    },
+    "document_sha256": "a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4a1b2c3d4",
+    "due_date": "2025-02-15",
+    "iban": "AE540140000000000001234",
+    "id": "INV-BASE",
+    "issue_date": "2025-01-15",
+    "kind": "invoice",
+    "language": "en",
+    "lines": [
+      {
+        "description": "Designated zone supply (goods, conditions met)",
+        "net_amount": {
+          "amount": "3000.00",
+          "currency": "AED"
+        },
+        "po_line_ref": null,
+        "quantity": "1",
+        "unit_price": {
+          "amount": "3000.00",
+          "currency": "AED"
+        },
+        "vat_category": "O",
+        "vat_rate": "5"
+      }
+    ],
+    "number": "INV-2025-0001",
+    "po_number": null,
+    "subtotal": {
+      "amount": "3000.00",
+      "currency": "AED"
+    },
+    "supplier": {
+      "address": "Sheikh Zayed Road, Dubai",
+      "country": "AE",
+      "name": "Al Reem Trading LLC",
+      "trn": "100200300400503"
+    },
+    "total": {
+      "amount": "3000.00",
+      "currency": "AED"
+    },
+    "vat_total": {
+      "amount": "0.00",
+      "currency": "AED"
+    },
+    "vendor_id": "VEND-0001"
+  },
+  "rule_id": "vat_category_rate_mismatch"
+}

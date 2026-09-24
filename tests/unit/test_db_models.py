@@ -51,10 +51,12 @@ EXPECTED_TABLES = {
     "llm_calls",
     "idempotency_keys",
     "labels",
+    "ingested_documents",
+    "fraud_flags",
 }
 
 # Columns that are legitimately `float` (probabilities/measurements, never money, §6.3).
-ALLOWED_FLOAT_COLUMNS = {("fields", "confidence")}
+ALLOWED_FLOAT_COLUMNS = {("fields", "confidence"), ("fraud_flags", "score")}
 
 
 def test_every_required_table_exists() -> None:
@@ -191,6 +193,29 @@ def test_users_and_roles_are_linked_by_a_join_table_not_a_free_text_column() -> 
     assert join_fks == {"users"}
     role_fks = {fk.column.table.name for fk in TABLES["user_roles"].columns["role_id"].foreign_keys}
     assert role_fks == {"roles"}
+
+
+def test_field_model_revision_column_exists_and_is_nullable() -> None:
+    """PRD §10 M10.1: a correction records the model/revision that produced the original
+    value, so `fields` must carry it (nullable -- most rows predate this or are human)."""
+    column = TABLES["fields"].c["model_revision"]
+    assert column.nullable is True
+
+
+def test_label_correction_columns_capture_the_before_snapshot() -> None:
+    """PRD §10 M10.1: every correction is a self-contained record of invoice, field,
+    before/after value, box, reviewer, timestamp and the model/revision that produced the
+    original -- `corrected_value`/`labeled_by`/`created_at` already covered the after value,
+    reviewer and timestamp; these four columns add the "before" half."""
+    labels = TABLES["labels"]
+    for column_name in (
+        "previous_value",
+        "previous_boxes",
+        "previous_source",
+        "previous_model_revision",
+    ):
+        assert column_name in labels.c, column_name
+        assert labels.c[column_name].nullable is True
 
 
 def test_foreign_key_type_is_sound() -> None:
