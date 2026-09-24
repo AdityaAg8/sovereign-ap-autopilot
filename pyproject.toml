@@ -88,7 +88,7 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["apx", "factory", "evals", "db", "attacks", "ml"]
+files = ["apx", "factory", "evals", "db", "attacks", "ml", "tools"]
 exclude = ["^web/"]
 
 [[tool.mypy.overrides]]
