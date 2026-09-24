@@ -382,6 +382,23 @@ def read_loop_state(checkpoint_dir: Path) -> LoopState:
         raise TrainingError(f"{checkpoint_dir / LOOP_STATE_JSON} missing or invalid") from exc
 
 
+def mlflow_run_params(
+    fingerprint: RunFingerprint, run_id: str, logged: Mapping[str, str]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """(params, tags) to log when a run starts or resumes. MLflow params are immutable, so a
+    resume logs only the keys the run doesn't have yet; `git_sha` isn't part of the resume
+    identity (`RunFingerprint.comparable`) and can change between resumes, so it goes in a
+    mutable tag. A resume whose logged fingerprint has a different comparable identity is refused
+    (the checkpoint store already checks this; this guards the MLflow record)."""
+    params = {"fingerprint": fingerprint.model_dump_json(), "run_id": run_id}
+    old = logged.get("fingerprint")
+    if old is not None:
+        previous = RunFingerprint.model_validate_json(old)
+        if previous.comparable() != fingerprint.comparable():
+            raise TrainingError("MLflow run was logged with a different run fingerprint")
+    return {k: v for k, v in params.items() if k not in logged}, {"git_sha": fingerprint.git_sha}
+
+
 # ---------------------------------------------------------------------------------------------
 # TRL SFTConfig (TrainingArguments + SFT fields; design §4, fixed values) and the probe sample.
 # ---------------------------------------------------------------------------------------------

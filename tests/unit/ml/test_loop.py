@@ -32,6 +32,7 @@ from ml.extractor_b.loop import (
     choose_rung,
     cuda_memory_fraction,
     make_run_id,
+    mlflow_run_params,
     probe_samples,
     read_loop_state,
     resolve_run,
@@ -315,3 +316,27 @@ def test_probe_helpers(cfg: TrainConfig, make_row: RowFactory) -> None:
     chosen = choose_rung(results, cfg)
     assert chosen is not None and chosen.rung is LadderRung.L1
     assert choose_rung([ProbeResult(LadderRung.L3, 12.0, 1.0)], cfg) is None
+
+
+# ---- MLflow params on start and resume ------------------------------------------------------
+
+
+def test_mlflow_params_new_run_logs_fingerprint_and_run_id() -> None:
+    fp = make_fingerprint()
+    params, tags = mlflow_run_params(fp, "b-run", {})
+    assert params == {"fingerprint": fp.model_dump_json(), "run_id": "b-run"}
+    assert tags == {"git_sha": "abc123"}
+
+
+def test_mlflow_params_resume_after_code_change_logs_no_params_and_retags_git_sha() -> None:
+    first = make_fingerprint(git_sha="48cc865")
+    logged = {"fingerprint": first.model_dump_json(), "run_id": "b-run"}
+    params, tags = mlflow_run_params(make_fingerprint(git_sha="a2d8ac3"), "b-run", logged)
+    assert params == {}  # MLflow params are immutable: re-logging a changed value is rejected
+    assert tags == {"git_sha": "a2d8ac3"}
+
+
+def test_mlflow_params_resume_with_a_different_identity_is_refused() -> None:
+    logged = {"fingerprint": make_fingerprint().model_dump_json()}
+    with pytest.raises(TrainingError, match="different run fingerprint"):
+        mlflow_run_params(make_fingerprint(config_sha256="0" * 64), "b-run", logged)

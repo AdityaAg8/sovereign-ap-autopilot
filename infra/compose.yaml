@@ -358,6 +358,7 @@ services:
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       EXTRACTOR_B_BASE_PATH: ${EXTRACTOR_B_BASE_PATH:-}
       EXTRACTOR_B_BASE_REVISION: ${EXTRACTOR_B_BASE_REVISION:-}
+      EXTRACTOR_B_EVAL_BATCH: ${EXTRACTOR_B_EVAL_BATCH:-}  # dev-eval generate batch; blank = 8
       TRAINER_IMAGE_DIGEST: ${TRAINER_IMAGE_DIGEST:-}
       GIT_SHA: ${GIT_SHA:-unknown}
     volumes:

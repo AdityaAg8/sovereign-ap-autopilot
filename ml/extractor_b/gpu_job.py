@@ -30,6 +30,7 @@ from ml.extractor_b.loop import (
     ProbeResult,
     choose_rung,
     cuda_memory_fraction,
+    mlflow_run_params,
     probe_samples,
     resolve_run,
     training_arguments_kwargs,
@@ -196,10 +197,13 @@ def run(
             if resolved.resume_from is None
             else resolved.store.path_for(resolved.resume_from.step)
         )
-        with tracker.mlflow.start_run(run_id=resolved.record.mlflow_run_id):
-            tracker.mlflow.log_params(
-                {"fingerprint": fingerprint.model_dump_json(), "run_id": resolved.record.run_id}
+        with tracker.mlflow.start_run(run_id=resolved.record.mlflow_run_id) as active:
+            params, tags = mlflow_run_params(
+                fingerprint, resolved.record.run_id, active.data.params
             )
+            if params:
+                tracker.mlflow.log_params(params)
+            tracker.mlflow.set_tags(tags)
             callback = loop_callback_class()(
                 loop,
                 evaluator,
