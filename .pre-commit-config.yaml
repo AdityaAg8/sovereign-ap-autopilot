@@ -50,12 +50,13 @@ repos:
         args: [--maxkb=1024]
         # web/public/pdfjs/pdf.worker.min.mjs is pdfjs-dist's own pre-minified worker build,
         # vendored so the pdf.js viewer (PRD §10 M5.4) never depends on a runtime CDN fetch;
-        # it can't be made smaller without breaking it.
-        exclude: ^web/public/pdfjs/
+        # it can't be made smaller without breaking it. .claude/skills holds vendored agent skills
+        # (the cloud-session kit), kept byte-identical to their upstream copies.
+        exclude: ^(web/public/pdfjs/|\.claude/skills/)
       - id: end-of-file-fixer
-        exclude: ^web/public/pdfjs/
+        exclude: ^(web/public/pdfjs/|\.claude/skills/)
       - id: trailing-whitespace
-        exclude: ^web/public/pdfjs/
+        exclude: ^(web/public/pdfjs/|\.claude/skills/)
       - id: check-merge-conflict
       - id: check-yaml
         args: [--allow-multiple-documents]

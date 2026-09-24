@@ -1,9 +1,9 @@
-# Secrets and local environment (PRD §8): never commit these.
+# Secrets and local environment (PRD Â§8): never commit these.
 .env
 .env.*
 !.env.example
 
-# Generated data, model weights and logs (PRD §8): never commit these.
+# Generated data, model weights and logs (PRD Â§8): never commit these.
 data/
 # Versioned eval inputs (M9.5 chat tasks and fixture world) are source, not generated data.
 !evals/chat/data/
@@ -43,11 +43,16 @@ node_modules/
 Thumbs.db
 
 
-# Planning and agent-orchestration files: local only, never committed.
-PRD.md
+# Local-only planning state. CLAUDE.md, PRD.md and .claude/{agents,rules,skills,settings.json}
+# are committed as the cloud-session kit, so cloud sessions get the same agents and skills.
 PROGRESS.md
 BLOCKED.md
 KICKOFF.md
-CLAUDE.md
 REVIEW.md
-.claude/
+CLAUDE.local.md
+.claude/worktrees/
+.claude/state/
+.claude/hooks/
+.claude/launch.json
+.claude/settings.local.json
+.claude/cloud-prompts.md
