@@ -54,6 +54,7 @@ Details and the report each one writes: [Evaluation guide](evaluation.md).
 | `make e2e-pipeline` | 20 documents through the live stack (GPU); writes `reports/e2e_pipeline.md` |
 | `make eval-chat` / `make eval-chat-dry` | Chat and AgentDojo evals on the local model (GPU) / on a scripted fake |
 | `make extraction-a-adr0012` / `make extraction-a-compare` | Extractor A with the ADR-0012 prompt (GPU, resumable) / paired before-after report |
+| `make bakeoff-probe` / `make bakeoff` / `make bakeoff-report` | M3.4: 5-page VRAM probe per arm (GPU) / 200 UAE + ExtractBench short per in-budget arm (GPU, resumable) / `reports/bakeoff.md` + ADR-0016 decision (CPU) |
 | `make verify-mN` / `make verify-all` | Milestone gates (built: m0, m1, m2, m4, m5, m8; the others fail loudly until their milestone lands) / all of them in order |
 
 ## Extractor B training

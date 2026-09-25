@@ -31,6 +31,7 @@ from apx.extract.normalize import NormalizationError, normalize_field
 from apx.extract.prompt import InvoicePromptBuilder
 from apx.extract.prompt_b import ImageOnlyPromptBuilder
 from apx.llm.client import LlamaSwapClient, LlmSettings
+from apx.parse.interfaces import ParsedDocument
 from apx.parse.parser import PaddleOcrDocumentParser
 from evals.extraction_identity import (
     RowIdentity,
@@ -127,6 +128,14 @@ async def _run_one(
     sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
 ) -> dict[str, Any]:
     document = await parser.parse(sha, (data_dir / f"{sha}.pdf").read_bytes())
+    return await extract_row(sha, document, data_dir, extractor)
+
+
+async def extract_row(
+    sha: str, document: ParsedDocument, data_dir: Path, extractor: LlmExtractor
+) -> dict[str, Any]:
+    """One eval row for an already-parsed factory document: extract, ground, score against its
+    `*.labels.json` / `*.truth.json` (the M3.4 bake-off reuses it on cached parses)."""
     output = await extractor.extract(document)
     grounded = WordGrounder().ground(document, output.fields)
     gold = _gold(data_dir / f"{sha}.labels.json")
