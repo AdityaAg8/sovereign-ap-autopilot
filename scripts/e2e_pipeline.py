@@ -124,6 +124,10 @@ class LoginAuth(httpx.Auth):
         self._form = {"username": username, "password": password}
         self._token: str | None = None
 
+    @property
+    def username(self) -> str:
+        return self._form["username"]
+
     @classmethod
     def from_seed(cls, data: Path) -> LoginAuth:
         creds = json.loads((data / "seed_credentials.json").read_text(encoding="utf-8"))

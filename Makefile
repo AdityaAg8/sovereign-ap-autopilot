@@ -16,7 +16,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
 
 .PHONY: help bootstrap env build up down models smoke gpu-free lint fmt typecheck test test-gpu \
         status open dashboard preview web-stop \
-        seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry retrain demo fresh-clone \
+        seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare \
@@ -31,7 +31,7 @@ N_TOTAL ?= 5000
 help:
 	@echo "Sovereign AP Autopilot -- see the targets below."
 	@echo "Common targets: bootstrap build up down models smoke gpu-free lint fmt typecheck test"
-	@echo "                test-gpu test-integration test-artifacts e2e eval eval-quick"
+	@echo "                test-gpu test-integration test-artifacts e2e eval eval-quick eval-attacks"
 	@echo "                retrain demo fresh-clone verify-mN verify-all"
 	@echo "                (verify-all stops at the first milestone whose gate is not built yet)"
 	@echo "Dev helpers:    status open dashboard preview web-stop"
@@ -277,6 +277,16 @@ seed:
 	@echo "==> load the factory ERP (seed 2026) into Postgres: users, vendors, verified IBANs, POs"
 	@echo "    replaces ERP tables and any invoices; sign-in details land in data/seed_credentials.json"
 	cd infra && $(COMPOSE) run --rm --no-deps worker python -m factory.seed_db
+
+# Overridable: `make eval-attacks ATTACKS_ARGS="--limit 24"` (or `--categories A08 A12`,
+# `--variant guard-off`, `--no-approve`, `--report-only`).
+ATTACKS_ARGS ?=
+
+eval-attacks:
+	@echo "==> M6.6: the 312-case attack suite through the running stack (make up + make seed first)"
+	@echo "    review-routed cases approved via the API; payment state read from Postgres"
+	@echo "    ~4 h for 312 cases (16 in flight); resumable: re-run to continue -> reports/attacks_e2e.md"
+	uv run $(if $(wildcard .env),--env-file .env,) python scripts/attacks_e2e.py $(ATTACKS_ARGS)
 
 e2e-pipeline:
 	@echo "==> 20 documents through the running stack (make up + make seed first) -> reports/e2e_pipeline.md"

@@ -46,6 +46,7 @@ GPU rows need `make up` (llama-swap serving) unless they say otherwise, and run 
 | [`chat_evals.md`](../reports/chat_evals.md) | Ops chat tool-call accuracy, citations, AgentDojo banking | `make eval-chat` (live) or `make eval-chat-dry` (harness self-test) | live run |
 | [`smoke.md`](../reports/smoke.md) | Every runtime model loads, answers and stays within the VRAM budget | `make smoke` | yes |
 | [`e2e_pipeline.md`](../reports/e2e_pipeline.md) | Documents through the live stack: archived, held, attack PDFs kept out of payment | `make e2e-pipeline` | yes |
+| [`attacks_e2e.md`](../reports/attacks_e2e.md) | M6.6: the 312-case attack suite end to end (approver approves review cases): payment-changing ASR per category, detection per control, gate ASR = 0 | `make eval-attacks` (~4 h, resumable) | yes |
 | [`fresh_clone.md`](../reports/fresh_clone.md) | A clean clone installs, lints, type-checks, tests and builds | `make fresh-clone` | no |
 | [`scoreboard.md`](../reports/scoreboard.md) | The PRD §5 table, also synced into the README | `make eval` / `make eval-quick` | depends on predictor |
 | [`env.md`](../reports/env.md) | Host preflight | `bash scripts/preflight.sh` | no |
