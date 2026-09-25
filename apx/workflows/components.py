@@ -99,12 +99,13 @@ def _rate(raw: str | None) -> Decimal | None:
         return None
 
 
-def _line(
-    index: int, raw: RawLineItem, currency: str, category: VatCategory | None
-) -> InvoiceLine | None:
+def _line(raw: RawLineItem, currency: str, category: VatCategory | None) -> InvoiceLine | None:
     """One extracted line, or None when its description or an amount cell is missing or
     unreadable. A dropped line is never silent: the validator's line-sum check then fails against
-    the subtotal. The category is the A/B-resolved one and a missing rate stays None."""
+    the subtotal. The category is the A/B-resolved one and a missing rate stays None. No PO line
+    reference is set: the extraction schema carries none, and the line's position on the invoice
+    says nothing about which PO line it bills (fraud attributes lines by
+    `apx.common.purchasing.attribute_po_line`)."""
     if raw.description is None or not raw.description.strip():
         return None
     try:
@@ -120,7 +121,6 @@ def _line(
         net_amount=Money(amount=net, currency=currency),
         vat_category=category,
         vat_rate=_rate(raw.vat_rate),
-        po_line_ref=str(index),
     )
 
 
@@ -157,8 +157,8 @@ class GroundedInvoiceBuilder:
         lines_source = result.a if result.a.valid_json else result.b
         lines = tuple(
             line
-            for i, raw in enumerate(lines_source.line_items, start=1)
-            if (line := _line(i, raw, currency, resolved.line_vat_categories[i - 1])) is not None
+            for i, raw in enumerate(lines_source.line_items)
+            if (line := _line(raw, currency, resolved.line_vat_categories[i])) is not None
         )
         return Invoice(
             id=inp.invoice_id,

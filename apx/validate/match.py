@@ -4,11 +4,11 @@ configurable unit-price tolerance and per-line currency consistency (PRD §10 M4
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 from apx.common.invoice import Invoice, InvoiceLine
+from apx.common.purchasing import normalize_description
 from apx.common.types import Frozen, Money
 from apx.validate.interfaces import (
     GoodsReceipt,
@@ -21,13 +21,6 @@ from apx.validate.interfaces import (
 
 DEFAULT_MATCH_TOLERANCE = MatchTolerance(quantity=Decimal("0"), price_pct=Decimal("0.005"))
 """Quantity must match received exactly; unit price may differ by up to ±0.5% (PRD §10 M4.2)."""
-
-_WHITESPACE_RE = re.compile(r"\s+")
-
-
-def _normalize_description(text: str) -> str:
-    """Case- and whitespace-insensitive key used for the SKU/description fallback match."""
-    return _WHITESPACE_RE.sub(" ", text).strip().casefold()
 
 
 class LineMatch(Frozen):
@@ -63,8 +56,8 @@ def _resolve_po_line(invoice_line: InvoiceLine, po: PurchaseOrder) -> PoLine | N
         for po_line in po.lines:
             if po_line.line_ref == invoice_line.po_line_ref:
                 return po_line
-    target = _normalize_description(invoice_line.description)
-    candidates = [pl for pl in po.lines if _normalize_description(pl.description) == target]
+    target = normalize_description(invoice_line.description)
+    candidates = [pl for pl in po.lines if normalize_description(pl.description) == target]
     if len(candidates) == 1:
         return candidates[0]
     return None
