@@ -71,6 +71,9 @@ def main(argv: list[str] | None = None) -> int:
         id2label={0: "benign", 1: "injection"},
         label2id={"benign": 0, "injection": 1},
         local_files_only=True,
+        # ModernBERT defaults to torch.compile, which needs a C compiler for Triton that the
+        # toolbox image does not ship; eager mode gives the same weights.
+        reference_compile=False,
     ).to(device)
 
     steps_per_epoch = (len(train_rows) + args.batch_size - 1) // args.batch_size

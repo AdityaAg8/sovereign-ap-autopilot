@@ -28,7 +28,7 @@ class GuardClassifier:
         self.max_length = max_length
         self.tokenizer = AutoTokenizer.from_pretrained(str(model_dir), local_files_only=True)
         self.model = AutoModelForSequenceClassification.from_pretrained(
-            str(model_dir), local_files_only=True
+            str(model_dir), local_files_only=True, reference_compile=False
         ).to(self.device)
         self.model.eval()
         threshold_file = model_dir / "guard.json"

@@ -19,7 +19,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
-        extraction-a-adr0012 extraction-a-compare \
+        extraction-a-adr0012 extraction-a-compare guard-data train-guard guard-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all
 
@@ -268,6 +268,23 @@ eval-chat:
 eval-chat-dry:
 	@echo "==> eval-chat-dry: same harness on the in-process scripted fake (no network, no GPU)"
 	uv run python -m evals.chat --dry-run
+
+## --- M6.4 injection guard (ml/guard, reports/guard.md) --------------------------------
+GUARD_TOOLBOX = cd infra && $(COMPOSE) --profile dev run --rm --no-deps toolbox
+
+guard-data:
+	@echo "==> guard dataset (public injections + invoice hard negatives) -> data/guard/ (CPU)"
+	uv run python -m evals.datasets fetch --set prompt_injections
+	uv run python -m evals.guard build
+
+train-guard: gpu-free
+	@echo "==> ModernBERT-base guard fine-tune + cal threshold, then test-split scores (GPU, ~2 min)"
+	$(GUARD_TOOLBOX) python -m ml.guard.train
+	$(GUARD_TOOLBOX) python -m ml.guard.infer --model-dir data/guard/checkpoints/guard-modernbert 		--out data/guard/scores/modernbert-ft.jsonl
+
+guard-report:
+	@echo "==> reports/guard.md: our fine-tune vs baselines on the test split (CPU)"
+	uv run python -m evals.guard report 		--status "Llama Prompt Guard 2 86M=blocked (gated; BLOCKED [models:promptguard])" 		--scores "ModernBERT-base fine-tune (ours)=data/guard/scores/modernbert-ft.jsonl" 		--scores "siberiancat/modernbert-prompt-injection=data/guard/scores/siberiancat.jsonl" 		--fixed "siberiancat/modernbert-prompt-injection=argmax 0.5:0.5" 		--fixed "siberiancat/modernbert-prompt-injection=vendor ~1% FPR point:0.03"
 
 retrain:
 	@echo "==> retrain: export corrections, LoRA challenger, shadow eval vs champion, promote or reject (ADR-0015)"
