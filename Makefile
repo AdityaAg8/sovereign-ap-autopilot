@@ -15,6 +15,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         status open dashboard preview web-stop \
         seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
+        report-b export-b export-b-image test-export smoke-b \
         extraction-a-adr0012 extraction-a-compare \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all
@@ -29,6 +30,9 @@ help:
 	@echo "Common targets: bootstrap up down models smoke gpu-free lint fmt typecheck test"
 	@echo "                test-gpu e2e eval eval-quick retrain demo fresh-clone verify-all"
 	@echo "Dev helpers:    status open dashboard preview web-stop"
+	@echo "Extractor B:    train-b-data train-b-probe train-b train-b-new train-b-pause"
+	@echo "                report-b export-b-image export-b smoke-b test-export"
+	@echo "All targets, grouped: docs/commands.md"
 
 ## --- Implemented -------------------------------------------------------------------
 
@@ -169,6 +173,31 @@ test-trainer:
 	@echo "==> trainer-image tests on CPU (pytest -m trainer)"
 	cd infra && $(COMPOSE) --profile train run --rm --no-deps -e CUDA_VISIBLE_DEVICES= trainer \
 		python -m pytest -m trainer -p no:cacheprovider --no-cov tests/trainer
+
+## --- Extractor B export and report (ADR-0009 §1.7, training-loop.md step 13) ----------
+EXPORTER_RUN = cd infra && GIT_SHA=$$(git rev-parse HEAD) \
+	$(COMPOSE) --profile train run --rm --name extractor-b-exporter exporter
+
+export-b-image:
+	@echo "==> building the exporter image (trainer image + llama.cpp b11096)"
+	cd infra && $(COMPOSE) --profile train build exporter
+
+export-b: gpu-free
+	@echo "==> Extractor B export from best.json -> models/extractor_b/<run_id>/export/ (GPU, foreground)"
+	$(EXPORTER_RUN) python -m ml.extractor_b.export
+
+test-export:
+	@echo "==> exporter-image tests on CPU (pytest -m trainer tests/exporter)"
+	cd infra && $(COMPOSE) --profile train run --rm --no-deps -e CUDA_VISIBLE_DEVICES= exporter \
+		python -m pytest -m trainer -p no:cacheprovider --no-cov tests/exporter
+
+smoke-b:
+	@echo "==> llama-server smoke of the exported challenger on 5 UAE dev docs (needs make up)"
+	uv run python -m ml.extractor_b.smoke --base-url http://127.0.0.1:8080
+
+report-b:
+	@echo "==> Extractor B training report -> reports/extractor_b.md (CPU; MLflow via the gateway if up)"
+	uv run python -m ml.extractor_b.report
 
 e2e:
 	@echo "not implemented yet (M5.4)"; exit 1

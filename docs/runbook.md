@@ -48,6 +48,9 @@ ADR-0013 needs table plus a 0.3 GB margin. A short card fails typed
 (`InsufficientGpuMemoryError`, retried by Temporal) instead of crashing mid-load. The worker
 reserves the GPU with `capabilities: [utility]` only, for `nvidia-smi`.
 
+**Training.** How to run, pause, resume and export the Extractor B fine-tune is in
+[`training.md`](training.md); every command is in [`commands.md`](commands.md).
+
 **Training lock.** `data/ml/gpu.lock` is held by a kernel `flock` for the whole training job, so a
 lock left by a dead trainer is reclaimed automatically. `make gpu-free` stops services and does
 not clear the lock. A legacy (pid-only) lock, or any lock on a host without flock (Windows), is

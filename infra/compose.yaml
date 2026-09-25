@@ -380,6 +380,18 @@ services:
               count: all
               capabilities: [gpu]
 
+  exporter:
+    # Extractor B export (ADR-0009 §1.7; `make export-b`): the trainer service's settings and
+    # mounts on the trainer image plus a pinned llama.cpp (infra/docker/exporter/Dockerfile).
+    # Writes only models/extractor_b/<run_id>/export/ and reads the pinned upstream mmproj.
+    extends:
+      service: trainer
+    profiles: [train]
+    image: sovereign-ap/exporter:2026.9.25
+    build:
+      context: ..
+      dockerfile: infra/docker/exporter/Dockerfile
+
   # Optional containerized alternative to running scripts/download_models.py on the host
   # (e.g. a CI runner without uv). Not started by `make up`/`docker compose up` -- only by
   # `docker compose --profile tools run model-fetch`. Lives on `egress`, never `app`.

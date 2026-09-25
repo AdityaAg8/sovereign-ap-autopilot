@@ -25,10 +25,11 @@
 </p>
 
 > [!NOTE]
-> Pre-release, working toward `v0.1.0`. The pipeline runs end to end on a live stack, but
-> Extractor B is still training and the trust gate is not calibrated yet, so every invoice is
-> currently routed to a human reviewer rather than paid automatically. [Project status](#project-status)
-> lists what is done and what is in progress.
+> Pre-release, working toward `v0.1.0`. The pipeline runs end to end on a live stack.
+> Extractor B finished training on 2026-09-25 (dev field F1 97.17) and is exported; its
+> test-split promotion gates are next; until the trust gate is calibrated on real A and B outputs, every invoice is routed to a
+> human reviewer rather than paid automatically. [Project status](#project-status) lists what is
+> done and what is in progress. New here? Start with [Getting started](docs/getting-started.md).
 
 ---
 
@@ -65,6 +66,7 @@ Every number below is measured and links to the report that produced it. Nothing
 | Area | Result | Gate | Source |
 |---|---|---|---|
 | Extraction (Extractor A, Qwen3.5-9B) | 99.60% valid JSON; 99.24% field accuracy on 750 UAE test invoices (480 with Arabic text) | valid JSON ≥ 99% | [`extraction_a.md`](reports/extraction_a.md) |
+| Extractor B training (Qwen3.5-4B LoRA) | Dev field F1 97.17, 95.5% valid JSON unconstrained, best of 4 dev evals over 510 steps; exported to a 2.8 GB Q4_K_M GGUF, 5/5 llama-server smoke; test-split gates next | reported (promotion gates in ADR-0015) | [`extractor_b.md`](reports/extractor_b.md) |
 | Grounding | 92.69% of non-null fields matched to words on the page; 86.25% of boxes at IoU ≥ 0.5 | reported | [`extraction_a.md`](reports/extraction_a.md) |
 | Parsing (born-digital) | 98.24% of 96,444 labelled fields at IoU ≥ 0.5; p50 222 ms per document | ≥ 98% | [`parse.md`](reports/parse.md) |
 | E-invoice output | 5,000 / 5,000 gold PINT AE invoices pass the official schematron, across all five tax cases | 100% | [`gold_xml.md`](reports/gold_xml.md) |
@@ -239,6 +241,7 @@ login page lists the demo accounts.
 > Compose defaults it to the demo company. Anywhere else there is no default, and the worker
 > refuses to start without a valid value (see `.env.example`).
 
+Step-by-step setup with checks after each step: [`docs/getting-started.md`](docs/getting-started.md).
 Service URLs, recovery steps and the GPU budget: [`docs/runbook.md`](docs/runbook.md).
 
 ## Evaluation and quality gates
@@ -331,7 +334,7 @@ real `make eval`/`make eval-quick` run measures it._
 | ✅ | **M4** Validation and e-invoice | VAT and TRN/IBAN validators, 3-way match, PINT AE builder, mock ASP |
 | 🚧 | **M5** Workflow, API, review UI | Workflow, API, ingest and review UI done; mobile Lighthouse 96 on the key pages. The 20-document live run and the `v0.1.0` tag are next |
 | 🚧 | **M6** Security | Threat model, hidden-content scan, attack suite, typed boundary and policy engine done. Guard fine-tune (M6.4) and the full end-to-end attack run (M6.6) pending |
-| 🚧 | **M7** Trust gate and Extractor B | **Extractor B is training** (M7.1). Calibration and Learn-then-Test code merged; fitting (M7.4, M7.5) waits for B. Teacher (M7.2, only if B misses its gate) and arbiter selection (M7.3) follow |
+| 🚧 | **M7** Trust gate and Extractor B | **Extractor B trained** (M7.1, 510 steps, dev F1 97.17); export and test-split promotion gates next. Calibration and Learn-then-Test code merged; fitting (M7.4, M7.5) runs on real A and B outputs. Teacher (M7.2, only if B misses its gate) and arbiter selection (M7.3) follow |
 | 🚧 | **M8** Fraud | Rules, isolation forest and UI explanations done. Page-similarity provider built, not yet wired into the workflow |
 | 🚧 | **M9** Agent, chat, MCP | Tools, exception agent, ops chat and MCP server done. Live chat and AgentDojo evals (M9.5) pending |
 | 🚧 | **M10** Learning loop, observability, demo | Corrections store, tracing and operations board, audit verifier and `make demo` done. The promotion decider for `make retrain` is built; its production adapters are pending |
@@ -391,7 +394,7 @@ memory against the budget, Compose services, pull requests and CI. It binds 127.
 only the Python standard library ([details](tools/ops-dashboard/README.md)).
 
 <details>
-<summary><strong>All make targets</strong></summary>
+<summary><strong>All make targets</strong> (grouped, with one-liners: <a href="docs/commands.md">docs/commands.md</a>)</summary>
 
 | Target | What it does |
 |---|---|
@@ -407,7 +410,10 @@ only the Python standard library ([details](tools/ops-dashboard/README.md)).
 | `e2e-pipeline` | 20 documents through the running stack; writes `reports/e2e_pipeline.md` |
 | `eval` / `eval-quick` | Full / quick evaluation; regenerates the scoreboard and syncs it into this README |
 | `eval-chat` / `eval-chat-dry` | Chat and AgentDojo evals against the local model / against a scripted fake |
-| `train-b` / `train-b-pause` | Resume Extractor B training in the background (GPU) / stop it after saving at the next optimizer step |
+| `train-b-data` / `train-b-probe` | Build and guard B's training data (CPU) / measure VRAM per image rung (GPU) |
+| `train-b` / `train-b-new` / `train-b-pause` | Resume / start Extractor B training in the background (GPU) / stop it after saving at the next optimizer step |
+| `report-b` / `export-b` / `smoke-b` | Training report `reports/extractor_b.md` (CPU) / best checkpoint to GGUF Q4_K_M + mmproj (GPU) / the export on 5 dev documents through llama-server ([training guide](docs/training.md)) |
+| `extraction-a-adr0012` / `extraction-a-compare` | Extractor A on the ADR-0012 prompt (GPU, resumable) / paired before-after report |
 | `retrain` | Challenger vs champion on gates G1-G11, promote only if nothing regresses ([ADR-0015](docs/adr/0015-promotion-gates.md)). Exits 2 until the production adapters exist |
 | `status` | Aligned table of service health, ports, GPU memory, loaded model and active jobs; honours `NO_COLOR` |
 | `open` / `dashboard` | Open the web UI / Phoenix, MLflow and Temporal UI |
@@ -452,6 +458,11 @@ Contribution workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 | Document | Contents |
 |---|---|
+| [Getting started](docs/getting-started.md) | Fresh machine to running demo, step by step, with what each step does |
+| [Commands](docs/commands.md) | Every `make` target grouped by task, plus useful one-liners |
+| [Evaluation guide](docs/evaluation.md) | What each report measures, the datasets and splits, and the command that regenerates it |
+| [Training Extractor B](docs/training.md) | Running, watching, pausing and exporting the fine-tune, and the first run's results |
+| [Glossary](docs/glossary.md) | UAE e-invoicing, pipeline, security and ML terms in plain words |
 | [Architecture](docs/architecture.md) | Modules, import direction, data flow, trust boundaries, GPU staging, the payee pin |
 | [Security threat model](docs/security.md) | Assets, STRIDE per boundary, attack trees, attack categories, control catalogue, residual risks |
 | [Runbook](docs/runbook.md) | Operating the stack, service URLs, common failures, migrations, audit verification |

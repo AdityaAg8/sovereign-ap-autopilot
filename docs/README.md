@@ -1,11 +1,17 @@
 # Documentation
 
-Start with the architecture, then read the ADR behind whichever module you are changing.
+New to the project? Read [Getting started](getting-started.md), then the architecture, then the
+ADR behind whichever module you are changing.
 
 ## Guides
 
 | Document | Read it for |
 |---|---|
+| [Getting started](getting-started.md) | Fresh machine to running demo, step by step |
+| [Commands](commands.md) | Every `make` target grouped by task, plus useful one-liners |
+| [Evaluation guide](evaluation.md) | Datasets, splits, what each report measures and how to regenerate it |
+| [Training Extractor B](training.md) | Running, watching, pausing and exporting the fine-tune; first-run results |
+| [Glossary](glossary.md) | UAE e-invoicing, pipeline, security and ML terms in plain words |
 | [Architecture](architecture.md) | Modules, import direction, data flow, trust boundaries, GPU staging, the payee pin, the decision index |
 | [Security threat model](security.md) | Assets, attackers, STRIDE per boundary, attack trees, the A01-A12 attack categories, the SEC-01..25 control catalogue, residual risks |
 | [Runbook](runbook.md) | Starting and stopping the stack, service URLs, GPU budget and the training lock, common failures, migrations, the ops dashboard, audit verification |
@@ -36,4 +42,5 @@ There is no ADR-0007; the number was not used.
 
 ## Reports
 
-Measured results live in [`reports/`](../reports/). Each file names the command that regenerates it.
+Measured results live in [`reports/`](../reports/). Each file names the command that regenerates it;
+the [evaluation guide](evaluation.md) lists them all in one table.
