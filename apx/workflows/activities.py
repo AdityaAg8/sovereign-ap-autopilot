@@ -7,6 +7,7 @@ e-invoicing lives on their own module branches; this file wires, never re-implem
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
@@ -166,7 +167,9 @@ class DefaultInvoiceActivities:
     @activity.defn(name="scan")
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport:
         data = self._deps.documents.get(inp.document_sha256)
-        report = self._deps.scanner.scan(inp.document_sha256, data)
+        # Off the event loop: the scan renders every page and runs the CPU injection guard
+        # (ADR-0017), seconds of work that would otherwise stall heartbeats and other activities.
+        report = await asyncio.to_thread(self._deps.scanner.scan, inp.document_sha256, data)
         await self._audit(
             "scan",
             inp.invoice_id,

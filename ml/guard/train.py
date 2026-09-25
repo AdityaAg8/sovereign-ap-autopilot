@@ -1,6 +1,7 @@
 """Fine-tunes ModernBERT-base into the M6.4 injection guard on data/guard/train.jsonl, then sets
-its operating threshold on cal.jsonl (max F1) and saves checkpoint + guard.json. Runs in the
-toolbox container; `--max-steps`/`--subset` give a quick CPU smoke run of the same pipeline.
+its review (max F1) and block (zero cal false positives) thresholds on cal.jsonl and saves the
+checkpoint + guard.json. Runs in the toolbox container; `--max-steps`/`--subset` give a quick
+CPU smoke run of the same pipeline.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from transformers import (
 )
 
 from ml.guard.infer import MAX_LENGTH, GuardClassifier
-from ml.guard.metrics import confusion, select_threshold
+from ml.guard.metrics import confusion, select_block_threshold, select_threshold
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
@@ -124,9 +125,17 @@ def main(argv: list[str] | None = None) -> int:
     cal_labels = [int(str(r["label"])) for r in cal_rows]
     threshold = select_threshold(cal_scores, cal_labels)
     cal = confusion(cal_scores, cal_labels, threshold)
+    block_threshold = select_block_threshold(cal_scores, cal_labels)
+    block_cal = confusion(cal_scores, cal_labels, block_threshold)
     meta = {
         "threshold": threshold,
         "cal": {"precision": cal.precision, "recall": cal.recall, "f1": cal.f1, "fpr": cal.fpr},
+        "block_threshold": block_threshold,
+        "block_cal": {
+            "precision": block_cal.precision,
+            "recall": block_cal.recall,
+            "fpr": block_cal.fpr,
+        },
         "steps": step,
         "train_rows": len(train_rows),
         "cal_rows": len(cal_rows),
@@ -137,6 +146,11 @@ def main(argv: list[str] | None = None) -> int:
         "base": str(args.base),
     }
     (args.out / "guard.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    # World-readable: the worker loads this read-only mount as a non-root user (ADR-0017), and
+    # safetensors writes its weights 0600.
+    for path in args.out.iterdir():
+        if path.is_file():
+            path.chmod(0o644)
     print(json.dumps(meta), flush=True)
     return 0
 

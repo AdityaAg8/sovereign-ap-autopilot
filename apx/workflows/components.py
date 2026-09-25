@@ -41,7 +41,8 @@ from apx.extract.interfaces import (
 from apx.fraud.interfaces import FraudFlag, FraudReport, InvoiceHistory, PageSimilarityIndex
 from apx.fraud.rules import DuplicateInvoiceRule
 from apx.scan.cap import cap_flags
-from apx.scan.interfaces import HiddenContentDetector, ScanFlagKind, ScanReport
+from apx.scan.guard import InjectionGuard
+from apx.scan.interfaces import HiddenContentDetector, ScanFlag, ScanFlagKind, ScanReport
 from apx.trust.interfaces import CalibrationMethod, FieldFeatures
 from apx.validate.interfaces import NO_CURRENCY
 from apx.workflows.interfaces import InvoiceWorkflowInput
@@ -199,9 +200,11 @@ def _normalized(fields: Mapping[FieldName, FieldValue], name: FieldName) -> str 
 
 
 class DetectorScanner:
-    """`Scanner` over the rule-based hidden-content detector (M6.1). Until the M6.4 guard
-    classifier lands, the injection score is the strongest flag of a kind that only an attack
-    produces: text a reader cannot see, or active content."""
+    """`Scanner` over the rule-based hidden-content detector (M6.2) and the M6.4 injection
+    guard (ADR-0017). The injection score is the strongest flag of a kind only an attack
+    produces: text a reader cannot see, active content, or a guard INJECTION flag, whose score
+    is already on the P4 scale (`apx.scan.guard.policy_score`). `guard=None` runs the detector
+    alone; the worker always passes one, and a guard failure raises `ScanError`."""
 
     ATTACK_KINDS = frozenset(
         {
@@ -212,11 +215,16 @@ class DetectorScanner:
         }
     )
 
-    def __init__(self, detector: HiddenContentDetector) -> None:
+    def __init__(self, detector: HiddenContentDetector, *, guard: InjectionGuard | None) -> None:
         self._detector = detector
+        self._guard = guard
 
     def scan(self, document_sha256: Sha256Hex, pdf_bytes: bytes) -> ScanReport:
-        found = self._detector.detect(pdf_bytes) if pdf_bytes.startswith(b"%PDF") else []
+        found: list[ScanFlag] = []
+        if pdf_bytes.startswith(b"%PDF"):
+            found = list(self._detector.detect(pdf_bytes))
+            if self._guard is not None:
+                found += self._guard.detect(pdf_bytes, found)
         score = max((f.score for f in found if f.kind in self.ATTACK_KINDS), default=0.0)
         flags, suppressed = cap_flags(found)
         return ScanReport(

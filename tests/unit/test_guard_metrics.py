@@ -7,7 +7,12 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ml.guard.metrics import ThresholdSelectionError, confusion, select_threshold
+from ml.guard.metrics import (
+    ThresholdSelectionError,
+    confusion,
+    select_block_threshold,
+    select_threshold,
+)
 
 
 def test_confusion_counts_and_rates() -> None:
@@ -50,3 +55,38 @@ def test_selected_threshold_is_optimal_over_candidates(pairs: list[tuple[float, 
     best = max(confusion(scores, labels, t).f1 for t in set(scores))
     assert chosen in scores
     assert confusion(scores, labels, chosen).f1 == best
+
+
+def test_block_threshold_is_the_lowest_positive_above_every_benign_score() -> None:
+    scores, labels = [0.1, 0.95, 0.9, 0.97, 0.99, 0.5], [0, 0, 1, 1, 1, 1]
+    block = select_block_threshold(scores, labels)
+    assert block == 0.97
+    assert confusion(scores, labels, block).fp == 0
+    assert block >= select_threshold(scores, labels)
+
+
+def test_block_threshold_refuses_when_no_positive_clears_the_top_benign() -> None:
+    with pytest.raises(ThresholdSelectionError, match="no positive"):
+        select_block_threshold([0.2, 0.9, 0.8], [1, 0, 1])
+    with pytest.raises(ThresholdSelectionError):
+        select_block_threshold([0.2, 0.9], [1, 1])
+    with pytest.raises(ThresholdSelectionError):
+        select_block_threshold([], [])
+
+
+@given(
+    st.lists(
+        st.tuples(st.floats(min_value=0.0, max_value=1.0, allow_nan=False), st.integers(0, 1)),
+        min_size=2,
+        max_size=40,
+    )
+)
+def test_block_threshold_never_admits_a_cal_false_positive(rows: list[tuple[float, int]]) -> None:
+    scores = [s for s, _ in rows]
+    labels = [y for _, y in rows]
+    try:
+        block = select_block_threshold(scores, labels)
+    except ThresholdSelectionError:
+        return
+    assert confusion(scores, labels, block).fp == 0
+    assert confusion(scores, labels, block).tp >= 1

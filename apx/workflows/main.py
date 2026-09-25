@@ -59,6 +59,8 @@ from apx.policy.engine import DefaultPolicyEngine
 from apx.policy.interfaces import PolicyThresholds
 from apx.policy.proposals import DefaultProposalSink, PgProposalStore
 from apx.scan.detector import PdfHiddenContentDetector
+from apx.scan.guard import InjectionGuard, load_guard_thresholds
+from apx.scan.modernbert import ModernBertInjectionClassifier
 from apx.trust.artifact import CalibratorStore
 from apx.trust.features import ExtractionFeatureBuilder
 from apx.trust.gate import ArtifactTrustGate, FileServedIdentities
@@ -129,6 +131,10 @@ class WorkerSettings(BaseSettings):
     scan_review: float = Field(default=0.5, ge=0, le=1)
     attack_block: float = Field(default=0.9, ge=0, le=1)
     sod_cooldown_days: int = Field(default=30, ge=0)
+    guard_model_dir: Path = Path("/models/guard-modernbert")
+    """The M6.4 injection guard checkpoint and its guard.json thresholds (read-only mount,
+    ADR-0017). Loaded at startup on CPU; a missing or invalid checkpoint stops the worker, so
+    no invoice is ever scanned without the classifier."""
     buyer_trn: str
     """`WORKER_BUYER_TRN` (required, no default): the buyer on every e-invoice is us, so BT-48
     and the BT-49 EndpointID come from here, never from the document. The document's buyer TRN
@@ -248,7 +254,7 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
     asp = MockAsp(SqliteAspRepository(settings.asp_db), validator_factory=schematron)
     return InvoiceActivityDeps(
         documents=documents,
-        scanner=DetectorScanner(PdfHiddenContentDetector()),
+        scanner=DetectorScanner(PdfHiddenContentDetector(), guard=_injection_guard(settings)),
         parser=PaddleOcrDocumentParser(gpu.parse_client),
         parsed=FileParsedDocumentStore(settings.parsed_dir),
         extraction=DualExtractionPipeline(
@@ -317,6 +323,19 @@ def trust_gate(settings: WorkerSettings, prompts: dict[ExtractorId, PromptBuilde
             models_root=settings.models_root,
         ),
         fallback=CalibratedTrustGate(AgreementScore(), None),
+    )
+
+
+def _injection_guard(settings: WorkerSettings) -> InjectionGuard:
+    """The M6.4 guard on CPU (ADR-0017), mapped onto the same P4 thresholds the policy engine
+    routes with. Raises `ScanError` (the worker does not start) if the checkpoint or its
+    guard.json thresholds are missing or invalid."""
+    thresholds = load_guard_thresholds(settings.guard_model_dir)
+    return InjectionGuard(
+        ModernBertInjectionClassifier(settings.guard_model_dir, device="cpu"),
+        thresholds,
+        scan_review=settings.scan_review,
+        attack_block=settings.attack_block,
     )
 
 

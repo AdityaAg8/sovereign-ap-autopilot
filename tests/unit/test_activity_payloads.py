@@ -193,7 +193,7 @@ def test_zero_width_flood_scan_is_capped_under_budget_and_routes_unchanged(
     # character), which is at Temporal's 2 MB limit and is sent twice (scan result, route arg).
     pdf = pdf_builder.zero_width_flood_pdf(5000, hidden_attack=hidden_attack)
     found = PdfHiddenContentDetector().detect(pdf)
-    report = DetectorScanner(PdfHiddenContentDetector()).scan(fx.DOC_SHA, pdf)
+    report = DetectorScanner(PdfHiddenContentDetector(), guard=None).scan(fx.DOC_SHA, pdf)
     converter = pydantic_data_converter.payload_converter
 
     payloads = converter.to_payloads([report])

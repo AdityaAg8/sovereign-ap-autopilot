@@ -17,11 +17,23 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+# The M6.4 injection guard runs on CPU in the worker (docs/adr/0017-injection-guard-runtime.md):
+# CPU-only torch at the toolbox's version (the checkpoint was trained and scored with 2.6.0)
+# and the transformers release its config.json was saved with (5.0.0). Outside uv.lock on
+# purpose: the Windows host venv never installs torch (Smart App Control, ADR-0006), so these
+# pins live in this image only; the sync below is `--inexact` so it keeps them. Build-time
+# network only: the checkpoint is a read-only mount and HF is forced offline.
+RUN uv pip install --python /opt/venv/bin/python "torch==2.6.0" \
+        --index-url https://download.pytorch.org/whl/cpu \
+    && uv pip install --python /opt/venv/bin/python "transformers==5.0.0"
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
 COPY apx ./apx
 COPY factory ./factory
 COPY db ./db
 COPY alembic.ini ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --inexact
 
 RUN useradd --create-home --uid 10001 apx && mkdir -p /app/data && chown apx /app/data
 USER apx

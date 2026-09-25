@@ -58,7 +58,8 @@ class HiddenContentDetector(Protocol):
 
 class InjectionClassifier(Protocol):
     def score(self, texts: Sequence[str]) -> list[float]:
-        """Probability of prompt injection per text, in [0, 1]."""
+        """Probability of prompt injection per text, in [0, 1], in input order. Raises
+        ScanError on failure (apx.scan.guard.InjectionGuard wraps anything else as one)."""
         ...
 
 

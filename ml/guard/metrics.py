@@ -1,6 +1,7 @@
 """Stdlib-only metrics and threshold selection for the M6.4 injection guard: confusion counts,
-precision/recall/F1/FPR at a threshold, and the cal-split threshold rule (max F1, ties to the
-higher threshold). Shared by the fine-tune script (in the toolbox container) and evals/guard.py.
+precision/recall/F1/FPR at a threshold, and the cal-split threshold rules (review: max F1, ties
+to the higher threshold; block: the lowest score with zero cal false positives). Shared by the
+fine-tune script (in the toolbox container), evals/guard.py and ml/guard/thresholds.py.
 """
 
 from __future__ import annotations
@@ -72,3 +73,22 @@ def select_threshold(scores: Sequence[float], labels: Sequence[int]) -> float:
         if f1 >= best_f1:
             best_f1, best_threshold = f1, candidate
     return best_threshold
+
+
+def select_block_threshold(scores: Sequence[float], labels: Sequence[int]) -> float:
+    """The cal-split block point (PRD §6.3 P4, ADR-0017): the lowest positive score strictly
+    above every benign score, so no cal negative reaches it. Raises `ThresholdSelectionError`
+    when no positive clears the highest benign score (the classifier could then never block)."""
+    if not scores:
+        raise ThresholdSelectionError("no calibration scores")
+    if len(scores) != len(labels):
+        raise ThresholdSelectionError("scores and labels differ in length")
+    if set(labels) != {0, 1}:
+        raise ThresholdSelectionError("calibration split needs both classes")
+    top_benign = max(s for s, y in zip(scores, labels, strict=True) if y == 0)
+    above = [s for s, y in zip(scores, labels, strict=True) if y == 1 and s > top_benign]
+    if not above:
+        raise ThresholdSelectionError(
+            f"no positive scores above the highest benign cal score {top_benign}"
+        )
+    return min(above)
