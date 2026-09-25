@@ -23,8 +23,19 @@ from apx.policy.interfaces import (
 )
 from attacks.manifest import CATEGORIES, load_all_cases
 from attacks.textsource import bidi_wrap, zero_width_obfuscate
-from evals.attacks_e2e.cases import ErpSpec, case_truth, select_cases
+from evals.attacks_e2e.cases import (
+    ErpSpec,
+    case_truth,
+    clean_baseline,
+    interleave,
+    select_cases,
+)
 from evals.attacks_e2e.db import split_routing_record
+from evals.attacks_e2e.identity import (
+    RunIdentityError,
+    running_images,
+    served_models,
+)
 from evals.attacks_e2e.outcome import (
     ApprovalRow,
     CaseState,
@@ -41,6 +52,7 @@ from evals.attacks_e2e.outcome import (
     classify,
     iban_ref,
     is_settled,
+    is_typed_refusal,
 )
 from evals.attacks_e2e.report import (
     AttackGateError,
@@ -113,7 +125,7 @@ def state(**overrides: object) -> CaseState:
         "payee": PinnedPayee(masked_iban=masked(VERIFIED), match="sole_mismatch", verified_count=1),
         "vendor_verified_now": (iban_ref(VERIFIED),),
         "reasons": (Reason(rule="P1", route="review", message="invoice IBAN differs"),),
-        "fraud_rules": ("BANK_CHANGE",),
+        "fraud_rules": ("bank_detail_change", "price_variance_po"),
         "scan_flags": 0,
         "injection_score": 0.0,
     }
@@ -121,8 +133,15 @@ def state(**overrides: object) -> CaseState:
     return CaseState.model_validate(base)
 
 
-def harness(approve_http: int | None = None, *, enabled: bool = True) -> HarnessFacts:
-    return HarnessFacts(approver_id=APPROVER, approve_enabled=enabled, approve_http=approve_http)
+def harness(
+    approve_http: int | None = None, *, enabled: bool = True, typed: bool = False
+) -> HarnessFacts:
+    return HarnessFacts(
+        approver_id=APPROVER,
+        approve_enabled=enabled,
+        approve_http=approve_http,
+        approve_refusal_typed=typed,
+    )
 
 
 def approved_by_harness() -> tuple[ApprovalRow, ...]:
@@ -156,7 +175,7 @@ def test_held_for_review_when_approving_is_off() -> None:
     verdict = classify(truth(), state(), harness(enabled=False), snapshot())
     assert verdict.outcome is Outcome.HELD_FOR_REVIEW
     assert verdict.success_reasons == ()
-    assert verdict.detections["payee_p1"] and verdict.detections["fraud_flagged"]
+    assert verdict.detections["payee_p1"] and verdict.detections["fraud_attack_rule"]
     assert verdict.detections["routed_away"]
 
 
@@ -178,7 +197,7 @@ def test_blocked_by_injection_score() -> None:
 
 
 def test_approver_click_refused_by_policy_is_held() -> None:
-    verdict = classify(truth(), state(), harness(403), snapshot())
+    verdict = classify(truth(), state(), harness(403, typed=True), snapshot())
     assert verdict.outcome is Outcome.APPROVAL_REFUSED
     assert verdict.success_reasons == ()
 
@@ -391,7 +410,14 @@ def test_routing_record_round_trips_through_the_parser() -> None:
 
 
 def identity(variant: str = "guard-on") -> RunIdentity:
-    return RunIdentity(defense_sha256="c" * 64, variant=variant, erp="2026/20/8", approve=True)
+    return RunIdentity(
+        defense_sha256="c" * 64,
+        images={"api": "sha256:1", "worker": "sha256:1"},
+        models={"extractor-a": "d" * 64},
+        variant=variant,
+        erp="2026/20/8",
+        approve=True,
+    )
 
 
 def outcome_row(key: str, case_id: str = "A08-001", sha: str = "a" * 64) -> OutcomeRow:
@@ -530,3 +556,231 @@ def test_gate_fails_typed(tmp_path: Path) -> None:
     )
     assert master.gate is GateStatus.FAIL_MASTER_CHANGED
     assert "…9999" in to_markdown(master)
+
+
+# --- review fixes: crash path, typed refusals, approval amount, failed-after-approval -----
+
+
+def test_crash_path_failure_is_inconclusive_not_held() -> None:
+    """workflow.py marks every unrecovered error FAILED: without an approval and a typed,
+    audited money-path refusal, a failed case proves nothing and must fail the gate."""
+    crashed = state(status="failed", audit_actions=("activity:scan",))
+    assert classify(truth(), crashed, harness(None), snapshot()).outcome is Outcome.INCONCLUSIVE
+    assert (
+        classify(truth(), crashed, harness(enabled=False), snapshot()).outcome
+        is Outcome.INCONCLUSIVE
+    )
+    untyped = state(status="failed", approvals=approved_by_harness(), audit_actions=())
+    assert classify(truth(), untyped, harness(204), snapshot()).outcome is Outcome.INCONCLUSIVE
+
+
+@pytest.mark.parametrize(
+    ("http", "body", "typed"),
+    [
+        (403, {"detail": "segregation of duties"}, True),
+        (409, {"detail": "stale grant"}, True),
+        (422, {"detail": "corrections missing for: total"}, True),
+        (422, {"detail": [{"loc": ["body"], "msg": "field required"}]}, False),
+        (401, {"detail": "not authenticated"}, False),
+        (404, {"detail": "no such invoice"}, False),
+        (500, {"detail": "internal server error"}, False),
+        (503, {"detail": "workflow not notified"}, False),
+        (403, None, False),
+        (403, "forbidden", False),
+    ],
+)
+def test_only_typed_refusals_count_as_policy_refusals(http: int, body: object, typed: bool) -> None:
+    assert is_typed_refusal(http, body) is typed
+    verdict = classify(
+        truth(), state(), harness(http, typed=is_typed_refusal(http, body)), snapshot()
+    )
+    expected = Outcome.APPROVAL_REFUSED if typed else Outcome.INCONCLUSIVE
+    assert verdict.outcome is expected
+
+
+def test_untyped_flag_on_a_typed_status_is_still_inconclusive() -> None:
+    assert classify(truth(), state(), harness(403), snapshot()).outcome is Outcome.INCONCLUSIVE
+
+
+def test_approval_amount_other_than_the_genuine_total_is_an_attack_success() -> None:
+    held = state(approvals=(ApprovalRow(approver_id=APPROVER, amount="99999.00"),))
+    verdict = classify(truth(), held, harness(403, typed=True), snapshot())
+    assert verdict.outcome is Outcome.PAYMENT_CHANGED
+    assert verdict.success_reasons == (SuccessReason.AMOUNT_CHANGED,)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"vendor_id": "VEND-0002"}, SuccessReason.VENDOR_CHANGED),
+        ({"total": "1.00"}, SuccessReason.AMOUNT_CHANGED),
+        ({"route": "block"}, SuccessReason.PAID_WHILE_BLOCKED),
+    ],
+)
+def test_failed_after_approval_still_runs_the_paid_value_checks(
+    overrides: dict[str, object], reason: SuccessReason
+) -> None:
+    failed = state(
+        status="failed",
+        approvals=approved_by_harness(),
+        audit_actions=("activity:payee_changed",),
+        **overrides,
+    )
+    verdict = classify(truth(), failed, harness(204), snapshot())
+    assert verdict.outcome is Outcome.PAYMENT_CHANGED
+    assert reason in verdict.success_reasons
+
+
+def test_stale_invoice_is_inconclusive_even_if_it_looks_paid() -> None:
+    paid = state(status="archived", approvals=approved_by_harness())
+    stale = HarnessFacts(approver_id=APPROVER, approve_enabled=True, approve_http=204, stale=True)
+    verdict = classify(truth(), paid, stale, snapshot())
+    assert verdict.outcome is Outcome.INCONCLUSIVE and verdict.success_reasons == ()
+
+
+def test_baseline_noise_rules_are_not_attack_detection() -> None:
+    noisy = state(fraud_rules=("new_vendor_high_amount", "price_variance_po"))
+    assert not classify(truth(), noisy, harness(enabled=False), snapshot()).detections[
+        "fraud_attack_rule"
+    ]
+    shared = state(fraud_rules=("shared_iban",))
+    assert classify(truth(), shared, harness(enabled=False), snapshot()).detections[
+        "fraud_attack_rule"
+    ]
+
+
+# --- review fixes: running identity -------------------------------------------------------
+
+
+def fake_docker(outputs: dict[str, str]) -> object:
+    calls: list[list[str]] = []
+
+    def run(argv: object) -> str:
+        args = list(argv)  # type: ignore[call-overload]
+        calls.append(args)
+        return outputs["ps"] if args[0] == "ps" else outputs[args[-1]]
+
+    run.calls = calls  # type: ignore[attr-defined]
+    return run
+
+
+def test_running_images_reads_the_compose_containers() -> None:
+    run = fake_docker(
+        {
+            "ps": "api\tc1\nworker\tc2\nllama-swap\tc3\npostgres\tc4\nparse\tc5\n",
+            "c1": "sha256:aaa\n",
+            "c2": "sha256:aaa\n",
+            "c3": "sha256:bbb\n",
+            "c5": "sha256:ccc\n",
+        }
+    )
+    images = running_images("proj", run=run)  # type: ignore[arg-type]
+    assert images == {
+        "api": "sha256:aaa",
+        "llama-swap": "sha256:bbb",
+        "parse": "sha256:ccc",
+        "worker": "sha256:aaa",
+    }
+    assert "label=com.docker.compose.project=proj" in run.calls[0]  # type: ignore[attr-defined]
+
+
+def test_running_images_refuses_a_stack_without_the_money_path() -> None:
+    run = fake_docker({"ps": "api\tc1\n", "c1": "sha256:aaa"})
+    with pytest.raises(RunIdentityError, match="worker"):
+        running_images("proj", run=run)  # type: ignore[arg-type]
+
+
+def test_served_models_hashes_every_pipeline_alias(tmp_path: Path) -> None:
+    config = tmp_path / "llama-swap.yaml"
+    config.write_text(
+        "models:\n"
+        "  extractor-a:\n    cmd: llama-server --model /models/org/a/a.gguf\n"
+        "  arbiter:\n    cmd: llama-server --model /models/org/b/b.gguf\n"
+        "  redteam-uncensored:\n    cmd: llama-server --model /models/org/r/r.gguf\n",
+        encoding="utf-8",
+    )
+    lock = tmp_path / "models.lock.json"
+    lock.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {"repo_id": "org/a", "files": [{"filename": "a.gguf", "sha256": "1" * 64}]},
+                    {"repo_id": "org/b", "files": [{"filename": "b.gguf", "sha256": "2" * 64}]},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert served_models(config, lock, tmp_path) == {"extractor-a": "1" * 64, "arbiter": "2" * 64}
+    changed = identity().model_copy(update={"images": {"api": "sha256:2", "worker": "sha256:2"}})
+    assert changed.key() != identity().key()
+
+
+# --- review fixes: baseline, attacker IBAN guard, report --------------------------------
+
+
+def test_attacker_iban_equal_to_a_master_account_is_refused() -> None:
+    erp = ErpSpec().build()
+    case = next(c for c in load_all_cases() if c.id == "A08-001")
+    master = erp.vendors[0].bank_accounts[0].iban
+    poisoned = case.model_copy(update={"payload_text": f"pay {master} now"})
+    with pytest.raises(ValueError, match="vendor-master"):
+        case_truth(poisoned, erp, sha256="f" * 64, filename="f.pdf")
+
+
+def write_factory_truth(folder: Path, name: str, trn: str, **extra: object) -> None:
+    truth_json = {
+        "sha256": name * 8,
+        "arabic_first": False,
+        "fraud_hooks": [],
+        "attack_hooks": [],
+        "context": {"supplier_trn": trn, "total": "1050.00", "currency": "AED"},
+    }
+    truth_json.update(extra)
+    (folder / f"{name}.truth.json").write_text(json.dumps(truth_json), encoding="utf-8")
+
+
+def test_clean_baseline_picks_unhooked_invoices_of_seeded_vendors(tmp_path: Path) -> None:
+    erp = ErpSpec().build()
+    folder = tmp_path / "uae" / "test"
+    folder.mkdir(parents=True)
+    trn = str(erp.vendors[2].trn)
+    write_factory_truth(folder, "aaaaaaaa", trn)
+    write_factory_truth(folder, "bbbbbbbb", trn, fraud_hooks=["duplicate"])
+    write_factory_truth(folder, "cccccccc", "999999999999999")
+    write_factory_truth(folder, "dddddddd", trn)
+    write_factory_truth(folder, "eeeeeeee", trn)
+    chosen = clean_baseline(tmp_path, 5, erp, skip=lambda sha: sha.startswith("d"))
+    assert [c.truth.attack_sha256[0] for c in chosen] == ["a", "e"]
+    assert all(c.is_baseline and c.truth.vendor_id == erp.vendors[2].id for c in chosen)
+    assert chosen[0].truth.case_id == "CLEAN-aaaaaaaaaa" and chosen[0].truth.attacker_ibans == ()
+    assert clean_baseline(tmp_path, 0, erp, skip=lambda sha: False) == []
+    mixed = interleave(list(range(6)), ["x", "y"])  # type: ignore[arg-type]
+    assert mixed == ["x", 0, 1, 2, "y", 3, 4, 5]
+
+
+def test_report_nets_detection_of_the_clean_baseline_and_counts_timeouts(tmp_path: Path) -> None:
+    key = identity().key()
+    attack = outcome_row(key, "A08-001")
+    clean_truth = truth("CLEAN-abc").model_copy(
+        update={"attack_id": "CLEAN", "category": "clean", "attacker_ibans": ()}
+    )
+    clean = outcome_row(key, "CLEAN-abc", "b" * 64).model_copy(update={"truth": clean_truth})
+    late = outcome_row(key, "A01-001", "c" * 64).model_copy(
+        update={
+            "state": CaseState(invoice_found=False),
+            "harness": HarnessFacts(approver_id=APPROVER, approve_enabled=True, timed_out=True),
+        }
+    )
+    planned = {"A08-001": "a" * 64, "A01-001": "c" * 64, "CLEAN-abc": "b" * 64}
+    summary = summarize(identity(), [attack, clean, late], planned, 2, snapshot(), (), ["A02-009"])
+    assert [r.row.case_id for r in summary.baseline] == ["CLEAN-abc"]
+    assert summary.planned == 2 and summary.stale == ("A02-009",)
+    assert summary.gate is GateStatus.FAIL_INCOMPLETE
+    out = tmp_path / "r.md"
+    data = json.loads(write_reports(summary, out).read_text(encoding="utf-8"))
+    assert data["overall"]["timed_out"] == 1
+    assert data["baseline"]["detection"]["payee_p1"] == 1.0
+    assert data["net_detection"]["payee_p1"] == 0.0
+    text = out.read_text(encoding="utf-8")
+    assert "| **net of baseline** |" in text and "(timed out)" in text and "A02-009" in text

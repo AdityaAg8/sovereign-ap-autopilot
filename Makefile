@@ -302,7 +302,7 @@ ATTACKS_ARGS ?=
 eval-attacks:
 	@echo "==> M6.6: the 312-case attack suite through the running stack (make up + make seed first)"
 	@echo "    review-routed cases approved via the API; payment state read from Postgres"
-	@echo "    ~4 h for 312 cases (16 in flight); resumable: re-run to continue -> reports/attacks_e2e.md"
+	@echo "    ~4.2 h for 312 cases + 24 clean baseline (16 in flight); resumable -> reports/attacks_e2e.md"
 	uv run $(if $(wildcard .env),--env-file .env,) python scripts/attacks_e2e.py $(ATTACKS_ARGS)
 
 e2e-pipeline:

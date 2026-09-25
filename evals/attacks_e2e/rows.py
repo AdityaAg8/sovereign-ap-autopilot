@@ -1,7 +1,7 @@
 """Resumable per-case rows for the M6.6 attack run (PRD §10 M6.6): one JSONL file of `snapshot`,
 `dropped`, `approved` and `outcome` events keyed by case id, attack sha256 and the run identity
-(defending code and config, variant label, target ERP, approve mode). A resumed run keeps only
-rows of its own identity; a changed attack or stack starts that case over."""
+(defending code, running images, served models, variant, ERP, approve mode). A resumed run keeps
+only rows of its own identity; a changed attack or stack starts that case over."""
 
 from __future__ import annotations
 
@@ -39,7 +39,15 @@ def defense_fingerprint(root: Path, globs: Iterable[str] = DEFENSE_GLOBS) -> str
 
 
 class RunIdentity(Frozen):
+    """What a row was measured against: the host checkout's defending files, the running
+    containers' image ids and the served model hashes (`evals.attacks_e2e.identity`), the
+    variant label, the target ERP and the approve mode."""
+
     defense_sha256: str
+    images: dict[str, str]
+    """Compose service -> running image id."""
+    models: dict[str, str]
+    """llama-swap alias -> served GGUF sha256."""
     variant: str
     """Operator label for the stack configuration, e.g. `guard-on` / `guard-off` (§7)."""
     erp: str
@@ -72,13 +80,16 @@ class DroppedRow(Frozen):
 
 
 class ApprovedRow(Frozen):
-    """The harness approver's click on a review-routed case and the HTTP status it got."""
+    """The harness approver's click on a review-routed case: the HTTP status it got and, for a
+    refusal, whether it was a typed error (`{"detail": "<str>"}`) and its text."""
 
     event: Literal["approved"] = "approved"
     identity_key: str
     case_id: str
     attack_sha256: str
     approve_http: int
+    approve_typed: bool = False
+    detail: str = ""
     at: float
 
 
@@ -146,6 +157,10 @@ class RowStore:
             handle.write(row.model_dump_json() + "\n")
             handle.flush()
         self._remember(row)
+
+    def knows(self, attack_sha256: str) -> bool:
+        """Whether this run dropped (or finished) a document with this sha256."""
+        return any(sha == attack_sha256 for _, sha in (*self._dropped, *self._outcomes))
 
     def outcome(self, case_id: str, attack_sha256: str) -> OutcomeRow | None:
         return self._outcomes.get((case_id, attack_sha256))

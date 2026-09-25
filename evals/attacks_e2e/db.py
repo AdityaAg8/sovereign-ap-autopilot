@@ -118,6 +118,20 @@ class AttackDb:
             ).all()
         return {sha: (cast(str, _enum(status)), _enum(route)) for sha, status, route in rows}
 
+    async def created(self, shas: Sequence[str]) -> dict[str, float]:
+        """`document_sha256 -> invoice created_at` (epoch seconds) for invoices that exist."""
+        if not shas:
+            return {}
+        async with self._sessions() as s:
+            rows = (
+                await s.execute(
+                    select(Invoice.document_sha256, Invoice.created_at).where(
+                        Invoice.document_sha256.in_(list(shas))
+                    )
+                )
+            ).all()
+        return {sha: created.timestamp() for sha, created in rows}
+
     async def master_changes(self, before: MasterSnapshot) -> tuple[MasterChange, ...]:
         changes: list[MasterChange] = []
         async with self._sessions() as s:
@@ -214,7 +228,7 @@ class AttackDb:
             payee=payee,
             vendor_verified_now=verified_now,
             reasons=reasons,
-            fraud_rules=tuple(sorted(fraud.scalars())),
+            fraud_rules=tuple(sorted(set(fraud.scalars()))),
             scan_flags=None if scan is None else int(scan.get("flags", 0)),
             injection_score=None if scan is None else float(scan.get("injection_score", 0.0)),
             approvals=tuple(
@@ -228,4 +242,5 @@ class AttackDb:
                 for p in proposals.scalars()
             ),
             audit_actions=tuple(e.action for e in audit),
+            created_at=invoice.created_at.timestamp(),
         )

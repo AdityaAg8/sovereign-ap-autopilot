@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
 from attacks.manifest import CATEGORIES_BY_NAME, AttackCase
 from attacks.render import render_case
-from evals.attacks_e2e.outcome import CaseTruth, attacker_ibans
+from evals.attacks_e2e.outcome import CLEAN_ATTACK_ID, CaseTruth, attacker_ibans, iban_ref
 from factory.erp import Erp, generate_erp
 from factory.hooks import ATTACK_HOOKS
 from factory.layouts import LAYOUTS, TaxCase, build_invoice_context
@@ -40,9 +40,14 @@ class ErpSpec:
 
 @dataclass(frozen=True)
 class PreparedCase:
-    case: AttackCase
+    """One document the run drops: an attack case, or a clean baseline invoice."""
+
     truth: CaseTruth
     pdf_path: Path
+
+    @property
+    def is_baseline(self) -> bool:
+        return self.truth.attack_id == CLEAN_ATTACK_ID
 
 
 def select_cases(
@@ -91,6 +96,14 @@ def case_truth(case: AttackCase, erp: Erp, *, sha256: str, filename: str) -> Cas
     )
     context = ATTACK_HOOKS.apply_context(context, names=(case.category,), seed=case.seed)
     vendor = erp.vendors[case.vendor_index % len(erp.vendors)]
+    attacker = attacker_ibans(case.payload_text)
+    master = [iban_ref(a.iban) for v in erp.vendors for a in v.bank_accounts]
+    clash = [
+        ref for ref in attacker for m in master if ref.sha256 == m.sha256 or ref.last4 == m.last4
+    ]
+    if clash:
+        # The masked-suffix fallback in the classifier needs attacker suffixes to be distinct.
+        raise ValueError(f"{case.id}: an attacker IBAN matches a vendor-master account or suffix")
     return CaseTruth(
         case_id=case.id,
         attack_id=case.attack_id,
@@ -102,7 +115,7 @@ def case_truth(case: AttackCase, erp: Erp, *, sha256: str, filename: str) -> Cas
         vendor_id=vendor.id,
         total=str(context["total"]),
         currency=str(context["currency"]),
-        attacker_ibans=attacker_ibans(case.payload_text),
+        attacker_ibans=attacker,
     )
 
 
@@ -132,5 +145,65 @@ def prepare(cases: Sequence[AttackCase], erp: ErpSpec, out_dir: Path) -> list[Pr
                 )
                 index[digest] = {"filename": result.pdf_filename, "truth": truth.model_dump()}
                 index_path.write_text(json.dumps(index, indent=1, ensure_ascii=False), "utf-8")
-            prepared.append(PreparedCase(case, truth, out_dir / truth.filename))
+            prepared.append(PreparedCase(truth, out_dir / truth.filename))
     return prepared
+
+
+def clean_baseline(
+    data_dir: Path, n: int, erp: Erp, skip: Callable[[str], bool]
+) -> list[PreparedCase]:
+    """The first `n` clean test-split factory invoices (no fraud or attack hooks) whose supplier
+    TRN is a seeded vendor, in file-name order, minus those `skip` rejects (already ingested by
+    someone else). They run through the same drop/approve path so each control's detection rate
+    can be reported net of what it flags on clean documents."""
+    if n <= 0:
+        return []
+    by_trn = {vendor.trn: vendor.id for vendor in erp.vendors}
+    chosen: list[PreparedCase] = []
+    for path in sorted((data_dir / "uae" / "test").glob("*.truth.json")):
+        truth = json.loads(path.read_text(encoding="utf-8"))
+        if truth["fraud_hooks"] or truth["attack_hooks"]:
+            continue
+        context = truth["context"]
+        vendor_id = by_trn.get(context["supplier_trn"])
+        sha = str(truth["sha256"])
+        if vendor_id is None or skip(sha):
+            continue
+        pdf = path.with_name(path.name.replace(".truth.json", ".pdf"))
+        chosen.append(
+            PreparedCase(
+                CaseTruth(
+                    case_id=f"{CLEAN_ATTACK_ID}-{sha[:10]}",
+                    attack_id=CLEAN_ATTACK_ID,
+                    category="clean",
+                    goal="none",
+                    lang="ar" if truth["arabic_first"] else "en",
+                    attack_sha256=sha,
+                    filename=pdf.name,
+                    vendor_id=vendor_id,
+                    total=str(context["total"]),
+                    currency=str(context.get("currency", "AED")),
+                    attacker_ibans=(),
+                ),
+                pdf,
+            )
+        )
+        if len(chosen) == n:
+            break
+    return chosen
+
+
+def interleave(
+    attacks: Sequence[PreparedCase], baseline: Sequence[PreparedCase]
+) -> list[PreparedCase]:
+    """Spreads the baseline evenly through the attack cases so both see the same stack load."""
+    if not baseline:
+        return list(attacks)
+    step = max(1, len(attacks) // len(baseline))
+    merged: list[PreparedCase] = []
+    rest = list(baseline)
+    for index, case in enumerate(attacks):
+        if index % step == 0 and rest:
+            merged.append(rest.pop(0))
+        merged.append(case)
+    return merged + rest
