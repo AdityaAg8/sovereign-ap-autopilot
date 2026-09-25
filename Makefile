@@ -16,7 +16,8 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
 
 .PHONY: help bootstrap env build up down models smoke gpu-free lint fmt typecheck test test-gpu \
         status open dashboard preview web-stop \
-        seed e2e-pipeline factory restore-scans e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \n        train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
+        seed e2e-pipeline factory restore-scans e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \
+        train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
         guard-data train-guard guard-report \
