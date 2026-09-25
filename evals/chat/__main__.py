@@ -125,9 +125,9 @@ def main(argv: list[str] | None = None) -> int:
         models=tuple(results),
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(render_markdown(report), encoding="utf-8")
+    args.out.write_text(render_markdown(report), encoding="utf-8", newline="\n")
     args.out.with_suffix(".json").write_text(
-        report.model_dump_json(indent=2) + "\n", encoding="utf-8"
+        report.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n"
     )
     print(f"wrote {_display(args.out)}")
     return 0

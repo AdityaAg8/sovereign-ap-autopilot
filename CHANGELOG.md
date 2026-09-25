@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M9.5 live chat evals (`make eval-chat`, 2026-09-25): stock `ops-chat` 65.0% exact tool calls, 92.4% citation faithfulness, 88.2% refusal accuracy; AgentDojo banking utility 87.5%, attack success 22.2% (uncensored red-team model: 56.0%, 81.0%, 5.9%, 87.5%, 30.6%).
 - Make targets `build` (rebuild app images after a pull; `make up` reuses the existing ones), `test-integration`, `test-artifacts`; `test-gpu`, `e2e`, `verify-m4`, `verify-m8` and `verify-all` now run real checks instead of printing "not implemented".
 - Extractor B dev evals persist per-row outputs to `<run>/dev_outputs/step-NNNNNN.jsonl`; `report.py` classifies invalid JSON as truncated / looping / malformed (#53).
 

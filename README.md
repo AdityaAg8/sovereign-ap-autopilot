@@ -262,8 +262,8 @@ change needs an ADR with evidence ([ADR-0005](docs/adr/0005-eval-protocol.md)).
 | Straight-through rate | UAE test | Report at α = 0.5, 1, 2% | Waits for the trust gate | ⏳ Pending |
 | Payment-changing attack success | Attack suite, end to end | 0 | 2 of 2 attack PDFs held in each live run so far; full 312-case run pending | ⏳ Pending |
 | Guard precision, recall, F1 | Attack suite + public sets | Report | Baseline `siberiancat/modernbert-prompt-injection` F1 0.658 at 0.5; our fine-tune pending ([report](reports/guard.md)) | 🚧 In progress |
-| Tool-call accuracy, citation faithfulness | 100 scripted chat tasks | Report | Harness verified on a scripted fake model only; live run pending ([report](reports/chat_evals.md)) | ⏳ Pending |
-| AgentDojo banking utility and attack success | AgentDojo | Report | Adapter built; live run pending | ⏳ Pending |
+| Tool-call accuracy, citation faithfulness | 100 scripted chat tasks | Report | Stock Qwen3.5-9B: 65.0% exact tool calls, 92.4% citation faithfulness, 88.2% refusal accuracy ([report](reports/chat_evals.md)) | ✅ Reported |
+| AgentDojo banking utility and attack success | AgentDojo | Report | Stock: utility 87.5%, 76.4% under attack, attack success 22.2% on AgentDojo's own tools (uncensored: 30.6%). In this system the agent can only propose, so payments still need P1-P5 and a human ([report](reports/chat_evals.md)) | ✅ Reported |
 | Value F1 and grounding F1 | ExtractBench short | Report next to published 92.31 | Runs with the extraction bake-off | ⏳ Pending |
 | Field F1, KILE and LIR | DocILE val | Report | Needs a DocILE access token | ⏳ Pending |
 | Seconds per invoice, peak VRAM per stage | This laptop | Report; ≤ 11.8 GB | Drop to routing decision: median 368 s ([report](reports/e2e_pipeline_offset30.md)); stage peaks in [`smoke.md`](reports/smoke.md) | 🚧 In progress |
@@ -336,7 +336,7 @@ real `make eval`/`make eval-quick` run measures it._
 | 🚧 | **M6** Security | Threat model, hidden-content scan, attack suite, typed boundary and policy engine done. Guard fine-tune (M6.4) and the full end-to-end attack run (M6.6) pending |
 | 🚧 | **M7** Trust gate and Extractor B | **Extractor B trained** (M7.1, 510 steps, dev F1 97.17); export and test-split promotion gates next. Calibration and Learn-then-Test code merged; fitting (M7.4, M7.5) runs on real A and B outputs. Teacher (M7.2, only if B misses its gate) and arbiter selection (M7.3) follow |
 | 🚧 | **M8** Fraud | Rules, isolation forest and UI explanations done. Page-similarity provider built, not yet wired into the workflow |
-| 🚧 | **M9** Agent, chat, MCP | Tools, exception agent, ops chat and MCP server done. Live chat and AgentDojo evals (M9.5) pending |
+| ✅ | **M9** Agent, chat, MCP | Tools, exception agent, ops chat and MCP server; live chat and AgentDojo evals (M9.5): 65.0% exact tool calls, 92.4% citation faithfulness |
 | 🚧 | **M10** Learning loop, observability, demo | Corrections store, tracing and operations board, audit verifier and `make demo` done. The promotion decider for `make retrain` is built; its production adapters are pending |
 | ⬜ | **M11** Independent review | Full audit of the system, fixes for every critical and high finding |
 | ⬜ | **M12** Release | `v1.0.0` |
