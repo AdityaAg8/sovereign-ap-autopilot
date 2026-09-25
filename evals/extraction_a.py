@@ -170,6 +170,14 @@ async def _run_one(
     sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
 ) -> dict[str, Any]:
     document = await parser.parse(sha, (data_dir / f"{sha}.pdf").read_bytes())
+    return await extract_row(sha, document, data_dir, extractor)
+
+
+async def extract_row(
+    sha: str, document: ParsedDocument, data_dir: Path, extractor: LlmExtractor
+) -> dict[str, Any]:
+    """One eval row for an already-parsed factory document: extract, ground, score against its
+    `*.labels.json` / `*.truth.json` (the M3.4 bake-off reuses it on cached parses)."""
     output = await extractor.extract(document)
     grounded = WordGrounder().ground(document, output.fields)
     fields = field_cells(

@@ -113,6 +113,19 @@ models:
     vram_gb_est: null
     notes: "PRD §4 offline table: empero-ai Qwen3.8-9B-Distill Q4."
 
+  - intent: bakeoff_latency_mtp
+    role: "Offline bake-off latency arm (M3.4): Qwen3.5-9B with MTP speculative decoding"
+    stage: offline
+    runtime: false
+    repo_id: unsloth/Qwen3.5-9B-MTP-GGUF
+    revision: main
+    files: [Qwen3.5-9B-UD-Q4_K_XL.gguf, mmproj-F16.gguf]
+    vram_gb_est: null
+    notes: >-
+      PRD §4 offline table / §10 M3.4 latency arm: the same UD-Q4_K_XL quant as extractor_a,
+      exported with its multi-token-prediction head so llama-server can draft with
+      `--spec-type draft-mtp` (present in the pinned llama.cpp b11096). Never served at runtime.
+
   - intent: teacher
     role: "Optional overnight teacher (M7.2, host RAM >= 32 GB only)"
     stage: offline

@@ -57,6 +57,7 @@ Details and the report each one writes: [Evaluation guide](evaluation.md).
 | `make extraction-a-adr0012` / `make extraction-a-compare` | Extractor A with the ADR-0012 prompt (GPU, resumable) / paired before-after report |
 | `make cal-rows-a` / `make cal-rows-b` | GPU, needs `make up`, resumable: A / B (`CAL_B_MODEL`, default `extractor-b`) over the 750 UAE cal documents → `logs/cal_a.jsonl`, `logs/cal_b.jsonl` |
 | `make calibrate` | CPU: fit the trust calibrator on cal, LTT λ̂ at alpha 0.5/1/2%, artifact to `data/trust/` (activated only for the served champions), UAE test gate → `reports/trust_gate.md` |
+| `make bakeoff-probe` / `make bakeoff` / `make bakeoff-report` | M3.4: 5-page VRAM probe per arm (GPU) / 200 UAE + ExtractBench short per in-budget arm (GPU, resumable) / `reports/bakeoff.md` + ADR-0016 decision (CPU) |
 | `make verify-mN` / `make verify-all` | Milestone gates (built: m0, m1, m2, m4, m5, m7, m8; the others fail loudly until their milestone lands) / all of them in order |
 
 ## Extractor B training
@@ -74,10 +75,6 @@ Guide: [Training Extractor B](training.md).
 | `make export-b-image` | Build the exporter image (trainer image + pinned llama.cpp b11096) |
 | `make export-b` | GPU: best checkpoint → merged → GGUF Q4_K_M + mmproj, verified and hashed |
 | `make smoke-b` | The exported challenger on 5 UAE dev documents through llama-server (needs `make up`) |
-| `make register-b` | CPU: register the export as MLflow `extractor_b`, alias `challenger` (idempotent) |
-| `make eval-b` | GPU, needs `make up`: B on UAE test via `extractor-b-challenger` → `reports/extractor_b_test.md` |
-| `make gates-b` | GPU, needs `make up`: P1-P5 → `reports/extractor_b_gates.md`; exit 1 if a gate fails |
-| `make promote-b` | CPU: only if every gate passed, move `champion` (calibrator, models.lock, llama-swap, alias) |
 | `make register-b` | CPU: register the export as MLflow `extractor_b`, alias `challenger` (idempotent) |
 | `make eval-b` | GPU, needs `make up`: B on UAE test via `extractor-b-challenger` → `reports/extractor_b_test.md` |
 | `make gates-b` | GPU, needs `make up`: P1-P5 → `reports/extractor_b_gates.md`; exit 1 if a gate fails |

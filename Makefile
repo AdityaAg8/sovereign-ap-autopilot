@@ -20,7 +20,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
-        guard-data train-guard guard-report \
+        guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all ci-local
 
@@ -166,6 +166,26 @@ extraction-a-adr0012:
 extraction-a-compare:
 	@echo "==> paired before/after comparison -> reports/extraction_a_schema_delta.md (CPU)"
 	uv run python -m evals.extraction_a_compare --before $(M33_BEFORE) --after $(M33_AFTER)
+
+## --- M3.4 Extractor A bake-off (ADR-0016) ---------------------------------------------
+# Host-side, needs `make up` (llama-swap + parse) and an otherwise idle GPU: every arm runs alone
+# on the card and its whole-card VRAM is part of the result. Probe first; `bakeoff` resumes.
+# Overridable: `make bakeoff BAKEOFF_ARMS=a,q38-9b-distill` (default: every arm).
+BAKEOFF_DATA_DIR ?= data/uae/test
+BAKEOFF_ARMS ?=
+
+bakeoff-probe:
+	@echo "==> M3.4 5-page VRAM probe per arm -> reports/bakeoff_probe.json (GPU; needs make up)"
+	uv run python -m evals.bakeoff.probe --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
+
+bakeoff:
+	@echo "==> M3.4 bake-off: 200 UAE + ExtractBench short per in-budget arm (GPU, resumable rows: logs/bakeoff/)"
+	uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
+	$(MAKE) bakeoff-report
+
+bakeoff-report:
+	@echo "==> reports/bakeoff.md + ADR-0016 decision block from logs/bakeoff/ (CPU)"
+	uv run python -m evals.bakeoff.report --data-dir $(BAKEOFF_DATA_DIR)
 
 ## --- Extractor B fine-tune (ADR-0011, docs/design/training-loop.md) ------------------
 # The trainer image digest is part of the resume fingerprint; GIT_SHA is recorded, not compared.

@@ -1,0 +1,335 @@
+"""M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document once into the parse cache,
+then runs each probed, in-budget arm strictly sequentially over the fixed 200-document UAE subset
+and ExtractBench short, appending identity-stamped rows (resumable) and one whole-card VRAM
+session per invocation under logs/bakeoff/. `evals.bakeoff.report` turns them into the report.
+
+Usage: python -m evals.bakeoff.run [--arms a,q38-27b,...] [--data-dir data/uae/test] [--limit N]
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Final, TextIO
+
+from apx.common.errors import ModelServingError
+from apx.extract.extractor import LlmExtractor
+from apx.extract.interfaces import ExtractorId
+from apx.llm.interfaces import LlmClient
+from apx.parse.interfaces import ParsedDocument
+from evals.bakeoff.arms import Arm, BakeoffError, invoice_prompt_builder
+from evals.bakeoff.extractbench import (
+    ExtractBenchPromptBuilder,
+    extractbench_row,
+    is_request_rejection,
+)
+from evals.bakeoff.parsed import ParseCache
+from evals.bakeoff.probe import ProbeResult
+from evals.extraction_a import extract_row, load_rows
+from evals.extraction_identity import (
+    RowIdentity,
+    prompt_version,
+    require_identity,
+    served_gguf_sha256,
+)
+from ml.extractor_b.gates import StrictVramSampler, VramUnavailableError
+
+ROWS_DIR: Final[Path] = Path("logs/bakeoff")
+PARSE_CACHE_DIR: Final[Path] = Path("data/bakeoff/parsed")
+
+SampleFn = Callable[[], float | None]
+UnloadFn = Callable[[], Awaitable[None]]
+
+
+@dataclass(frozen=True, slots=True)
+class ArmFiles:
+    uae: Path
+    extractbench: Path
+    vram: Path
+
+
+def arm_files(rows_dir: Path, arm: Arm) -> ArmFiles:
+    return ArmFiles(
+        uae=rows_dir / f"{arm.key}.uae.jsonl",
+        extractbench=rows_dir / f"{arm.key}.extractbench.jsonl",
+        vram=rows_dir / f"{arm.key}.vram.jsonl",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ArmIdentities:
+    uae: RowIdentity
+    extractbench: RowIdentity
+
+
+def arm_identities(
+    arm: Arm, *, llama_swap_config: Path, models_lock: Path, models_root: Path
+) -> ArmIdentities:
+    """Alias + served GGUF sha256 + prompt version, per row file (the two prompts differ)."""
+    gguf = served_gguf_sha256(
+        arm.alias,
+        llama_swap_config=llama_swap_config,
+        models_lock=models_lock,
+        models_root=models_root,
+    )
+    return ArmIdentities(
+        uae=RowIdentity(
+            model=arm.alias,
+            gguf_sha256=gguf,
+            prompt_version=prompt_version(invoice_prompt_builder(arm)),
+        ),
+        extractbench=RowIdentity(
+            model=arm.alias,
+            gguf_sha256=gguf,
+            prompt_version=ExtractBenchPromptBuilder(images=arm.images).version,
+        ),
+    )
+
+
+def require_probe_ok(probe: Mapping[str, ProbeResult], arm: Arm) -> None:
+    """No eval hours for an arm that was not probed or did not fit the budget (PRD M3.4)."""
+    result = probe.get(arm.key)
+    if result is None:
+        raise BakeoffError(f"{arm.key}: no VRAM probe on record; run `make bakeoff-probe` first")
+    if result.status != "ok":
+        raise BakeoffError(f"{arm.key}: disqualified by the VRAM probe ({result.reason})")
+
+
+def load_extractbench_rows(path: Path) -> dict[str, dict[str, Any]]:
+    """ExtractBench rows keyed by ExtractBench doc id; the last row wins."""
+    if not path.exists():
+        return {}
+    rows = (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line)
+    return {row["doc_id"]: row for row in rows}
+
+
+def load_vram_sessions(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+async def uae_row(
+    sha: str, document: ParsedDocument, data_dir: Path, extractor: LlmExtractor
+) -> dict[str, Any]:
+    """`evals.extraction_a.extract_row`, except that a request llama-server rejects for this
+    document (context overflow, HTTP 400) is an invalid row with its error, not a dead run."""
+    try:
+        return {**await extract_row(sha, document, data_dir, extractor), "error": None}
+    except ModelServingError as exc:
+        if not is_request_rejection(exc):
+            raise
+        return {
+            "sha": sha,
+            "valid_json": False,
+            "latency_ms": None,
+            "pages": len(document.pages),
+            "arabic": "ar" in {str(language) for language in document.languages},
+            "fields": {},
+            "error": str(exc),
+        }
+
+
+def _write(sink: TextIO, row: Mapping[str, Any]) -> None:
+    sink.write(json.dumps(row, ensure_ascii=False) + "\n")
+    sink.flush()
+
+
+async def run_arm(
+    arm: Arm,
+    *,
+    uae_shas: Sequence[str],
+    uae_data_dir: Path,
+    extractbench_records: Mapping[str, Mapping[str, Any]],
+    extractbench_shas: Mapping[str, str],
+    files: ArmFiles,
+    identities: ArmIdentities,
+    client: LlmClient,
+    unload: UnloadFn,
+    sample_fn: SampleFn,
+    cache: ParseCache,
+    log: Callable[[str], None] = print,
+    interval_s: float = 0.2,
+) -> None:
+    """Every pending UAE then ExtractBench document of `arm`, one at a time, inside one
+    whole-card VRAM window that starts from an empty llama-swap (so it includes the load)."""
+    uae_rows = load_rows(files.uae)
+    require_identity(uae_rows, identities.uae, files.uae)
+    eb_rows = load_extractbench_rows(files.extractbench)
+    require_identity(eb_rows, identities.extractbench, files.extractbench)
+    uae_pending = [sha for sha in uae_shas if sha not in uae_rows]
+    eb_ids = list(extractbench_records)
+    eb_pending = [doc_id for doc_id in eb_ids if doc_id not in eb_rows]
+    if not uae_pending and not eb_pending:
+        log(f"{arm.key}: all {len(uae_shas)} UAE and {len(eb_ids)} ExtractBench rows present")
+        return
+    files.uae.parent.mkdir(parents=True, exist_ok=True)
+    await unload()
+    idle = sample_fn()
+    extractor = LlmExtractor(
+        client, invoice_prompt_builder(arm), model=arm.alias, extractor=ExtractorId.A
+    )
+    eb_builder = ExtractBenchPromptBuilder(images=arm.images)
+    started = datetime.now(UTC).isoformat()
+    uae_done, eb_done = len(uae_shas) - len(uae_pending), len(eb_ids) - len(eb_pending)
+    sampler = StrictVramSampler(sample_fn, interval_s=interval_s)
+    try:
+        with sampler:
+            with files.uae.open("a", encoding="utf-8") as sink:
+                for sha in uae_pending:
+                    document = cache.get(sha)
+                    row = await uae_row(sha, document, uae_data_dir, extractor)
+                    _write(sink, {**row, **identities.uae.as_row_fields()})
+                    uae_done += 1
+                    log(
+                        f"[{uae_done}/{len(uae_shas)}] {arm.key} uae {sha[:12]} "
+                        f"valid={row['valid_json']} {row['latency_ms'] or 0:.0f} ms"
+                    )
+            with files.extractbench.open("a", encoding="utf-8") as sink:
+                for doc_id in eb_pending:
+                    document = cache.get(extractbench_shas[doc_id])
+                    row = await extractbench_row(
+                        extractbench_records[doc_id], document, client, eb_builder, arm.alias
+                    )
+                    _write(sink, {**row, **identities.extractbench.as_row_fields()})
+                    eb_done += 1
+                    log(
+                        f"[{eb_done}/{len(eb_ids)}] {arm.key} extractbench {doc_id} "
+                        f"valid={row['valid_json']} {row['latency_ms'] or 0:.0f} ms"
+                    )
+    finally:
+        await unload()  # arm done or interrupted: free the card for the next arm
+        try:
+            peak: float | None = sampler.peak_gb
+        except VramUnavailableError:
+            peak = None  # recorded as a gap; the report shows the arm's peak as unmeasured
+        session = {
+            "started_at": started,
+            "idle_gb": idle,
+            "peak_gb": peak,
+            "samples": sampler.samples,
+            "misses": sampler.misses,
+            "uae_done": uae_done,
+            "extractbench_done": eb_done,
+        }
+        with files.vram.open("a", encoding="utf-8") as sink:
+            _write(sink, session)
+
+
+def extractbench_inputs(
+    data_root: Path, limit: int | None
+) -> tuple[dict[str, dict[str, Any]], dict[str, str], dict[str, Path]]:
+    """ExtractBench short eval documents in doc-id order: records, sha256s and PDF paths, from
+    data/manifest.json and evals/splits.json (the same selection `evals.run` scores)."""
+    from evals.datasets.manifest import load_manifest
+    from evals.run import _extractbench_doc_ids, _load_extractbench_records
+    from evals.splits import load_splits
+
+    manifest = load_manifest(data_root / "manifest.json")
+    doc_ids = _extractbench_doc_ids(manifest, load_splits(), limit)
+    if not doc_ids:
+        raise BakeoffError("no ExtractBench short documents in data/manifest.json + splits.json")
+    records = _load_extractbench_records(data_root)
+    entry = manifest.datasets["extractbench"]
+    shas = {f.doc_id: f.sha256 for f in entry.files if f.doc_id}
+    missing = [doc_id for doc_id in doc_ids if doc_id not in records or doc_id not in shas]
+    if missing:
+        raise BakeoffError(
+            f"{len(missing)} ExtractBench documents lack a record, e.g. {missing[0]}"
+        )
+    ordered = {doc_id: records[doc_id] for doc_id in doc_ids}
+    paths = {doc_id: data_root / "extractbench" / str(records[doc_id]["pdf"]) for doc_id in doc_ids}
+    return ordered, {doc_id: shas[doc_id] for doc_id in doc_ids}, paths
+
+
+async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GPU + llama-swap
+    from scripts.smoke import sample_vram_gb
+
+    from apx.llm.client import LlamaSwapClient, LlmSettings
+    from apx.parse.client import ParseServiceClient
+    from apx.parse.parser import PaddleOcrDocumentParser
+    from evals.bakeoff.probe import PROBE_PATH, load_probe, parse_arms
+    from evals.bakeoff.subset import uae_subset
+    from evals.splits import load_splits
+
+    uae_shas = uae_subset(load_splits().sets["uae"]["test"])
+    if args.limit:
+        uae_shas = uae_shas[: args.limit]
+    missing = [sha for sha in uae_shas if not (args.data_dir / f"{sha}.pdf").exists()]
+    if missing:
+        raise BakeoffError(f"{len(missing)} bake-off UAE PDFs missing in {args.data_dir}")
+    records, eb_shas, eb_paths = extractbench_inputs(args.data_root, args.limit or None)
+
+    cache = ParseCache(args.parse_cache)
+    parse_client = ParseServiceClient()
+    parser = PaddleOcrDocumentParser(parse_client)
+    items = [(sha, args.data_dir / f"{sha}.pdf") for sha in uae_shas]
+    items += [(eb_shas[doc_id], eb_paths[doc_id]) for doc_id in records]
+    if await cache.fill(items, parser.parse):
+        await parse_client.unload()  # parse stage over before any arm's VRAM window opens
+
+    probe = load_probe(PROBE_PATH)
+    arms = parse_arms(args.arms)
+    client = LlamaSwapClient(
+        LlmSettings(base_url=args.base_url, allowed_models=frozenset(a.alias for a in arms))
+    )
+    skipped = 0
+    try:
+        for arm in arms:
+            try:
+                require_probe_ok(probe, arm)
+            except BakeoffError as exc:
+                print(f"skip {arm.key}: {exc}", flush=True)
+                skipped += 1
+                continue
+            await run_arm(
+                arm,
+                uae_shas=uae_shas,
+                uae_data_dir=args.data_dir,
+                extractbench_records=records,
+                extractbench_shas=eb_shas,
+                files=arm_files(args.rows_dir, arm),
+                identities=arm_identities(
+                    arm,
+                    llama_swap_config=args.llama_swap_config,
+                    models_lock=args.models_lock,
+                    models_root=args.models_root,
+                ),
+                client=client,
+                unload=client.unload,
+                sample_fn=sample_vram_gb,
+                cache=cache,
+            )
+    finally:
+        await client.aclose()
+    return 0 if skipped < len(arms) else 1
+
+
+def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wrapper
+    parser = argparse.ArgumentParser(prog="python -m evals.bakeoff.run", description=__doc__)
+    parser.add_argument("--arms", default="", help="comma-separated arm keys (default: all)")
+    parser.add_argument("--data-dir", type=Path, default=Path("data/uae/test"))
+    parser.add_argument("--data-root", type=Path, default=Path("data"))
+    parser.add_argument("--limit", type=int, default=0, help="smoke only: first N per set")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8080")
+    parser.add_argument("--rows-dir", type=Path, default=ROWS_DIR)
+    parser.add_argument("--parse-cache", type=Path, default=PARSE_CACHE_DIR)
+    parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))
+    parser.add_argument("--models-lock", type=Path, default=Path("infra/models.lock.json"))
+    parser.add_argument("--models-root", type=Path, default=Path("models"))
+    args = parser.parse_args(argv)
+    try:
+        return asyncio.run(_live(args))
+    except BakeoffError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

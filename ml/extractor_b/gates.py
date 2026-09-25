@@ -23,6 +23,7 @@ from apx.extract.extractor import LlmExtractor
 from apx.extract.interfaces import ExtractorId
 from apx.llm.interfaces import LlmClient
 from apx.parse.interfaces import ParsedDocument
+from evals.bakeoff.subset import BAKEOFF_SUBSET_SIZE, SubsetError, uae_subset
 from evals.extraction_a import prompt_builder_for
 from evals.extraction_identity import RowIdentity
 from evals.scorers.perf import LatencyStats
@@ -40,9 +41,10 @@ from ml.promotion.decide import (
 from ml.promotion.errors import PromotionError
 from ml.promotion.evidence import ExtractorGateReport, Fraction
 
-LATENCY_SUBSET_SIZE: Final[int] = 200
-"""ADR-0009 P2: the 200-document M3.4 subset. Defined here (first 200 UAE test sha256s in sorted
-order, i.e. a hash-random sample) until M3.4 lands; the digest is recorded with every run."""
+LATENCY_SUBSET_SIZE: Final[int] = BAKEOFF_SUBSET_SIZE
+"""ADR-0009 P2: the 200-document M3.4 subset, defined once in `evals.bakeoff.subset` (first 200
+UAE test sha256s in sorted order, i.e. a hash-random sample); the digest is recorded with every
+run."""
 A_ALIAS: Final[str] = "extractor-a"
 CHALLENGER_ALIAS: Final[str] = "extractor-b-challenger"
 EVIDENCE_SCHEMA_VERSION: Final[int] = 1
@@ -59,12 +61,12 @@ class VramUnavailableError(GateEvidenceError):
 
 
 def latency_subset(test_ids: Sequence[str]) -> list[str]:
-    ordered = sorted(set(test_ids))
-    if len(ordered) < LATENCY_SUBSET_SIZE:
+    try:
+        return uae_subset(test_ids, LATENCY_SUBSET_SIZE)
+    except SubsetError as exc:
         raise GateEvidenceError(
-            f"UAE test has {len(ordered)} documents, P2 needs {LATENCY_SUBSET_SIZE}"
-        )
-    return ordered[:LATENCY_SUBSET_SIZE]
+            f"UAE test has {len(set(test_ids))} documents, P2 needs {LATENCY_SUBSET_SIZE}"
+        ) from exc
 
 
 # --- P4: whole-card VRAM ---------------------------------------------------------------------

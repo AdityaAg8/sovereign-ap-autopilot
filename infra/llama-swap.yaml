@@ -110,6 +110,55 @@ models:
     checkEndpoint: /health
     ttl: 600
 
+  # M3.4 bake-off (PRD §4 offline table, §10 M3.4): offline challengers of extractor-a, never
+  # runtime aliases (apx.llm.client RUNTIME_MODEL_ALIASES), called only by `evals.bakeoff`. Each
+  # runs one slot of 12288 tokens, the same per-slot context extractor-a gives one invoice, since
+  # the bake-off is sequential. `make bakeoff-probe` measures each one before any eval hours.
+  bakeoff-q38-27b:
+    name: "Bake-off: Qwen3.8-27B UD-IQ2_XXS + mmproj"
+    description: "M3.4 challenger, text + page images like extractor-a. Offline only."
+    cmd: |
+      ${llama-server}
+      --model /models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-IQ2_XXS.gguf
+      --mmproj /models/unsloth/Qwen3.8-27B-GGUF/mmproj-F16.gguf
+      --ctx-size 12288
+      --parallel 1
+      --no-cache-prompt
+      --cache-ram 0
+    checkEndpoint: /health
+    ttl: 600
+
+  bakeoff-q38-9b-distill:
+    name: "Bake-off: empero-ai Qwen3.8-9B-Distill Q4_K_M"
+    description: "M3.4 challenger, text + parse only (the repo ships no mmproj). Offline only."
+    cmd: |
+      ${llama-server}
+      --model /models/empero-ai/Qwen3.8-9B-Distill-GGUF/Qwen3.8-9B-Q4_K_M.gguf
+      --ctx-size 12288
+      --parallel 1
+      --no-cache-prompt
+      --cache-ram 0
+    checkEndpoint: /health
+    ttl: 600
+
+  bakeoff-q35-9b-mtp:
+    name: "Bake-off latency arm: Qwen3.5-9B UD-Q4_K_XL + MTP speculative decoding"
+    description: "M3.4 latency arm: extractor-a's quant with its MTP head drafting 3 tokens. Offline only."
+    # `--spec-type draft-mtp` is listed by `llama-server --help` in the pinned b11096 image; the
+    # probe establishes whether it serves together with --mmproj (the report records either way).
+    cmd: |
+      ${llama-server}
+      --model /models/unsloth/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf
+      --mmproj /models/unsloth/Qwen3.5-9B-MTP-GGUF/mmproj-F16.gguf
+      --ctx-size 12288
+      --parallel 1
+      --no-cache-prompt
+      --cache-ram 0
+      --spec-type draft-mtp
+      --spec-draft-n-max 3
+    checkEndpoint: /health
+    ttl: 600
+
 # Groups map onto pipeline stages (PRD §3). ADR-0013: A and B together measured 10.3-10.6 GB
 # resident (peak 11.74-11.84 GB whole-card with a 1.1-1.4 GB desktop), which cannot hold the
 # 11.8 GB budget once the desktop takes its usual ~2.3 GB. So the extract group swaps: only one
@@ -135,3 +184,9 @@ routing:
           swap: true
           exclusive: true
           members: [redteam-uncensored]
+        # M3.4: one challenger at a time, and loading one evicts every other group (extract
+        # included), so no challenger ever co-resides with extractor-a or another challenger.
+        bakeoff:
+          swap: true
+          exclusive: true
+          members: [bakeoff-q38-27b, bakeoff-q38-9b-distill, bakeoff-q35-9b-mtp]

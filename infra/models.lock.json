@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-22T11:02:42.572929+00:00",
+  "generated_at": "2026-09-25T15:14:54.554685+00:00",
   "source_manifest": "infra/models.yaml",
   "models": [
     {
@@ -541,6 +541,31 @@
         }
       ],
       "total_size_bytes": 5780090176
+    },
+    {
+      "intent": "bakeoff_latency_mtp",
+      "role": "Offline bake-off latency arm (M3.4): Qwen3.5-9B with MTP speculative decoding",
+      "stage": "offline",
+      "runtime": false,
+      "repo_id": "unsloth/Qwen3.5-9B-MTP-GGUF",
+      "revision_requested": "main",
+      "revision_sha": "9716a636ee4bddc3fed678220b7a33dd2a4160ae",
+      "license": "apache-2.0",
+      "vram_gb_est": null,
+      "notes": "PRD \u00a74 offline table / \u00a710 M3.4 latency arm: the same UD-Q4_K_XL quant as extractor_a, exported with its multi-token-prediction head so llama-server can draft with `--spec-type draft-mtp` (present in the pinned llama.cpp b11096). Never served at runtime.",
+      "files": [
+        {
+          "filename": "Qwen3.5-9B-UD-Q4_K_XL.gguf",
+          "size_bytes": 6135034208,
+          "sha256": "362f85a2d7dbc0259e926d5ac33ca0d0f17fd3753496d65bfd2106384c929d3f"
+        },
+        {
+          "filename": "mmproj-F16.gguf",
+          "size_bytes": 918165984,
+          "sha256": "5a40d1f771686432172a4981018a0d30d03a5aaf5793a5badd5416573362a232"
+        }
+      ],
+      "total_size_bytes": 7053200192
     },
     {
       "intent": "teacher",
