@@ -191,6 +191,13 @@ class FieldDecision(Frozen):
 class TrustDecision(Frozen):
     fields: tuple[FieldDecision, ...]
     all_accepted: bool
+    calibrator_version: str | None = None
+    """Version of the persisted calibrator artifact that decided (M7.5); None when no fitted
+    calibrator was used."""
+    refusal: str | None = None
+    """Why the calibrated gate refused to decide (artifact missing, invalidated, corrupt, or its
+    A/B identities differ from the served builds), as `<reason>: <detail>`. A refused decision
+    accepts no field, so the invoice routes to REVIEW; the trust_gate activity audits this."""
 
 
 class ReliabilityBin(Frozen):

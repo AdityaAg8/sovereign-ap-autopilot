@@ -10,12 +10,14 @@ import warnings
 from collections.abc import Sequence
 
 import numpy as np
+from scipy.special import expit
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
 from apx.common.errors import TrustGateError
+from apx.common.types import Frozen
 from apx.extract.interfaces import FieldName
 from apx.trust.features import encode_features, hard_reject
 from apx.trust.interfaces import (
@@ -65,8 +67,8 @@ def _version_hash(
 ) -> str:
     """12-hex sha256 of the feature names, method and fitted parameters (scaler mean/scale,
     logistic coefficients, isotonic breakpoints) plus the sorted FIT document hashes (ADR-0009
-    §5). The A/B/arbiter champion versions are not threaded through the `Calibrator.fit(records)`
-    signature yet; the real M7.13 cal job folds them in when it logs this version to MLflow."""
+    §5). The A/B/arbiter build identities are folded in one level up, by
+    `apx.trust.artifact.artifact_version`, which names the persisted artifact."""
     digest = hashlib.sha256()
     digest.update("|".join(FEATURE_NAMES).encode())
     digest.update(method.value.encode())
@@ -153,6 +155,23 @@ class IsotonicCalibrator:
             raise TrustGateError("Calibrator.fit has not been called")
         return self._logreg
 
+    def state(self) -> CalibratorState:
+        """The fitted parameters as plain numbers, for the persisted calibrator artifact. A
+        `FrozenCalibrator` built from it predicts what this calibrator predicts."""
+        scaler, logreg, method = self._scaler_or_raise(), self._logreg_or_raise(), self.method
+        isotonic = self._isotonic if method is CalibrationMethod.ISOTONIC else None
+        return CalibratorState(
+            method=method,
+            version=self.version,
+            feature_names=FEATURE_NAMES,
+            scaler_mean=_floats(scaler.mean_),
+            scaler_scale=_floats(scaler.scale_),
+            coef=_floats(logreg.coef_[0]),
+            intercept=float(logreg.intercept_[0]),
+            isotonic_x=() if isotonic is None else _floats(isotonic.X_thresholds_),
+            isotonic_y=() if isotonic is None else _floats(isotonic.y_thresholds_),
+        )
+
     def fit_encoded(self, x: np.ndarray, y: np.ndarray, groups: np.ndarray) -> None:
         """Fit directly from an already-encoded (n, 28) matrix, label vector and group-id array.
         The fast path used by `fit` above and, for performance, by the M7.5 simulation."""
@@ -212,6 +231,78 @@ class IsotonicCalibrator:
         proba = logreg.predict_proba(x_scaled)
         # predict_proba columns follow logreg.classes_ ([0.0, 1.0] after fit); take P(correct=1).
         return np.asarray(proba[:, 1], dtype=np.float64)
+
+
+def _floats(values: np.ndarray) -> tuple[float, ...]:
+    return tuple(float(v) for v in np.asarray(values, dtype=np.float64).ravel())
+
+
+class CalibratorState(Frozen):
+    """Fitted parameters of an `IsotonicCalibrator` (ADR-0009 §5): the scaler, the logistic
+    scorer and, for method ISOTONIC, the isotonic breakpoints. JSON floats round-trip exactly,
+    so the persisted artifact reproduces the fitted calibrator's predictions."""
+
+    method: CalibrationMethod
+    version: str
+    feature_names: tuple[str, ...]
+    scaler_mean: tuple[float, ...]
+    scaler_scale: tuple[float, ...]
+    coef: tuple[float, ...]
+    intercept: float
+    isotonic_x: tuple[float, ...] = ()
+    isotonic_y: tuple[float, ...] = ()
+
+
+class FrozenCalibrator:
+    """`Calibrator` rebuilt from a `CalibratorState` with numpy only (no pickled sklearn objects):
+    p = iso(scorer(x)) with the isotonic map clipped at its ends, or sigmoid(scorer(x)) for
+    method LOGISTIC. It is already fitted, so `fit` raises. Raises TrustGateError when the state
+    does not match the current 28-column feature vector."""
+
+    def __init__(self, state: CalibratorState) -> None:
+        width = len(FEATURE_NAMES)
+        if state.feature_names != FEATURE_NAMES:
+            raise TrustGateError("calibrator state was fitted on another feature vector")
+        if not (len(state.scaler_mean) == len(state.scaler_scale) == len(state.coef) == width):
+            raise TrustGateError(f"calibrator state must have {width} columns")
+        if state.method is CalibrationMethod.ISOTONIC and (
+            len(state.isotonic_x) < 2 or len(state.isotonic_x) != len(state.isotonic_y)
+        ):
+            raise TrustGateError("isotonic calibrator state has no usable breakpoints")
+        if any(x0 >= x1 for x0, x1 in zip(state.isotonic_x, state.isotonic_x[1:], strict=False)):
+            raise TrustGateError("isotonic breakpoints must be strictly increasing")
+        if any(scale <= 0.0 for scale in state.scaler_scale):
+            raise TrustGateError("scaler scale must be positive")
+        self._state = state
+        self._mean = np.asarray(state.scaler_mean, dtype=np.float64)
+        self._scale = np.asarray(state.scaler_scale, dtype=np.float64)
+        self._coef = np.asarray(state.coef, dtype=np.float64)
+        self._iso_x = np.asarray(state.isotonic_x, dtype=np.float64)
+        self._iso_y = np.asarray(state.isotonic_y, dtype=np.float64)
+
+    @property
+    def method(self) -> CalibrationMethod:
+        return self._state.method
+
+    @property
+    def version(self) -> str:
+        return self._state.version
+
+    def fit(self, records: Sequence[CalRecord]) -> None:
+        raise TrustGateError("a persisted calibrator is already fitted; refit IsotonicCalibrator")
+
+    def predict(self, items: Sequence[tuple[FieldName, FieldFeatures]]) -> list[float]:
+        x = np.array([encode_features(field, feats) for field, feats in items], dtype=np.float64)
+        result: list[float] = self.predict_encoded(x).tolist()
+        return result
+
+    def predict_encoded(self, x: np.ndarray) -> np.ndarray:
+        if x.size == 0:
+            return np.zeros(0, dtype=np.float64)
+        scores = ((x - self._mean) / self._scale) @ self._coef + self._state.intercept
+        if self._state.method is CalibrationMethod.ISOTONIC:
+            return np.clip(np.interp(scores, self._iso_x, self._iso_y), 0.0, 1.0)
+        return np.asarray(expit(scores), dtype=np.float64)
 
 
 def _fit_logistic(x: np.ndarray, y: np.ndarray) -> LogisticRegression:

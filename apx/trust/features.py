@@ -230,8 +230,13 @@ def _line_matches_label(field: FieldName, line_canonical: str) -> bool:
 def ocr_support(field: FieldName, final: FieldValue, document: ParsedDocument) -> float:
     """m * (0.5 + 0.5 * proximity): m = match of the grounded parse words to the final value,
     proximity = max(0, 1 - d / OCR_SUPPORT_RADIUS) to the nearest label line on the value's page
-    (ADR-0009 §4.5). 0.0 when the final value is null or ungrounded."""
-    value_str = final.normalized if final.normalized is not None else final.raw
+    (ADR-0009 §4.5). 0.0 when the final value is null or ungrounded.
+
+    Both sides of the match go through `normalize_for_compare(kind)`: the printed words and the
+    value as extracted (`final.raw`). The grounder's own normalised form is not comparable (it
+    turns the identifier `INV-001` into `inv 001`, which never equals the printed `INV-001` under
+    the IDENTIFIER rule), so it is only used when there is no raw value (ADR-0009 §5.A)."""
+    value_str = final.raw if final.raw is not None else final.normalized
     if value_str is None or not final.word_ids:
         return 0.0
 
@@ -289,90 +294,98 @@ class ExtractionFeatureBuilder:
         for field in FieldName:
             if field not in FIELD_KINDS:
                 continue  # line-item-only or non-header field; outside the v1 gate
-            kind = FIELD_KINDS[field]
-            out[field] = self._field_features(field, kind, result, document, language_ar)
+            final = result.grounded.get(field)
+            out[field] = field_features(
+                field,
+                a=result.a,
+                b=result.b,
+                arbiter=result.arbiter,
+                disputed=result.disputed,
+                final_value=None if final is None else final_value_of(final),
+                final_ocr_support=0.0 if final is None else ocr_support(field, final, document),
+                language_ar=language_ar,
+            )
         return out
 
-    def _field_features(
-        self,
-        field: FieldName,
-        kind: FieldKind,
-        result: ExtractionResult,
-        document: ParsedDocument,
-        language_ar: bool,
-    ) -> FieldFeatures:
-        a_value, a_missing, a_logprob_missing = self._extractor_value(result.a, field)
-        b_value, b_missing, b_logprob_missing = self._extractor_value(result.b, field)
 
-        agreement_val = (
-            0.0
-            if (not result.a.valid_json or not result.b.valid_json)
-            else agreement(kind, a_value, b_value)
+def final_value_of(value: FieldValue) -> str | None:
+    """The final value string the features read: the grounded normalised value, else the raw."""
+    return value.normalized if value.normalized is not None else value.raw
+
+
+def field_features(
+    field: FieldName,
+    *,
+    a: ExtractorOutput,
+    b: ExtractorOutput,
+    arbiter: ExtractorOutput | None,
+    disputed: frozenset[FieldName],
+    final_value: str | None,
+    final_ocr_support: float,
+    language_ar: bool,
+) -> FieldFeatures:
+    """ADR-0009 §4 features of one header field from the A/B/arbiter outputs, the final value
+    string and its OCR support. The one definition shared by `ExtractionFeatureBuilder` (runtime,
+    from `ExtractionResult` + `ParsedDocument`) and the M7.4 cal/test job (from eval rows that
+    recorded the final value and its OCR support), so the two can never compute a feature
+    differently."""
+    kind = FIELD_KINDS[field]
+    a_value, a_missing, a_logprob_missing = _extractor_value(a, field)
+    b_value, b_missing, b_logprob_missing = _extractor_value(b, field)
+
+    agreement_val = (
+        0.0 if (not a.valid_json or not b.valid_json) else agreement(kind, a_value, b_value)
+    )
+
+    a_logprobs = a.logprobs.get(field)
+    b_logprobs = b.logprobs.get(field)
+    a_mean = _clip_logprob(a_logprobs.mean) if a_logprobs is not None else LOGPROB_FLOOR
+    a_min = _clip_logprob(a_logprobs.min) if a_logprobs is not None else LOGPROB_FLOOR
+    b_mean = _clip_logprob(b_logprobs.mean) if b_logprobs is not None else LOGPROB_FLOOR
+    b_min = _clip_logprob(b_logprobs.min) if b_logprobs is not None else LOGPROB_FLOOR
+
+    h1 = a_logprob_missing or b_logprob_missing
+    if h1 or field not in disputed:
+        arbiter_enum = ArbiterVote.NOT_RUN
+    else:
+        arbiter_valid = arbiter is not None and arbiter.valid_json
+        arbiter_value = (
+            _lookup_raw(arbiter.fields, field) if arbiter is not None and arbiter_valid else None
         )
-
-        final = result.grounded.get(field)
-        final_value_str: str | None = None
-        if final is not None:
-            final_value_str = final.normalized if final.normalized is not None else final.raw
-        final_missing = final_value_str is None
-
-        a_logprobs = result.a.logprobs.get(field)
-        b_logprobs = result.b.logprobs.get(field)
-        a_mean = _clip_logprob(a_logprobs.mean) if a_logprobs is not None else LOGPROB_FLOOR
-        a_min = _clip_logprob(a_logprobs.min) if a_logprobs is not None else LOGPROB_FLOOR
-        b_mean = _clip_logprob(b_logprobs.mean) if b_logprobs is not None else LOGPROB_FLOOR
-        b_min = _clip_logprob(b_logprobs.min) if b_logprobs is not None else LOGPROB_FLOOR
-
-        disputed = field in result.disputed
-        h1 = a_logprob_missing or b_logprob_missing
-        if h1 or not disputed:
-            arbiter_enum = ArbiterVote.NOT_RUN
-        else:
-            arbiter_valid = result.arbiter is not None and result.arbiter.valid_json
-            arbiter_value = (
-                _lookup_raw(result.arbiter.fields, field)
-                if result.arbiter is not None and arbiter_valid
-                else None
-            )
-            arbiter_enum = arbiter_vote(
-                kind, a_value, b_value, arbiter_value, disputed=True, arbiter_valid=arbiter_valid
-            )
-        arbiter_vote_bool: bool | None
-        if arbiter_enum is ArbiterVote.NOT_RUN:
-            arbiter_vote_bool = None
-        else:
-            arbiter_vote_bool = arbiter_enum in (ArbiterVote.AGREES_A, ArbiterVote.AGREES_B)
-
-        format_valid_val = format_valid(kind, final_value_str)
-        ocr_support_val = ocr_support(field, final, document) if final is not None else 0.0
-
-        return FieldFeatures(
-            agreement=agreement_val,
-            a_mean_logprob=a_mean,
-            a_min_logprob=a_min,
-            b_mean_logprob=b_mean,
-            b_min_logprob=b_min,
-            format_valid=format_valid_val,
-            ocr_support=ocr_support_val,
-            arbiter_vote=arbiter_vote_bool,
-            arbiter=arbiter_enum,
-            a_missing=a_missing,
-            b_missing=b_missing,
-            final_missing=final_missing,
-            a_logprob_missing=a_logprob_missing,
-            b_logprob_missing=b_logprob_missing,
-            language_ar=language_ar,
+        arbiter_enum = arbiter_vote(
+            kind, a_value, b_value, arbiter_value, disputed=True, arbiter_valid=arbiter_valid
         )
+    arbiter_vote_bool: bool | None
+    if arbiter_enum is ArbiterVote.NOT_RUN:
+        arbiter_vote_bool = None
+    else:
+        arbiter_vote_bool = arbiter_enum in (ArbiterVote.AGREES_A, ArbiterVote.AGREES_B)
 
-    @staticmethod
-    def _extractor_value(
-        output: ExtractorOutput, field: FieldName
-    ) -> tuple[str | None, bool, bool]:
-        """Returns (value, missing, logprob_missing). `missing` only applies to valid JSON."""
-        if not output.valid_json:
-            return None, False, True
-        value = _lookup_raw(output.fields, field)
-        return value, value is None, False
+    return FieldFeatures(
+        agreement=agreement_val,
+        a_mean_logprob=a_mean,
+        a_min_logprob=a_min,
+        b_mean_logprob=b_mean,
+        b_min_logprob=b_min,
+        format_valid=format_valid(kind, final_value),
+        ocr_support=final_ocr_support,
+        arbiter_vote=arbiter_vote_bool,
+        arbiter=arbiter_enum,
+        a_missing=a_missing,
+        b_missing=b_missing,
+        final_missing=final_value is None,
+        a_logprob_missing=a_logprob_missing,
+        b_logprob_missing=b_logprob_missing,
+        language_ar=language_ar,
+    )
+
+
+def _extractor_value(output: ExtractorOutput, field: FieldName) -> tuple[str | None, bool, bool]:
+    """Returns (value, missing, logprob_missing). `missing` only applies to valid JSON."""
+    if not output.valid_json:
+        return None, False, True
+    value = _lookup_raw(output.fields, field)
+    return value, value is None, False
 
 
 def _clip_logprob(value: float) -> float:

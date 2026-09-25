@@ -1,7 +1,7 @@
 """Production adapters that turn the pipeline modules into the invoice workflow's ports (PRD §10
 M5.6): grounded fields into a typed `Invoice`, the hidden-content detector into a `Scanner`, the
-fraud rules into a `FraudEngine`, `Invoice` into PINT AE UBL, and the interim trust score used
-until a calibrator is fitted on real review labels."""
+fraud rules into a `FraudEngine`, `Invoice` into PINT AE UBL, and the interim trust score of the
+no-calibrator path (everything to review)."""
 
 from __future__ import annotations
 
@@ -458,9 +458,10 @@ def _fmt(amount: Decimal) -> str:
 
 
 class AgreementScore:
-    """Interim `Calibrator` until M7.4 fits one on review labels: P(correct) is reported as A/B
-    agreement times OCR support. Uncalibrated, so the gate built on it takes λ̂ = None and never
-    auto-accepts; the number only orders fields for the reviewer."""
+    """Interim `Calibrator` of the explicit no-calibrator path: when the M7.5 artifact is missing,
+    invalidated or fitted on other builds, `apx.trust.gate.ArtifactTrustGate` falls back to a gate
+    on this score with λ̂ = None, which never auto-accepts (every invoice routes to REVIEW); the
+    number, A/B agreement times OCR support, only orders fields for the reviewer."""
 
     @property
     def method(self) -> CalibrationMethod:

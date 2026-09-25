@@ -238,7 +238,12 @@ class DefaultInvoiceActivities:
         await self._audit(
             "trust_gate",
             document.document_sha256,
-            {"all_accepted": decision.all_accepted, "fields": len(decision.fields)},
+            {
+                "all_accepted": decision.all_accepted,
+                "fields": len(decision.fields),
+                "calibrator_version": decision.calibrator_version,
+                "refusal": decision.refusal,
+            },
         )
         return decision
 

@@ -464,6 +464,81 @@ def test_ocr_support_no_matching_label_halves_score() -> None:
     assert score == pytest.approx(1.0 * 0.5)
 
 
+def _single_value_document(printed: str) -> ParsedDocument:
+    """One line holding just the printed value, no label phrase (so ocr_support = m * 0.5)."""
+    tokens = printed.split()
+    words = tuple(
+        Word(
+            id=f"p0w{i}",
+            text=token,
+            bbox=BBox(page=0, x0=0.1 + 0.1 * i, y0=0.5, x1=0.19 + 0.1 * i, y1=0.52),
+            line_id="p0l0",
+            confidence=0.99,
+        )
+        for i, token in enumerate(tokens)
+    )
+    line = Line(
+        id="p0l0",
+        word_ids=tuple(w.id for w in words),
+        bbox=BBox(page=0, x0=0.1, y0=0.5, x1=0.1 + 0.1 * len(words), y1=0.52),
+    )
+    page = Page(
+        index=0,
+        width_px=1000,
+        height_px=1400,
+        words=words,
+        lines=(line,),
+        tables=(),
+        image_png=b"",
+    )
+    return ParsedDocument(
+        document_sha256=DOC_SHA,
+        pages=(page,),
+        reading_order=("p0l0",),
+        languages=frozenset({Language.EN, Language.AR}),
+        parser_version="test-1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "printed", "extracted"),
+    [
+        (FieldName.INVOICE_NUMBER, "INV-001", "INV-001"),
+        (FieldName.INVOICE_NUMBER, "INV/2026/0042", "INV/2026/0042"),
+        (FieldName.INVOICE_NUMBER, "فاتورة-١٢٣", "فاتورة-١٢٣"),
+        (FieldName.INVOICE_NUMBER, "INV-١٢٣", "INV-123"),
+        (FieldName.PO_NUMBER, "PO-77.A", "PO-77.A"),
+        (FieldName.TOTAL, "1,050.00", "1,050.00"),
+        (FieldName.TOTAL, "12,345.5", "12,345.50"),
+        (FieldName.TOTAL, "\u0661,\u0660\u0665\u0660.\u0660\u0660", "1,050.00"),
+        (FieldName.ISSUE_DATE, "15/01/2026", "15/01/2026"),
+        (FieldName.ISSUE_DATE, "15 Jan 2026", "15 Jan 2026"),
+        (FieldName.ISSUE_DATE, "\u0661\u0665/\u0660\u0661/\u0662\u0660\u0662\u0666", "15/01/2026"),
+    ],
+)
+def test_ocr_support_matches_printed_words_under_the_value_kind(
+    field: FieldName, printed: str, extracted: str
+) -> None:
+    """Regression (M7.5): the grounder's normalised form (e.g. `inv 001`) is not comparable
+    with the printed words under the kind's rule, so the match uses the extracted raw value;
+    both sides go through `normalize_for_compare(kind)`."""
+    from apx.extract.grounding import WordGrounder
+    from apx.extract.interfaces import RawField
+
+    document = _single_value_document(printed)
+    final = WordGrounder().ground(document, [RawField(name=field, value=extracted)])[field]
+    assert final.word_ids, "the grounder must match the printed words"
+    assert ocr_support(field, final, document) == pytest.approx(0.5)  # m = 1, no label line
+
+
+def test_ocr_support_mismatched_value_scores_zero() -> None:
+    document = _single_value_document("INV-001")
+    final = FieldValue(
+        name="invoice_number", raw="INV-002", normalized="inv 002", word_ids=("p0w0",)
+    )
+    assert ocr_support(FieldName.INVOICE_NUMBER, final, document) == 0.0
+
+
 # --------------------------------------------------------------------------------------------
 # ExtractionFeatureBuilder (end-to-end wiring)
 # --------------------------------------------------------------------------------------------
