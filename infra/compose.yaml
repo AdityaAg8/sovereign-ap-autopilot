@@ -342,6 +342,9 @@ services:
       - ../infra:/repo/infra:ro
       # Only B's export manifests (export.json); Hub GGUF sha256s come from models.lock.
       - ../models/extractor_b:/repo/models/extractor_b:ro
+      # M6.4 injection guard checkpoint + guard.json thresholds, run on CPU in this container
+      # (ADR-0017; WORKER_GUARD_MODEL_DIR default). Missing or invalid: the worker won't start.
+      - ../data/guard/checkpoints/guard-modernbert:/models/guard-modernbert:ro
     networks: [app]
     deploy:
       resources:

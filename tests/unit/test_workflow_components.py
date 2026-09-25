@@ -155,13 +155,16 @@ def _flag(kind: ScanFlagKind, score: float) -> ScanFlag:
 
 def test_scanner_scores_only_attack_kinds() -> None:
     scanner = DetectorScanner(
-        FixedDetector([_flag(ScanFlagKind.PDF_METADATA, 0.9), _flag(ScanFlagKind.HIDDEN_TEXT, 0.7)])
+        FixedDetector(
+            [_flag(ScanFlagKind.PDF_METADATA, 0.9), _flag(ScanFlagKind.HIDDEN_TEXT, 0.7)]
+        ),
+        guard=None,
     )
     report = scanner.scan(SHA, b"%PDF-1.7 ...")
     assert report.injection_score == 0.7
     assert len(report.flags) == 2
     assert (
-        DetectorScanner(FixedDetector([_flag(ScanFlagKind.HIDDEN_TEXT, 1.0)]))
+        DetectorScanner(FixedDetector([_flag(ScanFlagKind.HIDDEN_TEXT, 1.0)]), guard=None)
         .scan(SHA, b"\x89PNG")
         .flags
         == ()
