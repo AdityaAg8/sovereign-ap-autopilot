@@ -1,0 +1,65 @@
+{
+  "budget": {
+    "whole_card_gb": 11.8,
+    "model_gb": 9.5
+  },
+  "pages": 5,
+  "arms": [
+    {
+      "arm": "a",
+      "alias": "extractor-a",
+      "status": "ok",
+      "reason": "peak 8.91 GB \u2264 11.8 GB, model 7.36 GB \u2264 9.5 GB",
+      "idle_gb": 1.544,
+      "peak_gb": 8.908,
+      "model_gb": 7.364,
+      "concurrency": 2,
+      "requests": 4,
+      "failed_requests": 0,
+      "vram_samples": 822,
+      "measured_at": "2026-09-25T17:25:42.247276+00:00"
+    },
+    {
+      "arm": "q38-27b",
+      "alias": "bakeoff-q38-27b",
+      "status": "ok",
+      "reason": "peak 10.53 GB \u2264 11.8 GB, model 8.97 GB \u2264 9.5 GB",
+      "idle_gb": 1.554,
+      "peak_gb": 10.528,
+      "model_gb": 8.975,
+      "concurrency": 1,
+      "requests": 2,
+      "failed_requests": 0,
+      "vram_samples": 1016,
+      "measured_at": "2026-09-25T17:30:03.939965+00:00"
+    },
+    {
+      "arm": "q38-9b-distill",
+      "alias": "bakeoff-q38-9b-distill",
+      "status": "ok",
+      "reason": "peak 7.00 GB \u2264 11.8 GB, model 5.45 GB \u2264 9.5 GB",
+      "idle_gb": 1.546,
+      "peak_gb": 6.995,
+      "model_gb": 5.449,
+      "concurrency": 1,
+      "requests": 2,
+      "failed_requests": 0,
+      "vram_samples": 595,
+      "measured_at": "2026-09-25T17:32:37.352617+00:00"
+    },
+    {
+      "arm": "q35-9b-mtp",
+      "alias": "bakeoff-q35-9b-mtp",
+      "status": "ok",
+      "reason": "peak 8.94 GB \u2264 11.8 GB, model 7.39 GB \u2264 9.5 GB",
+      "idle_gb": 1.547,
+      "peak_gb": 8.937,
+      "model_gb": 7.39,
+      "concurrency": 1,
+      "requests": 2,
+      "failed_requests": 0,
+      "vram_samples": 519,
+      "measured_at": "2026-09-25T17:34:51.554292+00:00"
+    }
+  ]
+}
