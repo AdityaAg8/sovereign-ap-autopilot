@@ -41,6 +41,7 @@ Every workflow in this repo is a `make` target (run from the repo root, in Git B
 | `make test-artifacts` | PINT AE schematron tests (bundles from `uv run python -m evals.pint_ae.fetch`) |
 | `make e2e` | Fixture build of the web app, then the full Playwright suite (`web/e2e`) |
 | `uv run pre-commit run --all-files` | Every commit hook; all run through `uv run python -m`, so Windows Smart App Control doesn't block them |
+| `make ci-local REF=<branch>` | Every CI job (python, web, headers, gitleaks) on a clean clone of a branch; report in `logs/ci-local/` (use when GitHub Actions can't run) |
 | `make fresh-clone` | Clean clone of `HEAD`: install, lint, typecheck, tests, compose config, image build |
 | `uv run python scripts/check_headers.py --all` | Every source file has its header comment |
 

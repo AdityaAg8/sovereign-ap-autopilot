@@ -22,7 +22,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
         guard-data train-guard guard-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
-        verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all
+        verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all ci-local
 
 # Overridable: `make factory OUT_DIR=/abs/path SEED=2026 N_TOTAL=5000`.
 OUT_DIR ?= data/uae
@@ -346,6 +346,11 @@ demo: up seed
 	cd $(WEB_DIR) && (nohup pnpm start -p 3000 >../logs/web.log 2>&1 &)
 	@echo "==> staging the demo scenarios (docs/demo.md walks through them)"
 	uv run python scripts/demo.py
+
+# Same jobs as .github/workflows/ci.yml on a clean clone of REF (default HEAD); for when Actions
+# can't run. Report: logs/ci-local/<ref>.md.
+ci-local:
+	bash scripts/ci_local.sh $(or $(REF),HEAD)
 
 fresh-clone:
 	@echo "==> clean clone of HEAD: install, lint, typecheck, unit tests, compose config, image build"
