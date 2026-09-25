@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import json
 import os
 from pathlib import Path
@@ -70,6 +71,11 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
+def _print_progress(label: str, done: int, total: int) -> None:
+    """One flushed line per finished chat task; tools/ops-dashboard parses `[<model>] chat i/n`."""
+    print(f"[{label}] chat {done}/{total}", flush=True)
+
+
 def _first(ids: list[str], n: int | None) -> list[str] | None:
     return None if n is None else ids[:n]
 
@@ -98,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
                     model=alias,
                     transport=fake.transport() if fake else None,
                     timeout_s=args.timeout_s,
+                    on_progress=functools.partial(_print_progress, label),
                 )
             )
             by_id = {t.id: t for t in tasks}
@@ -105,14 +112,17 @@ def main(argv: list[str] | None = None) -> int:
             chat = summarize(scores, errors=sum(r.error is not None for r in runs))
             print(
                 f"[{label}] chat: tool-call acc {chat.tool_call_accuracy:.3f}, "
-                f"citation faithfulness {chat.citation_faithfulness:.3f}"
+                f"citation faithfulness {chat.citation_faithfulness:.3f}",
+                flush=True,
             )
         banking = None
         if not args.skip_agentdojo:
+            print(f"[{label}] agentdojo banking: started", flush=True)
             banking = _banking(args, alias)
             print(
                 f"[{label}] banking: utility {banking.utility:.3f}, "
-                f"ASR {banking.attack_success_rate:.3f}"
+                f"ASR {banking.attack_success_rate:.3f}",
+                flush=True,
             )
         results.append(ModelResults(label=label, alias=alias, chat=chat, banking=banking))
 

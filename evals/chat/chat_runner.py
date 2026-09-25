@@ -6,7 +6,7 @@ check citations against it. The model endpoint is configurable (base URL, alias,
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import httpx
@@ -111,14 +111,21 @@ async def run_tasks(
     model: str,
     transport: httpx.AsyncBaseTransport | None = None,
     timeout_s: float = 600.0,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> list[TaskRun]:
-    """Run every task sequentially against one endpoint and model alias."""
+    """Run every task sequentially against one endpoint and model alias. `on_progress(done, total)`
+    is called after each task (the CLI prints it so the ops dashboard can show progress)."""
     llm = LlamaSwapClient(
         LlmSettings(base_url=base_url, timeout_s=timeout_s, allowed_models=frozenset({model})),
         transport=transport,
     )
+    runs: list[TaskRun] = []
     try:
-        return [await run_task(task, world, llm, model) for task in tasks]
+        for task in tasks:
+            runs.append(await run_task(task, world, llm, model))
+            if on_progress is not None:
+                on_progress(len(runs), len(tasks))
+        return runs
     finally:
         await llm.aclose()
 
