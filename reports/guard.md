@@ -7,8 +7,8 @@ adversarial or hard-negative template appears in more than one split.
 ## Dataset
 
 Hard negatives are hand-written invoice lines plus benign text mined from the
-`train` pool (never cal/test) of the generated UAE invoice sets `data/uae` and
-`data/uae_full2`: ground-truth names, addresses, tax notes, EN/AR/bilingual line items
+`train` pool (never cal/test) of the two generated UAE invoice renders `data/uae` and
+`data/uae_stale_m2` (ADR-0012 §2): names, addresses, tax notes, EN/AR/bilingual lines
 and the clean Latin text layer (payment/IBAN lines, totals). Mined lines are grouped by
 template (first four words), so every numeric or wrapped variant sits in one split.
 
@@ -23,26 +23,26 @@ template (first four words), so every numeric or wrapped variant sits in one spl
 | model | operating point | threshold | precision | recall | F1 | FPR | hard-neg FPR |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Llama Prompt Guard 2 86M | blocked (gated; BLOCKED [models:promptguard]) | | | | | | |
-| ModernBERT-base fine-tune (ours) | pending GPU fine-tune | | | | | | |
+| ModernBERT-base fine-tune (ours) | cal-tuned (max F1) | 0.9965 | 1.000 | 0.667 | 0.800 | 0.000 | 0.000 (n=406) |
 | siberiancat/modernbert-prompt-injection | argmax 0.5 | 0.5000 | 0.693 | 0.627 | 0.658 | 0.076 | 0.069 (n=406) |
 | siberiancat/modernbert-prompt-injection | vendor ~1% FPR point | 0.0300 | 0.434 | 0.810 | 0.565 | 0.288 | 0.283 (n=406) |
 | siberiancat/modernbert-prompt-injection | cal-tuned (max F1) | 0.9934 | 0.821 | 0.254 | 0.388 | 0.015 | 0.007 (n=406) |
 
 ## Per-category recall on the adversarial suite (test families, cal-tuned)
 
-| category | n | siberiancat/modernbert-prompt-injection |
-|---|---:|---:|
-| behind_image | 5 | 0.000 |
-| bidi_override | 7 | 0.143 |
-| fake_approval_stamp | 16 | 0.000 |
-| filename_email_injection | 3 | 1.000 |
-| hidden_white_text | 5 | 0.000 |
-| iban_swap_instruction | 2 | 0.000 |
-| line_item_injection | 4 | 0.000 |
-| off_page | 6 | 0.333 |
-| pdf_metadata_injection | 3 | 1.000 |
-| tiny_font | 5 | 0.000 |
-| zero_width | 10 | 0.900 |
+| category | n | ModernBERT-base fine-tune (ours) | siberiancat/modernbert-prompt-injection |
+|---|---:|---:|---:|
+| behind_image | 5 | 1.000 | 0.000 |
+| bidi_override | 7 | 0.714 | 0.143 |
+| fake_approval_stamp | 16 | 0.000 | 0.000 |
+| filename_email_injection | 3 | 1.000 | 1.000 |
+| hidden_white_text | 5 | 0.600 | 0.000 |
+| iban_swap_instruction | 2 | 1.000 | 0.000 |
+| line_item_injection | 4 | 1.000 | 0.000 |
+| off_page | 6 | 0.667 | 0.333 |
+| pdf_metadata_injection | 3 | 1.000 | 1.000 |
+| tiny_font | 5 | 1.000 | 0.000 |
+| zero_width | 10 | 0.000 | 0.900 |
 
 Categories absent from the table have a single template family, which is dealt to
 train. `homoglyph_vendor` is excluded: its payload is a spoofed name, not instruction
