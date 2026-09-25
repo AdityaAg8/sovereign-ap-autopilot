@@ -398,7 +398,26 @@ def test_challenger_entry_serves_the_export_and_leaves_extractor_b_alone() -> No
     challenger = models["extractor-b-challenger"]["cmd"]
     assert f"/export/{Q4_NAME}" in challenger and f"/export/{MMPROJ_NAME}" in challenger
     served = models["extractor-b"]["cmd"]
-    assert "/models/unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf" in served
+    if "/models/unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf" not in served:
+        # Only `ml.extractor_b.promote` repoints extractor-b, and it records the champion in
+        # models.lock `local_models` first (ADR-0009 §1.8).
+        lock = json.loads((root / "infra" / "models.lock.json").read_text(encoding="utf-8"))
+        assert f"/export/{Q4_NAME}" in served and f"/export/{MMPROJ_NAME}" in served
+        entries = [
+            e for e in lock.get("local_models", []) if e["registered_model"] == "extractor_b"
+        ]
+        # promote writes the served Q4_K_M sha256 into the entry's description; the lock entry
+        # of that build must carry the same sha256, and so must the export manifest when the
+        # (never committed) export is present on this machine.
+        description = models["extractor-b"]["description"]
+        served_entry = [e for e in entries if e["gguf_sha256"] in description]
+        assert len(served_entry) == 1
+        export_manifest = root / served.split("--model ")[1].split()[0].removeprefix("/")
+        export_manifest = export_manifest.parent / "export.json"
+        if export_manifest.is_file():
+            manifest = json.loads(export_manifest.read_text(encoding="utf-8"))
+            q4 = next(a for a in manifest["artifacts"] if a["name"] == Q4_NAME)
+            assert served_entry[0]["gguf_sha256"] == q4["sha256"]
     assert "extractor-b-challenger" not in RUNTIME_MODEL_ALIASES
     groups = config["routing"]["router"]["settings"]["groups"]
     assert "extractor-b-challenger" in groups["extract"]["members"]  # swaps with A and B

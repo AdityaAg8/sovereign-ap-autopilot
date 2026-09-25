@@ -268,3 +268,15 @@ models:
 
     assert exit_code == 1
     assert not out.exists()
+
+
+def test_carry_local_models_keeps_promoted_builds(tmp_path: Path) -> None:
+    previous = tmp_path / "models.lock.json"
+    local = [{"registered_model": "extractor_b", "version": "1", "source": "local"}]
+    previous.write_text(json.dumps({"models": [], "local_models": local}), encoding="utf-8")
+    fresh = {"generated_at": "now", "models": [{"intent": "x"}]}
+
+    assert rm.carry_local_models(fresh, previous) == {**fresh, "local_models": local}
+    assert rm.carry_local_models(fresh, tmp_path / "absent.json") == fresh
+    previous.write_text(json.dumps({"models": []}), encoding="utf-8")
+    assert rm.carry_local_models(fresh, previous) == fresh

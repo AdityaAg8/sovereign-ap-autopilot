@@ -141,6 +141,16 @@ def resolve_all(client: HubClient, entries: list[ManifestEntry]) -> dict[str, An
     }
 
 
+def carry_local_models(lock: dict[str, Any], previous: Path) -> dict[str, Any]:
+    """Keep the `local_models` entries of the lock being replaced (promoted local builds that
+    `ml.extractor_b.promote` records, ADR-0009 §1.8): they are not on the Hub, so re-resolving
+    `infra/models.yaml` must not drop them."""
+    if not previous.is_file():
+        return lock
+    local = json.loads(previous.read_text(encoding="utf-8")).get("local_models")
+    return lock if local is None else {**lock, "local_models": local}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -155,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    lock = carry_local_models(lock, args.out)
     args.out.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {args.out} ({len(lock['models'])} models)")
     return 0

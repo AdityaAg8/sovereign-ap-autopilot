@@ -71,6 +71,14 @@ Guide: [Training Extractor B](training.md).
 | `make export-b-image` | Build the exporter image (trainer image + pinned llama.cpp b11096) |
 | `make export-b` | GPU: best checkpoint → merged → GGUF Q4_K_M + mmproj, verified and hashed |
 | `make smoke-b` | The exported challenger on 5 UAE dev documents through llama-server (needs `make up`) |
+| `make register-b` | CPU: register the export as MLflow `extractor_b`, alias `challenger` (idempotent) |
+| `make eval-b` | GPU, needs `make up`: B on UAE test via `extractor-b-challenger` → `reports/extractor_b_test.md` |
+| `make gates-b` | GPU, needs `make up`: P1-P5 → `reports/extractor_b_gates.md`; exit 1 if a gate fails |
+| `make promote-b` | CPU: only if every gate passed, move `champion` (calibrator, models.lock, llama-swap, alias) |
+| `make register-b` | CPU: register the export as MLflow `extractor_b`, alias `challenger` (idempotent) |
+| `make eval-b` | GPU, needs `make up`: B on UAE test via `extractor-b-challenger` → `reports/extractor_b_test.md` |
+| `make gates-b` | GPU, needs `make up`: P1-P5 → `reports/extractor_b_gates.md`; exit 1 if a gate fails |
+| `make promote-b` | CPU: only if every gate passed, move `champion` (calibrator, models.lock, llama-swap, alias) |
 | `make test-export` | Exporter-image tests on CPU |
 | `make test-trainer` | Trainer-image tests on CPU |
 | `make retrain` | Challenger vs champion on gates G1-G11; promote only if nothing regresses ([ADR-0015](adr/0015-promotion-gates.md)). Not usable yet: exits 2 with `RetrainPrerequisiteError` until the production adapters land |

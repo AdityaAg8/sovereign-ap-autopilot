@@ -37,6 +37,7 @@ help:
 	@echo "Dev helpers:    status open dashboard preview web-stop"
 	@echo "Extractor B:    train-b-data train-b-probe train-b train-b-new train-b-pause"
 	@echo "                report-b export-b-image export-b smoke-b test-export"
+	@echo "                register-b eval-b gates-b promote-b (M7.1 promotion, docs/training.md)"
 	@echo "All targets, grouped: docs/commands.md"
 
 ## --- Implemented -------------------------------------------------------------------
@@ -215,6 +216,25 @@ test-export:
 smoke-b:
 	@echo "==> llama-server smoke of the exported challenger on 5 UAE dev docs (needs make up)"
 	uv run python -m ml.extractor_b.smoke --base-url http://127.0.0.1:8080
+
+# M7.1 promotion (ADR-0009 §1.8, docs/training.md "Promotion"): host-side, needs `make up`.
+# eval-b and gates-b drive the GPU through llama-swap; run them only when no other GPU job runs.
+# Overridable: `make gates-b A_ROWS=logs/extraction_a.adr0012.jsonl B_ROWS=logs/extractor_b_test.jsonl`.
+register-b:
+	@echo "==> register the export as MLflow extractor_b (alias challenger); CPU, re-hashes the export"
+	uv run python -m ml.extractor_b.promote register
+
+eval-b:
+	@echo "==> Extractor B on UAE test via extractor-b-challenger -> reports/extractor_b_test.md (GPU, resumable)"
+	uv run python -m ml.extractor_b.promote eval-b $(if $(B_ROWS),--b-rows $(B_ROWS))
+
+gates-b:
+	@echo "==> P1-P5: A vs B F1, 200-doc sequential latency + VRAM run, hygiene -> reports/extractor_b_gates.md (GPU)"
+	uv run python -m ml.extractor_b.promote gates $(if $(A_ROWS),--a-rows $(A_ROWS)) $(if $(B_ROWS),--b-rows $(B_ROWS))
+
+promote-b:
+	@echo "==> move champion only if every gate passed: calibrator, models.lock, llama-swap, alias (CPU)"
+	uv run python -m ml.extractor_b.promote promote
 
 report-b:
 	@echo "==> Extractor B training report -> reports/extractor_b.md (CPU; MLflow via the gateway if up)"

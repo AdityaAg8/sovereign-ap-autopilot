@@ -84,6 +84,74 @@ points of A, p50 latency at most 0.6 × A, valid JSON ≥ 99%, the VRAM budget a
 (ADR-0009 §1.8, [ADR-0015](adr/0015-promotion-gates.md)). `make retrain` will run that comparison for
 later challengers once its production adapters land (today it exits 2).
 
+### Promotion (M7.1): register, measure, promote
+
+`python -m ml.extractor_b.promote` does the first promotion. Run these in order on the host,
+with `make up` running and **no other GPU job** (training, export, an A eval): steps 0, 2 and 3
+drive the GPU through llama-swap.
+
+| Step | Command | GPU | Expected time | Output |
+|---|---|---|---|---|
+| 0 | `make extraction-a-adr0012` (A on all 750 test docs with the current prompt contract) | yes | about 3.5 h at A's p50 of about 35 s with 2 slots; resumes | `logs/extraction_a.adr0012.jsonl`, the P1 reference |
+| 1 | `make register-b` | no | 1-2 min (re-hashes the 12.8 GB export) | MLflow `extractor_b` version N, alias `challenger` |
+| 2 | `make eval-b` | yes | about 1 h (750 docs, 2 slots, parse included); resumes | `logs/extractor_b_test.jsonl`, `reports/extractor_b_test.md` |
+| 3 | `make gates-b` (override with `A_ROWS=` / `B_ROWS=`) | yes | about 2.5-3 h: parse 200 docs, then A × 200 and B × 200, one call at a time | `reports/extractor_b_gates.json` + `.md`, gate tags on version N; exit 1 if a gate fails |
+| 4 | `make promote-b` | no | seconds | calibrator marker, models.lock `local_models`, `infra/llama-swap.yaml` `extractor-b`, alias `champion` |
+| 5 | `cd infra && docker compose restart llama-swap` | no | about 10 s | the pipeline's `extractor-b` serves the champion |
+
+The times are estimates from A's measured p50 and B's smoke latencies, not measurements.
+
+How each gate is measured:
+
+- **P1 and P3** come from the Extractor A harness (`evals.extraction_a --extractor b --model
+  extractor-b-challenger`): same parse, same schema-constrained request settings, B with its
+  image-only prompt. A's and B's rows are scored by the same M1.3 scorer
+  (`evals.extraction_f1` → `evals.scorers.uae.score_uae`, micro F1 over the 14 header fields,
+  EN and AR split by the factory's `arabic_first`). Both row files must cover all 750 test
+  documents or `gates` stops.
+- **Row identity.** Every harness row records `model` (the alias), `gguf_sha256` (the GGUF that
+  alias serves: from `infra/models.lock.json` for A, from the export manifest for B) and
+  `prompt_version` (a hash of the full request the prompt builder makes, `evals.extraction_identity`).
+  A resume refuses a row file written by another build or prompt, and `gates` accepts only rows
+  whose identity equals the currently served A and the export being measured. Rows written
+  before these fields existed (the first 47 rows of `logs/extraction_a.adr0012.jsonl`) carry no
+  identity and are refused: the A run restarts into a fresh file. The evidence records both row
+  files' sha256 and identities.
+- **Served build.** `eval-b`, `gates` and `promote` refuse to run unless llama-swap's
+  `extractor-b-challenger` entry serves exactly `--export-dir`'s Q4_K_M and mmproj.
+- **P2** is a separate timed run in one session: the first 200 UAE test ids in sorted order
+  (the M3.4 subset until M3.4 defines its own; its digest is recorded) are parsed first, the
+  parse service is unloaded, then A and B each get one untimed warm-up call and then every
+  document once, strictly sequentially. The latency is the extract call's HTTP round trip, the
+  number the A harness reports.
+- **P4** is the whole-card nvidia-smi peak (sampled every 0.2 s) over that extract-stage run,
+  A and B under llama-swap's `swap: true`, so the ceiling is the 11.8 budget of ADR-0013. The
+  unit is GiB (nvidia-smi MiB / 1024), the same sampler and unit the budget was measured with.
+  A missed reading stops the gate run instead of guessing; the count is recorded.
+- **P5** re-hashes the run's `data/ml/extractor_b/manifest.jsonl` against `run.json`, runs the
+  leakage check on it and `dev.jsonl` against the train pool of `evals/splits.json`, and
+  compares the trained base revision with the `extractor_b_train_base` pin in models.lock.
+
+`promote` re-reads the evidence file and recomputes every verdict from its numbers. It checks
+that the file's sha256 equals the `gates.evidence_sha256` tag on the challenger version, that
+the export still matches its manifest, that the challenger entry serves that export and that
+`champion` has not moved since `gates` ran (checked again right before the alias move). Only
+then, in this order, it marks the calibrator stale (`data/trust/calibrator_invalidation.json`,
+cleared by the M7.4/M7.5 cal job), records the build in `infra/models.lock.json` under
+`local_models`, repoints llama-swap's `extractor-b` at the export and finally moves the alias.
+A failure names the steps already applied (`PromotionApplyError`, recovery as in ADR-0015 §5),
+and rerunning `make promote-b` finishes the job. The M10.2 decider behind `make retrain` is not
+reused for this first promotion: it compares a challenger with an existing champion on the full
+RunReport, and there is no champion yet. The thresholds, the models.lock entry type, the stage
+names and the errors are shared with it.
+
+**Row identity.** Every eval row records the model alias, the served GGUF's sha256 and a prompt
+version, and a resume refuses rows from another build or prompt. Two caveats: A's GGUF sha256
+is taken from `infra/models.lock.json` (Hub-pinned and hash-checked by `make models`), not
+re-hashed on disk, and A's mmproj is not part of its identity; the prompt version hashes a
+rendered PNG, so a Pillow upgrade can change it, which fails safe (the rows are refused and the
+eval is rerun).
+
 ## First run: results (2026-09-25)
 
 Run `b-20260923T2025-eb0aea7d`, 510/510 steps in 12 h 39 min of training time across three
@@ -132,7 +200,8 @@ decoding).
 
 ## Next steps
 
-1. Register the export in MLflow as `challenger` (ADR-0009 §1.8).
-2. Promotion gates P1-P5 on the UAE test split, measured through the `extract` group.
+1. Run the promotion steps above once the GPU is free.
+2. Commit the promotion's `infra/models.lock.json` and `infra/llama-swap.yaml` changes with
+   `reports/extractor_b_gates.md` as the evidence.
 3. Calibration (M7.4) and the Learn-then-Test threshold (M7.5) on real A and B outputs, which
    is what finally lets the trust gate accept fields without review.

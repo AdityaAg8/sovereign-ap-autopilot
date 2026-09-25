@@ -117,7 +117,8 @@ class ModelResult:
 
 def parse_nvidia_smi_memory_used(output: str) -> list[float]:
     """Parses `nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits` stdout
-    (one MiB value per line, one line per GPU) into GB values."""
+    (one MiB value per line, one line per GPU) into GiB values (MiB / 1024). Reports and the
+    ADR-0013 budget call these "GB"; they are binary gigabytes."""
     values: list[float] = []
     for raw_line in output.strip().splitlines():
         line = raw_line.strip()
