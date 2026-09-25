@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,10 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Until React hydrates, a click would submit the native form. The button stays disabled until
+  // then, and the form is POST, so credentials never land in the URL or browser history.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -56,6 +60,7 @@ export function LoginForm() {
 
   return (
     <form
+      method="post"
       onSubmit={onSubmit}
       noValidate
       className="w-full max-w-sm space-y-5"
@@ -93,7 +98,7 @@ export function LoginForm() {
           {error}
         </p>
       )}
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" className="w-full" disabled={pending || !hydrated}>
         {pending && <Loader2 className="animate-spin" aria-hidden />}
         Sign in
       </Button>

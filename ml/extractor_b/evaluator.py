@@ -1,8 +1,10 @@
 """Dev-holdout evaluation for Extractor B checkpoint selection (ADR-0011 §2): teacher-forced dev
 loss and greedy generation scored as micro field F1 over the 14 header fields with the M1.3
 scorer (`evals.scorers.field_f1`, which uses `apx.common.compare`). Invalid JSON fails every
-field. Generation is batched (longest prompt first, left padding, OOM backoff) with progress lines;
-the model calls are injected, so batching and scoring are CPU-tested with fakes."""
+field. Generation is batched (longest prompt first, left padding, OOM backoff) with progress lines,
+and each eval's raw generations are persisted atomically to `<run>/dev_outputs/step-NNNNNN.jsonl`
+(issue #53) for the training report; the model calls are injected, so batching, scoring and the
+writer are CPU-tested with fakes."""
 
 from __future__ import annotations
 
@@ -12,11 +14,13 @@ import os
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from apx.extract.interfaces import FieldName
 from evals.scorers.field_f1 import field_f1, records_from_field_maps
+from ml.extractor_b.checkpoints import atomic_write_bytes
 from ml.extractor_b.interfaces import EvalResult, TrainingError, TrainingSample
 
 HEADER_FIELDS: tuple[str, ...] = tuple(f.value for f in FieldName)
@@ -37,12 +41,91 @@ OOM halves the batch for the rest of the eval, and it is the first (longest) bat
 it."""
 
 
+DEV_OUTPUTS_DIR: Final[str] = "dev_outputs"
+"""`<run>/dev_outputs/step-NNNNNN.jsonl`: one `DevOutputRow` per dev sample per generative eval."""
+
+
+class FinishReason(StrEnum):
+    EOS = "eos"
+    """The model emitted a stop token."""
+    MAX_NEW_TOKENS = "max_new_tokens"
+    """The output budget ran out before a stop token."""
+
+
+class DevOutputsWriteError(TrainingError):
+    """The per-row dev generations could not be persisted."""
+
+
 @dataclass(frozen=True, slots=True)
 class BatchGeneration:
     texts: tuple[str, ...]
     """Raw generated text per input row, in input order."""
     new_tokens: int
     """Generated (non-pad) tokens in the batch, for the tokens/s progress figure."""
+    finish_reasons: tuple[FinishReason, ...] | None = None
+    """Per row, in input order; None when the generator cannot tell (per-row test fakes)."""
+    generated_tokens: tuple[int, ...] | None = None
+    """Per row, generated tokens up to and including the stop token; None as above."""
+
+
+@dataclass(frozen=True, slots=True)
+class DevOutputRow:
+    """One persisted dev generation. `finish_reason` and `generated_tokens` are null only when
+    the injected generator did not report them."""
+
+    sample_id: str
+    text: str
+    parsed_ok: bool
+    finish_reason: FinishReason | None
+    generated_tokens: int | None
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "sample_id": self.sample_id,
+                "text": self.text,
+                "parsed_ok": self.parsed_ok,
+                "finish_reason": None if self.finish_reason is None else self.finish_reason.value,
+                "generated_tokens": self.generated_tokens,
+            },
+            ensure_ascii=False,
+        )
+
+
+def dev_outputs_path(run_dir: Path, step: int) -> Path:
+    return run_dir / DEV_OUTPUTS_DIR / f"step-{step:06d}.jsonl"
+
+
+def write_dev_outputs(run_dir: Path, step: int, rows: Sequence[DevOutputRow]) -> Path:
+    """Write the step's rows atomically (tmp + fsync + rename), replacing any earlier file for the
+    same step, so a resumed run that re-evaluates a step never leaves a torn or mixed file."""
+    path = dev_outputs_path(run_dir, step)
+    data = "".join(row.to_json() + "\n" for row in rows).encode("utf-8")
+    try:
+        atomic_write_bytes(path, data)
+    except OSError as exc:
+        raise DevOutputsWriteError(f"cannot write dev outputs {path}: {exc}") from exc
+    return path
+
+
+def stop_stats(
+    rows: Sequence[Sequence[int]], stop_ids: frozenset[int]
+) -> tuple[tuple[FinishReason, ...], tuple[int, ...]]:
+    """Finish reason and generated token count per row of generated ids (right-padded to one
+    width): up to and including the first stop token, else the whole row ran out of budget."""
+    if not stop_ids:
+        raise TrainingError("no stop token ids: cannot tell eos from max_new_tokens")
+    reasons: list[FinishReason] = []
+    counts: list[int] = []
+    for ids in rows:
+        first = next((i for i, tok in enumerate(ids) if tok in stop_ids), None)
+        if first is None:
+            reasons.append(FinishReason.MAX_NEW_TOKENS)
+            counts.append(len(ids))
+        else:
+            reasons.append(FinishReason.EOS)
+            counts.append(first + 1)
+    return tuple(reasons), tuple(counts)
 
 
 GenerateBatch = Callable[[object, object, Sequence[TrainingSample]], BatchGeneration]
@@ -127,6 +210,7 @@ class HfDevEvaluator:
         max_new_tokens: int = EVAL_MAX_NEW_TOKENS,
         batch_size: int | None = None,
         oom_errors: tuple[type[BaseException], ...] | None = None,
+        run_dir: Path | None = None,
     ) -> None:
         if not dev_rows:
             raise TrainingError("dev set is empty")
@@ -146,6 +230,8 @@ class HfDevEvaluator:
         self._row_loss = row_loss or self._hf_row_loss
         self._oom_errors = _cuda_oom_errors() if oom_errors is None else oom_errors
         self._processor: object | None = None
+        self.run_dir = run_dir
+        """When set, each generative eval persists its rows under `<run_dir>/dev_outputs/`."""
 
     def dev_loss(self, model: object, step: int) -> EvalResult:
         losses = [self._row_loss(model, row) for row in self.rows]
@@ -156,10 +242,12 @@ class HfDevEvaluator:
         self._processor = processor
         start = time.monotonic()
         try:
-            outputs = self._generate_all(model, processor, step, start)
+            generations = self._generate_all(model, processor, step, start)
         finally:
             _empty_cuda_cache()  # eval leftovers must not stay in training's reserved memory
-        score = score_generations(self.rows, outputs)
+        score = score_generations(self.rows, {sid: g.text for sid, g in generations.items()})
+        if self.run_dir is not None:
+            write_dev_outputs(self.run_dir, step, [generations[r.sample_id] for r in self.rows])
         print(
             f"dev eval step={step} done in {time.monotonic() - start:.0f}s, "
             f"dev_f1={score.dev_f1:.2f}, valid_json={score.valid_json_rate:.3f}",
@@ -171,13 +259,13 @@ class HfDevEvaluator:
 
     def _generate_all(
         self, model: object, processor: object, step: int, start: float
-    ) -> dict[str, str]:
+    ) -> dict[str, DevOutputRow]:
         """Outputs keyed by `sample_id`. On OOM the batch size halves for the rest of this eval
         and the failed batch is retried; an OOM at batch size 1 is re-raised."""
         order = generation_order(self.rows)
         total = len(order)
         batch = self.batch_size
-        outputs: dict[str, str] = {}
+        outputs: dict[str, DevOutputRow] = {}
         new_tokens = 0
         done = 0
         while done < total:
@@ -199,9 +287,18 @@ class HfDevEvaluator:
                 raise TrainingError(
                     f"generator returned {len(result.texts)} outputs for {len(chunk)} rows"
                 )
-            outputs.update(
-                (row.sample_id, text) for row, text in zip(chunk, result.texts, strict=True)
-            )
+            n = len(chunk)
+            reasons = result.finish_reasons or (None,) * n
+            counts = result.generated_tokens or (None,) * n
+            if len(reasons) != n or len(counts) != n:
+                raise TrainingError(
+                    f"generator returned {len(reasons)} finish reasons and {len(counts)} token "
+                    f"counts for {n} rows"
+                )
+            for row, text, reason, count in zip(chunk, result.texts, reasons, counts, strict=True):
+                outputs[row.sample_id] = DevOutputRow(
+                    row.sample_id, text, parse_prediction(text) is not None, reason, count
+                )
             done += len(chunk)
             new_tokens += result.new_tokens
             elapsed = time.monotonic() - start
@@ -243,7 +340,13 @@ class HfDevEvaluator:
             tokenizer.padding_side = previous_side
         new = out[:, inputs["input_ids"].shape[1] :]
         texts = processor.batch_decode(new, skip_special_tokens=True)
-        return BatchGeneration(tuple(str(t) for t in texts), int((new != pad_id).sum().item()))
+        reasons, counts = stop_stats(new.tolist(), _stop_token_ids(model, tokenizer))
+        return BatchGeneration(
+            tuple(str(t) for t in texts),
+            int((new != pad_id).sum().item()),
+            finish_reasons=reasons,
+            generated_tokens=counts,
+        )
 
     def _hf_row_loss(self, model: Any, row: TrainingSample) -> float:
         import torch
@@ -274,6 +377,21 @@ def _per_row(generate: Generate) -> GenerateBatch:
         return BatchGeneration(tuple(generate(model, processor, row) for row in rows), 0)
 
     return generate_batch
+
+
+def _stop_token_ids(model: Any, tokenizer: Any) -> frozenset[int]:
+    """Token ids that end generation: the model's generation-config eos (int or list) and the
+    tokenizer's eos."""
+    ids: set[int] = set()
+    for value in (
+        getattr(getattr(model, "generation_config", None), "eos_token_id", None),
+        getattr(tokenizer, "eos_token_id", None),
+    ):
+        if isinstance(value, int):
+            ids.add(value)
+        elif isinstance(value, list | tuple):
+            ids.update(v for v in value if isinstance(v, int))
+    return frozenset(ids)
 
 
 def _cuda_oom_errors() -> tuple[type[BaseException], ...]:

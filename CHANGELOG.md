@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Make targets `build` (rebuild app images after a pull; `make up` reuses the existing ones), `test-integration`, `test-artifacts`; `test-gpu`, `e2e`, `verify-m4`, `verify-m8` and `verify-all` now run real checks instead of printing "not implemented".
+- Extractor B dev evals persist per-row outputs to `<run>/dev_outputs/step-NNNNNN.jsonl`; `report.py` classifies invalid JSON as truncated / looping / malformed (#53).
+
+### Fixed
+
+- Login: the form posts and its button stays disabled until hydration, so a pre-hydration submit can no longer put the email and password in the URL (new `login-prehydration.spec.ts`).
+- `make e2e` builds the web app in fixture mode first (48/53 specs failed against a stale build); `pdf-viewer-errors.spec.ts` now injects a failure the nested parser worker really sees.
+- Windows host: the unit suite collects and passes (gpu.lock via a `FileLocker` seam, lock file closed before delete), host scripts print UTF-8 (`PYTHONUTF8=1`, explicit subprocess encodings), and every pre-commit hook runs through `uv run python -m` so Smart App Control no longer blocks commits.
+- `checkpoints.retention_plan` no longer prunes newer checkpoints when `keep_last` exceeds the count.
+- ADR-0012 §2 data promotion done: `data/uae_full2` is now `data/uae`; the parse IoU gate re-run passes on it (98.24%, p50 187 ms).
+
 - Docs: new guides linked from the README and `docs/README.md`: [Getting started](docs/getting-started.md) (fresh machine to demo, step by step), [Commands](docs/commands.md) (every `make` target grouped by task), [Evaluation guide](docs/evaluation.md) (datasets, splits, and the command behind every report), [Training Extractor B](docs/training.md) (run, watch, pause, export; first-run results) and a [Glossary](docs/glossary.md).
 - M7.1 Extractor B export (ADR-0009 §1.7): `ml/extractor_b/export.py` merges the `best.json` LoRA, converts with pinned llama.cpp b11096 (new `exporter` image) to Q4_K_M + mmproj, fails on any mmproj tensor mismatch vs upstream, logs sha256/size to MLflow; `ml/extractor_b/smoke.py` checks 5 UAE dev documents through a non-default `extractor-b-challenger` llama-swap entry; `ml/extractor_b/report.py` writes `reports/extractor_b.md`. Targets `export-b-image`, `export-b`, `smoke-b`, `test-export`, `report-b`. First export: 2.78 GB GGUF, 298/298 mmproj tensors equal, smoke 5/5.
 - M7.1 Extractor B training complete (run `b-20260923T2025-eb0aea7d`, 2026-09-25): 510/510 steps, train loss 0.0042, probe step peak 5.8 GB (max reserved 8.96 GB incl. dev evals); dev field F1 96.99 / 97.17 / 97.17 at steps 255 / 383 / 510, valid JSON 0.955 unconstrained; `best.json` selects step 383 (tie with 510, earlier step wins). README highlights and M7 status updated.

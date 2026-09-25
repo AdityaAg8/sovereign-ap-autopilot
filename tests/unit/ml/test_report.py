@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from ml.extractor_b.checkpoints import FsCheckpointStore, atomic_write_json
+from ml.extractor_b.evaluator import DEV_OUTPUTS_DIR, FinishReason
 from ml.extractor_b.interfaces import (
     CheckpointMeta,
     EvalResult,
@@ -23,7 +24,6 @@ from ml.extractor_b.interfaces import (
     SpikeGuardState,
 )
 from ml.extractor_b.report import (
-    DEV_OUTPUTS_DIR,
     InvalidKind,
     MlflowRun,
     MlflowUnavailableError,
@@ -277,3 +277,28 @@ def test_fetch_mlflow_run_failures_are_typed(failure: object) -> None:
 
     with pytest.raises(MlflowUnavailableError):
         fetch_mlflow_run("http://m", "abc", fetch=fetch)
+
+
+@pytest.mark.parametrize(
+    ("text", "reason", "kind"),
+    [
+        ('{"a": "cut', FinishReason.MAX_NEW_TOKENS, InvalidKind.TRUNCATED),
+        ('{"a": 1,, }', FinishReason.MAX_NEW_TOKENS, InvalidKind.TRUNCATED),
+        ('{"a": "cut', FinishReason.EOS, InvalidKind.MALFORMED),
+        ('{"x": "' + "Total AED " * 8, FinishReason.MAX_NEW_TOKENS, InvalidKind.LOOPING),
+        ('{"x": "' + "Total AED " * 8, FinishReason.EOS, InvalidKind.LOOPING),
+        ('{"a": "ok"}', FinishReason.MAX_NEW_TOKENS, None),
+    ],
+)
+def test_recorded_finish_reason_decides_truncated_vs_malformed(
+    text: str, reason: FinishReason, kind: InvalidKind | None
+) -> None:
+    assert classify_invalid(text, reason) is kind
+
+
+def test_unknown_finish_reason_is_typed(tmp_path: Path) -> None:
+    out = tmp_path / DEV_OUTPUTS_DIR / "step-000001.jsonl"
+    out.parent.mkdir()
+    out.write_text('{"sample_id": "a", "text": "{", "finish_reason": "stop"}\n', encoding="utf-8")
+    with pytest.raises(ReportError, match=":1 is not"):
+        read_dev_outputs(tmp_path, 1)

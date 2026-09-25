@@ -52,7 +52,8 @@ runtime itself makes no outbound calls ([ADR-0001](adr/0001-local-only-runtime.m
 make up
 ```
 
-This builds the images, starts Postgres, Temporal, Phoenix, MLflow, llama-swap, the parse
+The first run builds the images; later runs reuse them (run
+`make build` after a `git pull` to pick up code changes). It starts Postgres, Temporal, Phoenix, MLflow, llama-swap, the parse
 service, the API and the worker, runs the database migrations and waits until every service is
 healthy. Then check that every model loads and answers within the VRAM budget:
 

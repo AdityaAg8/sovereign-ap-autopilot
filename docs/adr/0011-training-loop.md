@@ -371,3 +371,6 @@ container nvidia-smi may not list other containers' processes.
 - Proof: `tests/unit/ml/test_gpu_lock_stale.py` (held across containers, free flock reclaimed,
   thread and process races with one winner, a real child holding then killed, an empty lock
   reclaimed or held by its flock, legacy and no-flock refusals) and `tests/unit/ml/test_gpu_preflight.py`.
+  The lock takes a `FileLocker` seam (`FcntlLocker` on Linux; none on Windows, so nothing is
+  reclaimed there); the tests run the same races on both platforms through
+  `tests/unit/ml/_file_lockers.py` (real flock on Linux, a byte-range lock on Windows) (2026-09-25).

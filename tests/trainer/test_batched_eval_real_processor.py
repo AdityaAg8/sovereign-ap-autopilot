@@ -1,11 +1,13 @@
 """Batched dev eval (M7.1-perf) through the real Extractor B processor (`models/Qwen/Qwen3.5-4B`,
 offline) with only the model faked: prompts are left-padded and each unpadded row equals its
 single-row prompt, generate is greedy with the KV cache and a pad id, outputs map back to the right
-sample_id, the padding side is restored, and a real `torch.cuda.OutOfMemoryError` halves the
-batch. `trainer` marker (CPU only)."""
+sample_id, the padding side is restored, a real `torch.cuda.OutOfMemoryError` halves the batch,
+and the persisted dev outputs carry the real tokenizer's eos-based finish reason and token count.
+`trainer` marker (CPU only)."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -14,7 +16,12 @@ import pytest
 
 from apx.extract.prompt_b import BImageSettings
 from ml.extractor_b.data import SourceDoc, build_row
-from ml.extractor_b.evaluator import HfDevEvaluator, _hf_inputs
+from ml.extractor_b.evaluator import (
+    EVAL_MAX_NEW_TOKENS,
+    HfDevEvaluator,
+    _hf_inputs,
+    dev_outputs_path,
+)
 from ml.extractor_b.interfaces import SampleSource, TrainingSample
 from ml.extractor_b.mappings import empty_target
 from ml.extractor_b.prompting import serving_messages
@@ -104,17 +111,29 @@ def test_batched_generation_keys_outputs_and_restores_padding(
     processor = _processor()
     rows = _rows(tmp_path)
     model = _FakeModel(processor, rows, tmp_path)
-    result = HfDevEvaluator(rows, tmp_path, batch_size=2).generative(model, processor, 229)
+    run_dir = tmp_path / "run"
+    ev = HfDevEvaluator(rows, tmp_path, batch_size=2, run_dir=run_dir)
+    result = ev.generative(model, processor, 229)
     assert result.dev_f1 == pytest.approx(100.0) and result.valid_json_rate == 1.0
     assert [c["rows"] for c in model.calls] == [2, 1]
     for call in model.calls:
         assert call["side"] == "left"
         assert call["do_sample"] is False and call["use_cache"] is True
-        assert call["pad_token_id"] is not None and call["max_new_tokens"] == 2048
+        assert call["pad_token_id"] is not None
+        assert call["max_new_tokens"] == EVAL_MAX_NEW_TOKENS
     assert processor.tokenizer.padding_side == "right"
     out = capsys.readouterr().out
     assert "dev eval step=229 2/3 rows, " in out and "dev eval step=229 3/3 rows, " in out
     assert "dev eval step=229 done in " in out
+    written = dev_outputs_path(run_dir, 229).read_text(encoding="utf-8").splitlines()
+    by_id = {r.sample_id: r for r in rows}
+    persisted = [json.loads(line) for line in written]
+    assert [p["sample_id"] for p in persisted] == sorted(by_id)
+    for p in persisted:
+        target = by_id[p["sample_id"]].target_json
+        assert p["text"] == target and p["parsed_ok"] is True
+        assert p["finish_reason"] == "eos"
+        assert p["generated_tokens"] == len(processor.tokenizer.encode(target)) + 1
 
 
 def test_real_cuda_oom_halves_the_batch(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

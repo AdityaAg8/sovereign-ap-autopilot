@@ -21,3 +21,12 @@ test("a failed API load is reported as a server error, not a bad account", async
   await expect(page.getByText("Couldn't reach the server, try again.")).toBeVisible();
   await expect(page.getByText(/No account matches/)).toHaveCount(0);
 });
+
+test("after hydration, Enter in the password field signs in", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  await page.getByLabel("Email").fill("admin@sovereign.local");
+  await page.getByLabel("Password").fill("anything");
+  await page.getByLabel("Password").press("Enter");
+  await expect(page).toHaveURL(/\/inbox$/);
+});

@@ -179,7 +179,7 @@ Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
 
 def _default_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=False)
 
 
 def tool_name(cmd: Sequence[str]) -> str:

@@ -66,6 +66,9 @@ empty and no train job runs on the host), then `rm data/ml/gpu.lock` (ADR-0011 a
 | Host tool gets `password authentication failed` | Postgres volume was created with a different password than `.env` has | Set the same `POSTGRES_PASSWORD` in `.env`, or recreate the volume (`make down`, `docker volume rm sovereign-ap-autopilot_postgres-data`, `make up`, `make seed`) |
 | Dropped files are never picked up | Worker not running, or file not a PDF/PNG/JPEG | `docker compose logs worker`; check the ingest error in the log |
 | Invoice stuck at a stage | An activity is retrying (model outage, parse error) | Temporal UI shows the failing activity and its error; the workflow resumes when the dependency is back |
+| API or worker behaves like older code after a `git pull` | `make up` reuses the built images | `make build`, then `make up` |
+| `make e2e` fails on nearly every spec with a "scaffold" page | Playwright served a stale or `http`-mode `.next` build | `make e2e` now builds in fixture mode first; if you run `pnpm test:e2e` by hand, run `NEXT_PUBLIC_API_MODE=fixture pnpm build` first |
+| A host script crashes with `UnicodeEncodeError: 'charmap'` | Windows console code page (cp1252) | Run it through `make` (sets `PYTHONUTF8=1`) or export `PYTHONUTF8=1` |
 | Model calls time out | GPU contention or a cold load | `nvidia-smi`; wait for the load or `make gpu-free` and retry |
 | `worker` exits with `ConfigError` on `buyer_trn` | `WORKER_BUYER_TRN` unset or not a valid 15-digit TRN outside Compose | Set it in `.env` (Compose defaults it to the demo company), then restart the worker |
 | Activity fails with `GpuProbeError` | `nvidia-smi` missing in the worker or its output unreadable | Check the worker's GPU `utility` reservation (`infra/compose.yaml`); a timeout or non-zero exit (`GpuProbeTransientError`) is retried |

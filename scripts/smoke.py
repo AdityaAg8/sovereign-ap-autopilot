@@ -132,6 +132,7 @@ def _run_nvidia_smi() -> str:
         ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=5,
         check=True,
     )

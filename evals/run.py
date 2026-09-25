@@ -113,6 +113,7 @@ def git_sha() -> str:
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
     except (OSError, subprocess.CalledProcessError):
         return "unknown"

@@ -166,18 +166,33 @@ def test_atomic_write_json_leaves_no_temp(tmp_path: Path) -> None:
 
 
 @given(
-    steps=st.sets(st.integers(0, 10_000), max_size=30),
+    steps=st.lists(st.integers(0, 10_000), max_size=30),
     best=st.one_of(st.none(), st.integers(0, 10_000)),
-    keep=st.integers(0, 5),
+    keep=st.integers(0, 40),
 )
-def test_retention_plan_property(steps: set[int], best: int | None, keep: int) -> None:
-    doomed = retention_plan(sorted(steps), best_step=best, keep_last=keep)
-    kept = steps - set(doomed)
-    newest = set(sorted(steps)[len(steps) - keep :]) if keep else set()
-    expected = newest | ({best} & steps)
-    assert kept == expected
-    assert set(doomed) <= steps
+def test_retention_plan_property(steps: list[int], best: int | None, keep: int) -> None:
+    """For any counts (keep_last above, at or below the number of checkpoints, duplicates and
+    any input order): the best is never pruned, the `keep` newest are kept, nothing else is."""
+    doomed = retention_plan(steps, best_step=best, keep_last=keep)
+    distinct = set(steps)
+    kept = distinct - set(doomed)
+    newest = set(sorted(distinct, reverse=True)[:keep])
+    assert kept == newest | ({best} & distinct)
+    assert set(doomed) <= distinct and len(doomed) == len(set(doomed))
     assert best not in doomed
+    assert newest.isdisjoint(doomed)
+    assert len(doomed) == max(0, len(distinct) - keep - (best in distinct - newest))
+
+
+@pytest.mark.parametrize("keep", [3, 4, 10])
+def test_retention_plan_keeps_everything_when_keep_last_covers_all(keep: int) -> None:
+    assert retention_plan([100, 200, 300], best_step=None, keep_last=keep) == []
+    assert retention_plan([300, 100, 200], best_step=100, keep_last=keep) == []
+
+
+def test_retention_plan_prunes_oldest_non_best() -> None:
+    assert retention_plan([100, 200, 300, 400], best_step=100, keep_last=2) == [200]
+    assert retention_plan([100, 200, 300], best_step=None, keep_last=0) == [100, 200, 300]
 
 
 def test_retention_plan_rejects_negative_keep() -> None:

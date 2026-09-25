@@ -45,7 +45,9 @@ def _require_docker() -> None:
             "re-run this test",
             pytrace=False,
         )
-    result = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=15)
+    result = subprocess.run(
+        ["docker", "info"], capture_output=True, text=True, encoding="utf-8", timeout=15
+    )
     if result.returncode != 0:
         pytest.fail(
             f"docker daemon unreachable (`docker info` exited {result.returncode}): "
@@ -60,6 +62,7 @@ def _require_running(service: str) -> None:
         cwd=INFRA_DIR,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=15,
     )
     if result.returncode != 0 or service not in result.stdout.split():
@@ -82,7 +85,9 @@ def _probe_script(host_port: str) -> str:
 
 
 def _assert_blocked(compose_cmd: list[str], *, label: str) -> None:
-    result = subprocess.run(compose_cmd, cwd=INFRA_DIR, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        compose_cmd, cwd=INFRA_DIR, capture_output=True, text=True, encoding="utf-8", timeout=30
+    )
     assert result.returncode == 0 and "BLOCKED_AS_EXPECTED" in result.stdout, (
         f"{label} reached a public host from inside the `app` network -- PRD C1 requires no "
         f"egress: stdout={result.stdout!r} stderr={result.stderr!r}"

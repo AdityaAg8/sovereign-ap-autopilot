@@ -1,7 +1,8 @@
 """Tests for the Extractor B dev evaluator (ADR-0011 §2) with a deterministic fake generator
 (the model is faked, the M1.3 scorer is real): micro field F1 in points, normalised matches,
-invalid JSON failing every field, the dev-loss mean, and batched generation (longest prompt
-first, outputs keyed to sample_ids, env batch size, OOM backoff, progress lines)."""
+invalid JSON failing every field, the dev-loss mean, batched generation (longest prompt
+first, outputs keyed to sample_ids, env batch size, OOM backoff, progress lines) and the persisted
+per-row dev outputs (schema, report round trip, atomic rerun, typed write failure)."""
 
 from __future__ import annotations
 
@@ -14,15 +15,23 @@ import pytest
 
 from ml.extractor_b.evaluator import (
     DEFAULT_EVAL_BATCH,
+    DEV_OUTPUTS_DIR,
     EVAL_BATCH_ENV,
     BatchGeneration,
+    DevOutputsWriteError,
+    FinishReason,
+    GenerateBatch,
     HfDevEvaluator,
+    dev_outputs_path,
     eval_batch_size,
     generation_order,
     parse_prediction,
     score_generations,
+    stop_stats,
+    write_dev_outputs,
 )
 from ml.extractor_b.interfaces import TrainingError, TrainingSample
+from ml.extractor_b.report import InvalidKind, read_dev_outputs
 from tests.unit.ml.conftest import RowFactory, good_target
 
 
@@ -252,3 +261,139 @@ def test_eval_output_budget_matches_serving_and_fits_every_dev_target() -> None:
 
     assert LlmSettings.model_fields["max_tokens"].default == EVAL_MAX_NEW_TOKENS
     assert EVAL_MAX_NEW_TOKENS > 2923
+
+
+# --- persisted dev outputs (issue #53) ------------------------------------------------------
+
+
+def _reported(texts: dict[str, tuple[str, FinishReason, int]]) -> GenerateBatch:
+    """A batched fake reporting a text, finish reason and token count per sample_id."""
+
+    def generate_batch(
+        model: object, processor: object, rows: Sequence[TrainingSample]
+    ) -> BatchGeneration:
+        picked = [texts[r.sample_id] for r in rows]
+        return BatchGeneration(
+            tuple(t for t, _, _ in picked),
+            sum(n for _, _, n in picked),
+            finish_reasons=tuple(f for _, f, _ in picked),
+            generated_tokens=tuple(n for _, _, n in picked),
+        )
+
+    return generate_batch
+
+
+def test_generative_eval_persists_one_row_per_sample(make_row: RowFactory, tmp_path: Path) -> None:
+    rows = [*_rows(make_row), make_row("d3", role="dev", target=good_target())]
+    run_dir = tmp_path / "run"
+    truncated = '{"invoice_number": "INV-2", "total": "10'
+    fake = _reported(
+        {
+            "d1": (rows[0].target_json, FinishReason.EOS, 40),
+            "d2": (truncated, FinishReason.MAX_NEW_TOKENS, 4096),
+            "d3": ('{"invoice_number": "X",, }', FinishReason.EOS, 12),
+        }
+    )
+    ev = HfDevEvaluator(rows, tmp_path, generate_batch=fake, batch_size=2, run_dir=run_dir)
+    ev.generative(None, None, 383)
+    path = dev_outputs_path(run_dir, 383)
+    assert path == run_dir / DEV_OUTPUTS_DIR / "step-000383.jsonl"
+    written = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert written == [
+        {
+            "sample_id": "d1",
+            "text": rows[0].target_json,
+            "parsed_ok": True,
+            "finish_reason": "eos",
+            "generated_tokens": 40,
+        },
+        {
+            "sample_id": "d2",
+            "text": truncated,
+            "parsed_ok": False,
+            "finish_reason": "max_new_tokens",
+            "generated_tokens": 4096,
+        },
+        {
+            "sample_id": "d3",
+            "text": '{"invoice_number": "X",, }',
+            "parsed_ok": False,
+            "finish_reason": "eos",
+            "generated_tokens": 12,
+        },
+    ]
+    # Round trip through the report's reader: same file, same schema.
+    read = read_dev_outputs(run_dir, 383)
+    assert read is not None and read.rows == 3
+    assert read.invalid == {InvalidKind.TRUNCATED: ["d2"], InvalidKind.MALFORMED: ["d3"]}
+
+
+def test_rerun_of_a_step_replaces_the_file_atomically(make_row: RowFactory, tmp_path: Path) -> None:
+    rows = _rows(make_row)
+    run_dir = tmp_path / "run"
+    bad = {r.sample_id: ("not json", FinishReason.EOS, 3) for r in rows}
+    good = {r.sample_id: (r.target_json, FinishReason.EOS, 30) for r in rows}
+    for outputs in (bad, good):
+        ev = HfDevEvaluator(rows, tmp_path, generate_batch=_reported(outputs), run_dir=run_dir)
+        ev.generative(None, None, 7)
+    written = dev_outputs_path(run_dir, 7).read_text(encoding="utf-8").splitlines()
+    assert len(written) == 2 and all(json.loads(x)["parsed_ok"] for x in written)
+    assert [p.name for p in (run_dir / DEV_OUTPUTS_DIR).iterdir()] == ["step-000007.jsonl"]
+
+
+def test_write_failure_is_typed(make_row: RowFactory, tmp_path: Path) -> None:
+    rows = _rows(make_row)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / DEV_OUTPUTS_DIR).write_text("a file where the directory should be")
+    gen, _ = _fake({r.sample_id: r.target_json for r in rows})
+    with pytest.raises(DevOutputsWriteError, match="cannot write dev outputs"):
+        HfDevEvaluator(rows, tmp_path, generate=gen, run_dir=run_dir).generative(None, None, 1)
+    with pytest.raises(DevOutputsWriteError):
+        write_dev_outputs(run_dir, 2, [])
+
+
+def test_without_run_dir_nothing_is_written(make_row: RowFactory, tmp_path: Path) -> None:
+    rows = _rows(make_row)
+    gen, _ = _fake({r.sample_id: r.target_json for r in rows})
+    HfDevEvaluator(rows, tmp_path, generate=gen).generative(None, None, 1)
+    assert not (tmp_path / DEV_OUTPUTS_DIR).exists()
+
+
+def test_per_row_fakes_record_unknown_finish(make_row: RowFactory, tmp_path: Path) -> None:
+    rows = _rows(make_row)
+    gen, _ = _fake({"d1": "{", "d2": rows[1].target_json})
+    HfDevEvaluator(rows, tmp_path, generate=gen, run_dir=tmp_path).generative(None, None, 2)
+    first = json.loads(dev_outputs_path(tmp_path, 2).read_text(encoding="utf-8").splitlines()[0])
+    assert first == {
+        "sample_id": "d1",
+        "text": "{",
+        "parsed_ok": False,
+        "finish_reason": None,
+        "generated_tokens": None,
+    }
+
+
+def test_generator_must_report_per_row_stats_for_every_row(
+    make_row: RowFactory, tmp_path: Path
+) -> None:
+    def short(model: object, processor: object, rows: Sequence[TrainingSample]) -> BatchGeneration:
+        return BatchGeneration(
+            tuple("{}" for _ in rows), 0, finish_reasons=(FinishReason.EOS,), generated_tokens=(1,)
+        )
+
+    ev = HfDevEvaluator(_rows(make_row), tmp_path, generate_batch=short, batch_size=2)
+    with pytest.raises(TrainingError, match="finish reasons"):
+        ev.generative(None, None, 1)
+
+
+def test_stop_stats() -> None:
+    pad, eos, im_end = 0, 2, 7
+    reasons, counts = stop_stats(
+        [[5, 6, im_end, pad, pad], [5, 5, 5, 5, 5], [eos, pad, pad, pad, pad]],
+        frozenset({eos, im_end}),
+    )
+    assert reasons == (FinishReason.EOS, FinishReason.MAX_NEW_TOKENS, FinishReason.EOS)
+    assert counts == (3, 5, 1)
+    with pytest.raises(TrainingError, match="no stop token"):
+        stop_stats([[1]], frozenset())

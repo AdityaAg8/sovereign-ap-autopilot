@@ -8,7 +8,8 @@ Every workflow in this repo is a `make` target (run from the repo root, in Git B
 | Command | What it does |
 |---|---|
 | `make status` | One aligned table: service health, ports, GPU memory, loaded model, running jobs (`NO_COLOR` respected) |
-| `make up` / `make down` | Start (build, migrate, wait for health) / stop the Compose stack |
+| `make up` / `make down` | Start (migrate, wait for health; reuses already-built images) / stop the Compose stack |
+| `make build` | Rebuild the app images after a `git pull` (needs the network for base-image metadata) |
 | `make open` | Open the web UI |
 | `make dashboard` | Open Phoenix, MLflow and the Temporal UI |
 | `make demo` | Stack + seed + web app on :3000 + nine staged invoices ([walkthrough](demo.md)) |
@@ -34,7 +35,12 @@ Every workflow in this repo is a `make` target (run from the repo root, in Git B
 | `make lint` | ruff check + format check, ESLint |
 | `make fmt` | ruff format + fixes, Prettier |
 | `make typecheck` | `mypy --strict`, `tsc` |
-| `make test` | pytest unit suite (integration, GPU and trainer tests are opt-in markers) |
+| `make test` | pytest unit suite (integration, GPU and trainer tests are opt-in markers); green on Windows and Linux |
+| `make test-integration` | Tests marked `integration` against the running stack (`make up` first) |
+| `make test-gpu` | Tests marked `gpu` or `integration` (live stack with models) |
+| `make test-artifacts` | PINT AE schematron tests (bundles from `uv run python -m evals.pint_ae.fetch`) |
+| `make e2e` | Fixture build of the web app, then the full Playwright suite (`web/e2e`) |
+| `uv run pre-commit run --all-files` | Every commit hook; all run through `uv run python -m`, so Windows Smart App Control doesn't block them |
 | `make fresh-clone` | Clean clone of `HEAD`: install, lint, typecheck, tests, compose config, image build |
 | `uv run python scripts/check_headers.py --all` | Every source file has its header comment |
 
@@ -48,7 +54,7 @@ Details and the report each one writes: [Evaluation guide](evaluation.md).
 | `make e2e-pipeline` | 20 documents through the live stack (GPU); writes `reports/e2e_pipeline.md` |
 | `make eval-chat` / `make eval-chat-dry` | Chat and AgentDojo evals on the local model (GPU) / on a scripted fake |
 | `make extraction-a-adr0012` / `make extraction-a-compare` | Extractor A with the ADR-0012 prompt (GPU, resumable) / paired before-after report |
-| `make verify-mN` / `make verify-all` | Milestone gates |
+| `make verify-mN` / `make verify-all` | Milestone gates (built: m0, m1, m2, m4, m5, m8; the others fail loudly until their milestone lands) / all of them in order |
 
 ## Extractor B training
 

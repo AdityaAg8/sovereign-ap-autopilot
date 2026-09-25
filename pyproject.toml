@@ -59,6 +59,7 @@ dev = [
     "agentdojo==0.1.35",
     "reportlab>=5.0.1",
     "tokenizers>=0.23",  # CPU test of the Extractor B loss mask (tests/unit/ml/test_mask_tokenizer.py)
+    "pre-commit-hooks==5.0.0",
 ]
 
 [build-system]

@@ -111,8 +111,8 @@ def render_report(results: Sequence[ModelResult], dataset_counts: dict[str, dict
         "## Dataset",
         "",
         "Hard negatives are hand-written invoice lines plus benign text mined from the",
-        "`train` pool (never cal/test) of the generated UAE invoice sets `data/uae` and",
-        "`data/uae_full2`: ground-truth names, addresses, tax notes, EN/AR/bilingual line items",
+        "`train` pool (never cal/test) of the two generated UAE invoice renders `data/uae` and",
+        "`data/uae_stale_m2` (ADR-0012 §2): names, addresses, tax notes, EN/AR/bilingual lines",
         "and the clean Latin text layer (payment/IBAN lines, totals). Mined lines are grouped by",
         "template (first four words), so every numeric or wrapped variant sits in one split.",
         "",
@@ -230,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "build":
-        dirs = args.invoices or [REPO_ROOT / "data" / "uae", REPO_ROOT / "data" / "uae_full2"]
+        dirs = args.invoices or [REPO_ROOT / "data" / "uae", REPO_ROOT / "data" / "uae_stale_m2"]
         return _build(args.data_dir, dirs)
 
     fixed: dict[str, list[tuple[str, float]]] = defaultdict(list)

@@ -88,7 +88,9 @@ def retention_plan(
     if keep_last < 0:
         raise ValueError(f"keep_last must be >= 0, got {keep_last}")
     steps = sorted(set(verified_steps))
-    keep = set(steps[len(steps) - keep_last :]) if keep_last else set()
+    # Newest first, so keep_last above the count keeps them all (a `len - keep_last` start would
+    # go negative and wrap around, pruning newer checkpoints).
+    keep = set(steps[::-1][:keep_last])
     if best_step is not None:
         keep.add(best_step)
     return [s for s in steps if s not in keep]

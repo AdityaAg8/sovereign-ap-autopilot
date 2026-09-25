@@ -27,7 +27,12 @@ from pydantic import ValidationError
 from apx.common.errors import ApxError
 from ml.extractor_b.checkpoints import FsCheckpointStore
 from ml.extractor_b.config import DEFAULT_CONFIG_PATH, load_config
-from ml.extractor_b.evaluator import parse_prediction
+from ml.extractor_b.evaluator import (
+    DEV_OUTPUTS_DIR,
+    FinishReason,
+    dev_outputs_path,
+    parse_prediction,
+)
 from ml.extractor_b.export import (
     Q4_NAME,
     ExportManifest,
@@ -49,8 +54,6 @@ from ml.extractor_b.smoke import SMOKE_NAME, SmokeResult
 REPORT_PATH: Final[Path] = Path("reports/extractor_b.md")
 DEFAULT_MLFLOW_URI: Final[str] = "http://127.0.0.1:5000"
 """The host reaches MLflow through the compose `gateway` (infra/compose.yaml)."""
-DEV_OUTPUTS_DIR: Final[str] = "dev_outputs"
-"""`<run>/dev_outputs/step-XXXXXX.jsonl`, rows `{"sample_id", "text"}`, if an evaluator wrote it."""
 _LAST_N: Final[int] = 50
 _LOOP_RE: Final[re.Pattern[str]] = re.compile(r"(.{8,200}?)\1{3,}", re.S)
 """A unit of 8-200 characters repeated back to back at least 4 times."""
@@ -204,14 +207,20 @@ def _unterminated(text: str) -> bool:
     return in_string or bool(stack)
 
 
-def classify_invalid(text: str) -> InvalidKind | None:
+def classify_invalid(text: str, finish_reason: FinishReason | None = None) -> InvalidKind | None:
     """None for a valid prediction (same rule as the dev metric: a JSON object). Otherwise
-    looping (a repeated unit, the usual cause of running out of tokens) before truncated (JSON
-    that is fine up to an abrupt end) before malformed (broken mid-text or not an object)."""
+    looping (a repeated unit, the usual cause of running out of tokens) first. With a recorded
+    `finish_reason` the rest is decided by it: out of budget is truncated, a stop token is
+    malformed (the model ended on its own with broken JSON). Without one (older files), JSON that
+    is fine up to an abrupt end is truncated and anything else malformed."""
     if parse_prediction(text) is not None:
         return None
     if _looping(text):
         return InvalidKind.LOOPING
+    if finish_reason is FinishReason.MAX_NEW_TOKENS:
+        return InvalidKind.TRUNCATED
+    if finish_reason is FinishReason.EOS:
+        return InvalidKind.MALFORMED
     stripped = text.strip()
     if stripped.startswith("{") and _unterminated(stripped):
         return InvalidKind.TRUNCATED
@@ -227,7 +236,9 @@ class DevOutputs:
 
 
 def read_dev_outputs(run_dir: Path, step: int) -> DevOutputs | None:
-    path = run_dir / DEV_OUTPUTS_DIR / f"step-{step:06d}.jsonl"
+    """Classify a persisted step's rows (`evaluator.DevOutputRow`: `sample_id`, `text`, and
+    `finish_reason` when recorded; the other fields are informational)."""
+    path = dev_outputs_path(run_dir, step)
     if not path.is_file():
         return None
     invalid: dict[InvalidKind, list[str]] = {}
@@ -238,10 +249,12 @@ def read_dev_outputs(run_dir: Path, step: int) -> DevOutputs | None:
         try:
             row = json.loads(line)
             sample_id, text = str(row["sample_id"]), str(row["text"])
-        except (ValueError, KeyError, TypeError) as exc:
+            raw_reason = row.get("finish_reason")
+            reason = None if raw_reason is None else FinishReason(raw_reason)
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise ReportError(f"{path}:{n} is not a {{sample_id, text}} row: {exc}") from exc
         rows += 1
-        kind = classify_invalid(text)
+        kind = classify_invalid(text, reason)
         if kind is not None:
             invalid.setdefault(kind, []).append(sample_id)
     return DevOutputs(step=step, path=path, rows=rows, invalid=invalid)
@@ -347,12 +360,10 @@ def collect(
     dev_outputs = read_dev_outputs(run_dir, best)
     if dev_outputs is None:
         gaps.append(
-            "per-row dev generations were not persisted: `HfDevEvaluator.generative` "
-            "(ml/extractor_b/evaluator.py) scores them in memory and keeps only F1 and the "
-            "valid-JSON rate, so the invalid rows cannot be split into looping / truncated / "
-            f"malformed. Follow-up: write `<run>/{DEV_OUTPUTS_DIR}/step-XXXXXX.jsonl` "
-            "(sample_id, text) at each generative eval (issue #53); this report then "
-            "classifies them"
+            f"per-row dev generations were not persisted for step {best} "
+            f"(`<run>/{DEV_OUTPUTS_DIR}/step-{best:06d}.jsonl` is missing): the run predates "
+            "issue #53 or its evaluator had no run_dir, so the invalid rows cannot be split "
+            "into looping / truncated / malformed"
         )
 
     mlflow_run: MlflowRun | None = None

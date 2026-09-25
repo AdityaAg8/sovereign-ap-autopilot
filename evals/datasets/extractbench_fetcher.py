@@ -25,7 +25,9 @@ LICENSE = "Apache-2.0"
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+    result = subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8"
+    )
     return result.stdout.strip()
 
 

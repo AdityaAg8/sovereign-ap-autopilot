@@ -186,7 +186,9 @@ def run(
             n_train=len(train_rows),
             pause=pause,
         )
-        evaluator = HfDevEvaluator(_load_rows(cfg.data_dir / "dev.jsonl"), cfg.data_dir)
+        evaluator = HfDevEvaluator(
+            _load_rows(cfg.data_dir / "dev.jsonl"), cfg.data_dir, run_dir=resolved.run_dir
+        )
         evaluator.set_processor(processor)
         from trl import SFTConfig
         from unsloth import FastVisionModel

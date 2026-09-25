@@ -98,7 +98,8 @@ serve parity (ADR-0009 §1.2), no change to the trust-gate feature vector (28 co
 `data/uae_full2` becomes `data/uae`, after the M3.3 run and the before/after run (§7) have
 finished reading `data/uae_full2/test`:
 `mv data/uae data/uae_stale_m2 && mv data/uae_full2 data/uae` (then `rm -rf data/uae_stale_m2`
-once `make train-b-data` passes). B trains on `data/uae/train` ∩ the splits train pool, plus FATURA
+once `make train-b-data` passes). **Done 2026-09-25:** promoted after the first B run; `data/_stage_b/data/uae` is a junction to
+`data/uae`, and the stale render is kept as `data/uae_stale_m2` (the M6.4 guard dataset mines both). B trains on `data/uae/train` ∩ the splits train pool, plus FATURA
 train from the manifest. DocILE stays deferred (BLOCKED token). Leakage: the splits validate
 leak-free (`train_split_sha256` raises otherwise), the per-row `check_leakage` guard runs, and split
 assignment is by `doc_seed`, so no seed crosses splits. The new guard in `uae_docs` stops prep with

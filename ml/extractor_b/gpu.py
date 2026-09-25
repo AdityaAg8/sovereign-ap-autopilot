@@ -1,7 +1,8 @@
 """GPU exclusivity for the Extractor B run (ADR-0011 §6): `nvidia-smi` preflight (memory in use,
 compute processes) and the O_EXCL `data/ml/gpu.lock` that one GPU job holds, with a kernel flock
 kept for the whole job. A lock whose flock is free is stale and reclaimed atomically; a held one is
-refused. Torch-free; `nvidia-smi` and the identity readers are injectable for CPU tests."""
+refused. Torch-free; `nvidia-smi`, the identity readers and the file locker are injectable, so
+the lock logic is tested on any host."""
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -30,8 +31,6 @@ _HINT: Final[str] = "run `make gpu-free` and retry"
 _MIB_PER_GIB: Final[float] = 1024.0
 LOCK_FORMAT: Final[int] = 2
 _CONTAINER_ID_RE: Final[re.Pattern[str]] = re.compile(r"(?<![0-9a-f])([0-9a-f]{64})(?![0-9a-f])")
-# flock(2) is the liveness proof; without it (Windows) a lock is never reclaimed.
-_HAS_FLOCK: bool = sys.platform != "win32"
 _TRAINER_CHECK: Final[str] = "docker ps --filter name=extractor-b-trainer"
 
 # Open fds of the locks this process holds (path -> fd); the flock lives as long as the fd.
@@ -59,6 +58,52 @@ class GpuLockInfo(BaseModel):
     started_at: datetime
     format: int = 1
     holder: HolderIdentity | None = None
+
+
+class FlockUnavailableError(TrainingError):
+    """flock(2) was used on a host that has none (Windows). There `DEFAULT_LOCKER` is None
+    instead, so a lock is never reclaimed (ADR-0011 amendment 4)."""
+
+
+class FileLocker(Protocol):
+    """Exclusive whole-file locks with flock(2) semantics: held per open file (not per thread or
+    pid) and dropped when that fd closes or its holder dies. The seam lets tests drive the lock
+    logic with a flock-equivalent on hosts that have no flock."""
+
+    def try_lock(self, fd: int) -> bool:
+        """Take the lock without blocking; False when another open file holds it."""
+        ...
+
+    def lock(self, fd: int) -> None:
+        """Take the lock, blocking until it is free."""
+        ...
+
+
+class FcntlLocker:
+    """The production locker: `fcntl.flock`, imported on use so this module loads on Windows,
+    where every call raises `FlockUnavailableError`."""
+
+    def try_lock(self, fd: int) -> bool:
+        if sys.platform == "win32":
+            raise FlockUnavailableError("flock(2) is unavailable on Windows")
+        import fcntl
+
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
+
+    def lock(self, fd: int) -> None:
+        if sys.platform == "win32":
+            raise FlockUnavailableError("flock(2) is unavailable on Windows")
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
+# flock(2) is the liveness proof; without it (None: Windows) a lock is never reclaimed.
+DEFAULT_LOCKER: Final[FileLocker | None] = None if sys.platform == "win32" else FcntlLocker()
 
 
 class LockState(StrEnum):
@@ -162,26 +207,21 @@ def read_lock(lock_path: Path) -> GpuLockInfo | None:
         return None
 
 
-def flock_is_free(lock_path: Path) -> bool | None:
+def flock_is_free(lock_path: Path, locker: FileLocker | None = DEFAULT_LOCKER) -> bool | None:
     """Whether nobody holds an flock on `lock_path`: a non-blocking LOCK_EX that succeeds (and is
     dropped at once). None when flock is unavailable or the file cannot be opened."""
-    if not _HAS_FLOCK or sys.platform == "win32":  # the platform test is for mypy on Windows
+    if locker is None:
         return None
-    import fcntl
-
     try:
         fd = os.open(lock_path, os.O_RDONLY)
     except OSError:
         return None
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return False
+        return locker.try_lock(fd)
     except OSError:
         return None
     finally:
         os.close(fd)  # also drops our probe flock
-    return True
 
 
 def classify_lock(
@@ -246,43 +286,39 @@ def _busy_message(lock_path: Path, info: GpuLockInfo | None, state: LockState, r
 
 
 def _inspect(
-    lock_path: Path, alive: Callable[[int], bool]
+    lock_path: Path, alive: Callable[[int], bool], locker: FileLocker | None
 ) -> tuple[GpuLockInfo | None, LockState, str]:
     info = read_lock(lock_path)
-    state, reason = classify_lock(info, flock_free=flock_is_free(lock_path), alive=alive)
+    state, reason = classify_lock(info, flock_free=flock_is_free(lock_path, locker), alive=alive)
     return info, state, reason
 
 
 @contextlib.contextmanager
-def _acquire_guard(lock_path: Path) -> Iterator[None]:
+def _acquire_guard(lock_path: Path, locker: FileLocker | None) -> Iterator[None]:
     """Serialize every inspect/create/reclaim/release of `lock_path` with a blocking flock on a
     sibling `.guard` file, held only for those few syscalls. The kernel drops it when its holder
     dies, so it never goes stale; the file stays in place on purpose (unlinking flock files
     reintroduces the race). A no-op without flock, where nothing is ever reclaimed."""
-    if not _HAS_FLOCK or sys.platform == "win32":  # the platform test is for mypy on Windows
+    if locker is None:
         yield
         return
-    import fcntl
-
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(lock_path.with_name(lock_path.name + ".guard"), os.O_CREAT | os.O_RDWR, 0o644)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        locker.lock(fd)
         yield
     finally:
         os.close(fd)
 
 
-def _create_and_hold(lock_path: Path, info: GpuLockInfo) -> None:
+def _create_and_hold(lock_path: Path, info: GpuLockInfo, locker: FileLocker | None) -> None:
     """O_EXCL-create the lock, take its flock, then write the metadata. The fd stays open (and
     the flock held) until `release_lock` or process exit. O_CLOEXEC is the default, so exec'd
     children do not inherit it; forked workers do, which keeps the lock held while they run."""
     fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o644)
     try:
-        if _HAS_FLOCK and sys.platform != "win32":  # the platform test is for mypy on Windows
-            import fcntl
-
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if locker is not None and not locker.try_lock(fd):
+            raise GpuBusyError(f"{lock_path} was just created but another process holds its flock")
         os.write(fd, info.model_dump_json().encode("utf-8"))
         os.fsync(fd)
     except BaseException:
@@ -293,17 +329,19 @@ def _create_and_hold(lock_path: Path, info: GpuLockInfo) -> None:
         _held[str(lock_path)] = fd
 
 
-def _acquire(lock_path: Path, info: GpuLockInfo, alive: Callable[[int], bool]) -> None:
+def _acquire(
+    lock_path: Path, info: GpuLockInfo, alive: Callable[[int], bool], locker: FileLocker | None
+) -> None:
     """Under the guard: create the lock, or re-check an existing one and reclaim it when stale,
     so two racing reclaimers never both hold it (the loser sees the winner's flock)."""
-    with _acquire_guard(lock_path):
+    with _acquire_guard(lock_path, locker):
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            _create_and_hold(lock_path, info)
+            _create_and_hold(lock_path, info, locker)
             return
         except FileExistsError:
             pass
-        old, state, reason = _inspect(lock_path, alive)
+        old, state, reason = _inspect(lock_path, alive, locker)
         if state is not LockState.STALE:
             raise GpuBusyError(_busy_message(lock_path, old, state, reason))
         if old is None:
@@ -320,9 +358,9 @@ def _acquire(lock_path: Path, info: GpuLockInfo, alive: Callable[[int], bool]) -
             )
         lock_path.unlink()
         try:
-            _create_and_hold(lock_path, info)
+            _create_and_hold(lock_path, info, locker)
         except FileExistsError as exc:  # an unguarded (legacy) writer got in; never overwrite
-            again, state, reason = _inspect(lock_path, alive)
+            again, state, reason = _inspect(lock_path, alive, locker)
             raise GpuBusyError(_busy_message(lock_path, again, state, reason)) from exc
 
 
@@ -335,15 +373,17 @@ def preflight_gpu(
     alive: Callable[[int], bool] = pid_alive,
     pid: int | None = None,
     probe: ProcProbe = DEFAULT_PROBE,
+    locker: FileLocker | None = DEFAULT_LOCKER,
 ) -> None:
     """Raise `GpuBusyError` unless nvidia-smi shows < `gpu_idle_max_used_gib` used, no compute
     process, and `lock_path` can be taken: created with O_EXCL, or reclaimed when its flock is
     free (`classify_lock`). On success this process holds the lock and its flock until
     `release_lock`. A held lock refuses before nvidia-smi runs. nvidia-smi is the general "GPU
-    is free" check (llama-server and friends), not a liveness proof: the flock is that."""
-    with _acquire_guard(lock_path):
+    is free" check (llama-server and friends), not a liveness proof: the flock is that. With no
+    `locker` (no flock) a free path is still taken but an existing lock is never reclaimed."""
+    with _acquire_guard(lock_path, locker):
         if lock_path.exists():
-            old, state, reason = _inspect(lock_path, alive)
+            old, state, reason = _inspect(lock_path, alive, locker)
             if state is not LockState.STALE:
                 raise GpuBusyError(_busy_message(lock_path, old, state, reason))
     used = query_used_mib(smi)
@@ -362,27 +402,43 @@ def preflight_gpu(
         format=LOCK_FORMAT,
         holder=probe.identity(),
     )
-    _acquire(lock_path, info, alive)
+    _acquire(lock_path, info, alive, locker)
+
+
+def _close_held(lock_path: Path) -> None:
+    with _held_mutex:
+        fd = _held.pop(str(lock_path), None)
+    if fd is not None:
+        os.close(fd)
 
 
 def release_lock(
-    lock_path: Path, *, pid: int | None = None, probe: ProcProbe = DEFAULT_PROBE
+    lock_path: Path,
+    *,
+    pid: int | None = None,
+    probe: ProcProbe = DEFAULT_PROBE,
+    locker: FileLocker | None = DEFAULT_LOCKER,
 ) -> bool:
     """Under the guard, remove the lock only if this process (or `pid`) owns it: same pid and,
     for a format 2 lock, the same holder identity (pid 1 in another container is not us). The
-    holder flock is dropped last, after the unlink. Returns whether it was removed."""
+    holder flock is dropped last, after the unlink. Returns whether it was removed.
+
+    Windows refuses to unlink a file that has an open handle, so there the fd is closed first.
+    Nobody can observe that gap: every inspect and reclaim runs under the guard held here, and a
+    host without a locker never reclaims at all."""
     owner = os.getpid() if pid is None else pid
-    with _acquire_guard(lock_path):
+    with _acquire_guard(lock_path, locker):
         info = read_lock(lock_path)
         if info is None or info.pid != owner:
             return False
         if info.holder is not None and info.holder != probe.identity():
             return False
-        lock_path.unlink(missing_ok=True)
-        with _held_mutex:
-            fd = _held.pop(str(lock_path), None)
-        if fd is not None:
-            os.close(fd)
+        if sys.platform == "win32":
+            _close_held(lock_path)
+            lock_path.unlink(missing_ok=True)
+        else:
+            lock_path.unlink(missing_ok=True)
+            _close_held(lock_path)
     return True
 
 
@@ -395,13 +451,16 @@ def gpu_lock(
     smi: SmiRunner | None = None,
     alive: Callable[[int], bool] = pid_alive,
     probe: ProcProbe = DEFAULT_PROBE,
+    locker: FileLocker | None = DEFAULT_LOCKER,
 ) -> Iterator[GpuLockInfo]:
     """Preflight and hold `gpu.lock` (and its flock) for the block; released in `finally`."""
-    preflight_gpu(cfg, lock_path=lock_path, job=job, smi=smi, alive=alive, probe=probe)
+    preflight_gpu(
+        cfg, lock_path=lock_path, job=job, smi=smi, alive=alive, probe=probe, locker=locker
+    )
     try:
         info = read_lock(lock_path)
         if info is None:
             raise TrainingError(f"{lock_path} vanished right after it was created")
         yield info
     finally:
-        release_lock(lock_path, probe=probe)
+        release_lock(lock_path, probe=probe, locker=locker)

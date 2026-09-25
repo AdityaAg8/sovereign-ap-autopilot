@@ -9,9 +9,13 @@ test("a parser worker that fails to load shows the document error state", async 
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/inbox$/);
 
+  // Chromium does not route a nested worker's own top-level script fetch through Playwright (the
+  // render worker's `new Worker(pdf.worker.entry.mjs)` never reaches `route`), but it does route
+  // that worker's module imports. Failing the vendored pdf.js module the entry imports makes the
+  // parser worker's module graph fail to load, which is the same `error` event a 404 entry fires.
   await page
     .context()
-    .route("**/pdfjs/pdf.worker.entry.mjs", (route) =>
+    .route("**/pdfjs/pdf.worker.*.mjs", (route) =>
       route.fulfill({ status: 404, contentType: "text/plain", body: "Not found" }),
     );
   await page.goto("/invoices/inv-adr12-disagreement");

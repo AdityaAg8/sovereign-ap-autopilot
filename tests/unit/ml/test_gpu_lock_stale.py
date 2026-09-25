@@ -2,17 +2,19 @@
 keeping the flock is held whatever its host or container, a free flock is stale and reclaimed
 exactly once (thread and process races, a real killed child), an empty lock left by a crash
 before the metadata write is reclaimed when its flock is free and held otherwise, legacy pid-only
-locks need the documented manual step, and without flock nothing is ever reclaimed."""
+locks need the documented manual step, and without flock nothing is ever reclaimed. The
+host locker (`_file_lockers`) is real flock on Linux and a flock-equivalent on Windows."""
 
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import logging
 import multiprocessing as mp
 import multiprocessing.queues as mp_queues
 import multiprocessing.synchronize as mp_sync
 import os
+import re
+import sys
 import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -22,7 +24,11 @@ import pytest
 
 import ml.extractor_b.gpu as gpu
 from ml.extractor_b.gpu import (
+    DEFAULT_LOCKER,
     LOCK_FORMAT,
+    FcntlLocker,
+    FileLocker,
+    FlockUnavailableError,
     GpuLockInfo,
     HolderIdentity,
     LockState,
@@ -33,7 +39,8 @@ from ml.extractor_b.gpu import (
     read_lock,
     release_lock,
 )
-from ml.extractor_b.interfaces import GpuBusyError, VramConfig
+from ml.extractor_b.interfaces import GpuBusyError, TrainingError, VramConfig
+from tests.unit.ml._file_lockers import LOCKER
 
 CFG = VramConfig()
 BOOT = "boot-a"
@@ -88,7 +95,7 @@ def hold(lock: Path) -> Iterator[None]:
     """Keep an exclusive flock on `lock` through a separate open file, like a live holder."""
     fd = os.open(lock, os.O_RDONLY)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert LOCKER.try_lock(fd)
         yield
     finally:
         os.close(fd)
@@ -99,7 +106,10 @@ def alive_only(*pids: int) -> Callable[[int], bool]:
 
 
 def take(
-    lock: Path, p: ProcProbe | None = None, alive: Callable[[int], bool] | None = None
+    lock: Path,
+    p: ProcProbe | None = None,
+    alive: Callable[[int], bool] | None = None,
+    locker: FileLocker | None = LOCKER,
 ) -> None:
     preflight_gpu(
         CFG,
@@ -108,6 +118,7 @@ def take(
         smi=idle_smi,
         alive=alive or alive_only(HOLDER_PID, os.getpid()),
         probe=p or probe(),
+        locker=locker,
     )
 
 
@@ -116,7 +127,7 @@ def assert_reclaimed(lock: Path, caplog: pytest.LogCaptureFixture) -> None:
     assert info is not None and info.pid == os.getpid() and info.job == "train"
     assert info.format == LOCK_FORMAT
     assert info.holder == HolderIdentity(boot_id=BOOT, hostname=HOST, container_id=CONTAINER)
-    assert flock_is_free(lock) is False  # the new holder keeps the flock
+    assert flock_is_free(lock, LOCKER) is False  # the new holder keeps the flock
     assert (
         "reclaiming stale GPU lock" in caplog.text and "no process holds its flock" in caplog.text
     )
@@ -130,7 +141,7 @@ def test_live_holder_in_another_container_is_held(tmp_path: Path) -> None:
         raise AssertionError("nvidia-smi must not run while the lock is held")
 
     with hold(lock), pytest.raises(GpuBusyError, match="held by job 'eval' pid 1 on run-2"):
-        preflight_gpu(CFG, lock_path=lock, job="t", smi=smi, probe=probe())
+        preflight_gpu(CFG, lock_path=lock, job="t", smi=smi, probe=probe(), locker=LOCKER)
     assert lock.read_text(encoding="utf-8") == raw
 
 
@@ -165,7 +176,7 @@ def test_free_flock_is_stale_and_reclaimed(
     with caplog.at_level(logging.WARNING, logger="ml.extractor_b.gpu"):
         take(lock)
     assert_reclaimed(lock, caplog)
-    assert release_lock(lock, probe=probe()) and not lock.exists()
+    assert release_lock(lock, probe=probe(), locker=LOCKER) and not lock.exists()
 
 
 def test_stale_lock_is_kept_when_gpu_is_busy(tmp_path: Path) -> None:
@@ -176,7 +187,7 @@ def test_stale_lock_is_kept_when_gpu_is_busy(tmp_path: Path) -> None:
         return "9000\n" if args[0].startswith("--query-gpu") else ""
 
     with pytest.raises(GpuBusyError, match="MiB in use"):
-        preflight_gpu(CFG, lock_path=lock, job="t", smi=busy, probe=probe())
+        preflight_gpu(CFG, lock_path=lock, job="t", smi=busy, probe=probe(), locker=LOCKER)
     assert lock.read_text(encoding="utf-8") == raw
 
 
@@ -201,12 +212,12 @@ def test_empty_lock_with_free_flock_is_reclaimed(
     empty file whose flock the kernel already dropped: stale, reclaimed under the guard."""
     lock = tmp_path / "gpu.lock"
     lock.touch()
-    assert lock.stat().st_size == 0 and read_lock(lock) is None and flock_is_free(lock)
+    assert lock.stat().st_size == 0 and read_lock(lock) is None and flock_is_free(lock, LOCKER)
     with caplog.at_level(logging.WARNING, logger=gpu.log.name):
         take(lock)
     info = read_lock(lock)
     assert info is not None and info.pid == os.getpid() and info.format == LOCK_FORMAT
-    assert flock_is_free(lock) is False  # we hold it now
+    assert flock_is_free(lock, LOCKER) is False  # we hold it now
     assert "no metadata" in caplog.text
 
 
@@ -218,14 +229,13 @@ def test_empty_lock_with_held_flock_is_held(tmp_path: Path) -> None:
     assert lock.read_bytes() == b""
 
 
-def test_unreadable_lock_without_flock_needs_the_manual_step(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(gpu, "_HAS_FLOCK", False)
+def test_unreadable_lock_without_flock_needs_the_manual_step(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     lock.touch()
-    with pytest.raises(GpuBusyError, match=f"unreadable; confirm no trainer runs .*rm {lock}"):
-        take(lock)
+    with pytest.raises(
+        GpuBusyError, match=f"unreadable; confirm no trainer runs .*rm {re.escape(str(lock))}"
+    ):
+        take(lock, locker=None)
     assert lock.read_bytes() == b""
 
 
@@ -235,18 +245,39 @@ def test_classify_unreadable_by_flock_state() -> None:
     assert classify_lock(None, flock_free=None, alive=alive_only())[0] is LockState.MANUAL
 
 
-def test_without_flock_a_stale_lock_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(gpu, "_HAS_FLOCK", False)
+def test_without_flock_a_stale_lock_is_refused(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     raw = write_v2(lock)
     with pytest.raises(GpuBusyError, match="flock unavailable"):
-        take(lock)
+        take(lock, locker=None)
     assert lock.read_text(encoding="utf-8") == raw
     fresh = tmp_path / "fresh.lock"
-    take(fresh)  # a free path is still taken, just never reclaimed later
-    assert release_lock(fresh, probe=probe()) and not fresh.exists()
+    take(fresh, locker=None)  # a free path is still taken, just never reclaimed later
+    assert flock_is_free(fresh, None) is None
+    assert release_lock(fresh, probe=probe(), locker=None) and not fresh.exists()
+
+
+def test_default_locker_matches_the_host(tmp_path: Path) -> None:
+    """Windows has no flock: no default locker (never reclaim), and the fcntl locker raises a
+    typed error on use. Elsewhere the default is real flock, held per open file."""
+    lock = tmp_path / "gpu.lock"
+    lock.touch()
+    first, second = os.open(lock, os.O_RDONLY), os.open(lock, os.O_RDONLY)
+    try:
+        if sys.platform == "win32":
+            assert DEFAULT_LOCKER is None
+            for use in (FcntlLocker().try_lock, FcntlLocker().lock):
+                with pytest.raises(FlockUnavailableError) as err:
+                    use(first)
+                assert isinstance(err.value, TrainingError)
+        else:
+            assert isinstance(DEFAULT_LOCKER, FcntlLocker)
+            assert DEFAULT_LOCKER.try_lock(first)
+            assert not DEFAULT_LOCKER.try_lock(second)  # another open file of this process
+    finally:
+        os.close(first)
+        os.close(second)
+    assert flock_is_free(lock, DEFAULT_LOCKER) is (None if DEFAULT_LOCKER is None else True)
 
 
 def test_unknown_flock_state_is_held() -> None:
@@ -265,15 +296,18 @@ def test_unknown_flock_state_is_held() -> None:
 def test_release_refuses_same_pid_from_another_container(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     write_v2(lock, pid=os.getpid(), container=OTHER_CONTAINER)
-    assert not release_lock(lock, probe=probe())
-    assert release_lock(lock, probe=probe(container=OTHER_CONTAINER)) and not lock.exists()
+    assert not release_lock(lock, probe=probe(), locker=LOCKER)
+    assert (
+        release_lock(lock, probe=probe(container=OTHER_CONTAINER), locker=LOCKER)
+        and not lock.exists()
+    )
 
 
 def test_release_drops_the_flock(tmp_path: Path) -> None:
     lock = tmp_path / "gpu.lock"
     take(lock)
     fd = gpu._held[str(lock)]
-    assert release_lock(lock, probe=probe()) and not lock.exists()
+    assert release_lock(lock, probe=probe(), locker=LOCKER) and not lock.exists()
     assert str(lock) not in gpu._held
     with pytest.raises(OSError):
         os.fstat(fd)  # closed, so its flock is gone
@@ -317,7 +351,7 @@ def _race_child(
     """Real probe. The winner keeps its flock until every loser has checked the lock."""
     start.wait()
     try:
-        preflight_gpu(CFG, lock_path=Path(lock), job="train", smi=idle_smi)
+        preflight_gpu(CFG, lock_path=Path(lock), job="train", smi=idle_smi, locker=LOCKER)
         out.put(("won", os.getpid()))
     except GpuBusyError:
         out.put(("busy", os.getpid()))
@@ -342,11 +376,11 @@ def test_process_race_on_stale_lock_has_one_winner(tmp_path: Path) -> None:
     assert len(winners) == 1 and sum(o == "busy" for o, _ in results) == n - 1
     info = read_lock(lock)
     assert info is not None and info.pid == winners[0] and info.format == LOCK_FORMAT
-    assert flock_is_free(lock) is True  # the winner exited, so the kernel dropped its flock
+    assert flock_is_free(lock, LOCKER) is True  # the winner exited, so the kernel dropped its flock
 
 
 def _holding_child(lock: str, ready: mp_sync.Event) -> None:
-    preflight_gpu(CFG, lock_path=Path(lock), job="child", smi=idle_smi)
+    preflight_gpu(CFG, lock_path=Path(lock), job="child", smi=idle_smi, locker=LOCKER)
     ready.set()
     threading.Event().wait()  # hold the lock until killed
 

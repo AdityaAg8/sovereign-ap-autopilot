@@ -7,15 +7,18 @@ SHELL := bash
 .DEFAULT_GOAL := help
 
 WEB_DIR := web
+# Host Python on Windows defaults stdout to cp1252, so reports that print "≥" or Arabic crash;
+# UTF-8 mode makes every `uv run python` target print the same bytes it writes to reports/.
+export PYTHONUTF8 := 1
 # Compose reads `.env` from its project directory (infra/), but the repo keeps one `.env` at the
 # root next to `.env.example`; pass it explicitly whenever it exists.
 COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
 
-.PHONY: help bootstrap env up down models smoke gpu-free lint fmt typecheck test test-gpu \
+.PHONY: help bootstrap env build up down models smoke gpu-free lint fmt typecheck test test-gpu \
         status open dashboard preview web-stop \
         seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
-        report-b export-b export-b-image test-export smoke-b \
+        report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all
@@ -27,8 +30,10 @@ N_TOTAL ?= 5000
 
 help:
 	@echo "Sovereign AP Autopilot -- see the targets below."
-	@echo "Common targets: bootstrap up down models smoke gpu-free lint fmt typecheck test"
-	@echo "                test-gpu e2e eval eval-quick retrain demo fresh-clone verify-all"
+	@echo "Common targets: bootstrap build up down models smoke gpu-free lint fmt typecheck test"
+	@echo "                test-gpu test-integration test-artifacts e2e eval eval-quick"
+	@echo "                retrain demo fresh-clone verify-mN verify-all"
+	@echo "                (verify-all stops at the first milestone whose gate is not built yet)"
 	@echo "Dev helpers:    status open dashboard preview web-stop"
 	@echo "Extractor B:    train-b-data train-b-probe train-b train-b-new train-b-pause"
 	@echo "                report-b export-b-image export-b smoke-b test-export"
@@ -58,7 +63,7 @@ bootstrap:
 	@echo "==> uv sync (Python deps + dev tools)"
 	uv sync
 	@echo "==> pnpm install (web/)"
-	cd $(WEB_DIR) && pnpm install
+	cd $(WEB_DIR) && pnpm install --ignore-workspace
 	@echo "==> installing pre-commit hooks"
 	uv run pre-commit install
 	@echo "bootstrap complete"
@@ -78,18 +83,18 @@ fmt:
 
 typecheck:
 	@echo "==> mypy --strict (apx/ factory/ evals/)"
-	uv run mypy
+	uv run python -m mypy
 	@echo "==> web typecheck"
 	cd $(WEB_DIR) && pnpm typecheck
 
 test:
-	uv run pytest
+	uv run python -m pytest
 
 factory:
 	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py, PRD §10 M2.3)"
 	uv run python -m factory.build --out-dir "$(OUT_DIR)" --seed $(SEED) --n-total $(N_TOTAL)
 
-## --- Not yet implemented (later milestones) -----------------------------------------
+## --- Stack, models and tests ------------------------------------------------------
 
 # Its own target so `.env` exists before `up`'s recipe (and its $(wildcard .env)) is expanded.
 env:
@@ -100,6 +105,12 @@ up: env
 	@echo "==> waiting for all services to report healthy"
 	cd infra && $(COMPOSE) up -d --wait --wait-timeout 600
 	cd infra && $(COMPOSE) ps
+
+# Rebuild the app images (api, worker, migrate, parse) after a pull; `up` alone reuses the
+# existing images so it works offline.
+build:
+	@echo "==> docker compose build (needs the network for base-image metadata)"
+	cd infra && $(COMPOSE) build
 
 down:
 	@echo "==> docker compose down (infra/compose.yaml)"
@@ -120,11 +131,21 @@ gpu-free:
 	@echo "==> stopping llama-swap, parse and toolbox to free the GPU"
 	cd infra && $(COMPOSE) stop llama-swap parse toolbox
 
+# Tests that need the live stack (make up; the GPU for model calls). Excluded from CI.
 test-gpu:
-	@echo "not implemented yet (M3.1)"; exit 1
+	@echo "==> tests marked gpu or integration against the running stack (make up first)"
+	uv run python -m pytest -m "gpu or integration" --no-cov -p no:cacheprovider tests
+
+test-integration:
+	@echo "==> tests marked integration against the running stack (make up first)"
+	uv run python -m pytest -m integration --no-cov -p no:cacheprovider tests/integration
+
+test-artifacts:
+	@echo "==> PINT AE schematron tests (needs: uv run python -m evals.pint_ae.fetch)"
+	uv run python -m pytest -m artifacts --no-cov -p no:cacheprovider tests
 
 ## --- ADR-0012 §7: M3.3 before/after on the same documents ---------------------------
-M33_DATA_DIR ?= data/uae_full2/test
+M33_DATA_DIR ?= data/uae/test
 M33_BEFORE ?= .claude/worktrees/int-m3b/logs/extraction_a.jsonl
 M33_AFTER ?= logs/extraction_a.adr0012.jsonl
 
@@ -200,7 +221,10 @@ report-b:
 	uv run python -m ml.extractor_b.report
 
 e2e:
-	@echo "not implemented yet (M5.4)"; exit 1
+	@echo "==> Playwright end-to-end tests of the review UI on fixtures (web/e2e); fixture build first"
+	@mkdir -p logs
+	cd $(WEB_DIR) && NEXT_PUBLIC_API_MODE=fixture pnpm build > ../logs/web-e2e-build.log 2>&1
+	cd $(WEB_DIR) && pnpm test:e2e
 
 eval:
 	@echo "==> eval: dummy predictor, full sets (reports/runs/, scoreboard, README sync)"
@@ -275,7 +299,12 @@ verify-m3:
 	@echo "not implemented yet (M3.4)"; exit 1
 
 verify-m4:
-	@echo "not implemented yet (M4.4)"; exit 1
+	@echo "==> verify-m4: lint + typecheck + unit tests + PINT AE schematron (validators, 3-way match, builder, ASP)"
+	$(MAKE) lint
+	$(MAKE) typecheck
+	$(MAKE) test
+	$(MAKE) test-artifacts
+	@echo "verify-m4 OK"
 
 verify-m5: fresh-clone
 	@echo "==> M5 gate: 20 documents end to end through the running stack (make up + make seed)"
@@ -288,7 +317,13 @@ verify-m7:
 	@echo "not implemented yet (M7.5)"; exit 1
 
 verify-m8:
-	@echo "not implemented yet (M8.3)"; exit 1
+	@echo "==> verify-m8: unit tests + fraud recall gate (>= 90% per typology at 1% FPR) + flag explanations e2e"
+	$(MAKE) test
+	uv run python -m evals.fraud
+	@mkdir -p logs
+	cd $(WEB_DIR) && NEXT_PUBLIC_API_MODE=fixture pnpm build > ../logs/web-e2e-build.log 2>&1
+	cd $(WEB_DIR) && pnpm test:e2e e2e/flags.spec.ts
+	@echo "verify-m8 OK"
 
 verify-m9:
 	@echo "not implemented yet (M9.5)"; exit 1
@@ -302,5 +337,6 @@ verify-m11:
 verify-m12:
 	@echo "not implemented yet (M12)"; exit 1
 
+# Every milestone gate in order; a milestone whose gate is not built yet fails loudly.
 verify-all:
-	@echo "not implemented yet (M12)"; exit 1
+	@for n in 0 1 2 3 4 5 6 7 8 9 10 11 12; do $(MAKE) verify-m$$n || exit 1; done

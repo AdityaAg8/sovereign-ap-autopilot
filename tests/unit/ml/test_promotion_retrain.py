@@ -397,6 +397,7 @@ def test_make_retrain_entry_point_exits_2() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 

@@ -68,7 +68,7 @@ Every number below is measured and links to the report that produced it. Nothing
 | Extraction (Extractor A, Qwen3.5-9B) | 99.60% valid JSON; 99.24% field accuracy on 750 UAE test invoices (480 with Arabic text) | valid JSON ≥ 99% | [`extraction_a.md`](reports/extraction_a.md) |
 | Extractor B training (Qwen3.5-4B LoRA) | Dev field F1 97.17, 95.5% valid JSON unconstrained, best of 4 dev evals over 510 steps; exported to a 2.8 GB Q4_K_M GGUF, 5/5 llama-server smoke; test-split gates next | reported (promotion gates in ADR-0015) | [`extractor_b.md`](reports/extractor_b.md) |
 | Grounding | 92.69% of non-null fields matched to words on the page; 86.25% of boxes at IoU ≥ 0.5 | reported | [`extraction_a.md`](reports/extraction_a.md) |
-| Parsing (born-digital) | 98.24% of 96,444 labelled fields at IoU ≥ 0.5; p50 222 ms per document | ≥ 98% | [`parse.md`](reports/parse.md) |
+| Parsing (born-digital) | 98.24% of 96,444 labelled fields at IoU ≥ 0.5; p50 187 ms per document | ≥ 98% | [`parse.md`](reports/parse.md) |
 | E-invoice output | 5,000 / 5,000 gold PINT AE invoices pass the official schematron, across all five tax cases | 100% | [`gold_xml.md`](reports/gold_xml.md) |
 | Fraud detection | Recall at 1% FPR of 92-100% on each of 8 typologies, minimum over 3 seeds | ≥ 90% per typology | [`fraud.md`](reports/fraud.md) |
 | Live end-to-end run | 11 of 12 factory invoices archived and 2 of 2 attack PDFs kept out of payment | reported | [`e2e_pipeline_offset30.md`](reports/e2e_pipeline_offset30.md) |

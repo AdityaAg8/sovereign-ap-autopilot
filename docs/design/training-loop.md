@@ -39,6 +39,10 @@ models/extractor_b/<run_id>/
   run.json                           # RunRecord (atomic)
   best.json                          # {"step": N} (atomic)
   spikes.jsonl                       # {step, sample_ids, loss, grad_norm, action}
+  dev_outputs/
+    step-000383.jsonl                # one row per dev sample per generative eval (issue #53):
+                                     # {sample_id, text, parsed_ok, finish_reason, generated_tokens}
+                                     # finish_reason eos | max_new_tokens; atomic, a rerun replaces it
   checkpoints/
     checkpoint-000125/               # verified: COMPLETE.json present and hashes match
       adapter_model.safetensors  adapter_config.json

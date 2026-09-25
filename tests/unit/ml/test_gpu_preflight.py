@@ -1,10 +1,10 @@
 """Tests for the Extractor B GPU preflight and `gpu.lock` (ADR-0011 §6) with a fake nvidia-smi:
 busy memory or a compute process refuse, a legacy pid-only lock is reported with the manual step
-and never taken over, and the lock is released after the block."""
+and never taken over, and the lock is released after the block (with the host's default locker,
+none on Windows, and with the flock-equivalent host locker)."""
 
 from __future__ import annotations
 
-import fcntl
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from ml.extractor_b.gpu import (
+    DEFAULT_LOCKER,
+    FileLocker,
     GpuLockInfo,
     gpu_lock,
     pid_alive,
@@ -22,6 +24,7 @@ from ml.extractor_b.gpu import (
     release_lock,
 )
 from ml.extractor_b.interfaces import GpuBusyError, TrainingError, VramConfig
+from tests.unit.ml._file_lockers import LOCKER
 
 CFG = VramConfig()
 
@@ -77,9 +80,9 @@ def test_unreadable_lock_with_a_held_flock_is_busy(tmp_path: Path) -> None:
     lock.write_text("garbage", encoding="utf-8")
     fd = os.open(lock, os.O_RDONLY)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # a live holder still writing metadata
-        with pytest.raises(GpuBusyError, match="unreadable"):
-            preflight_gpu(CFG, lock_path=lock, job="t", smi=fake_smi())
+        assert LOCKER.try_lock(fd)  # a live holder still writing metadata
+        with pytest.raises(GpuBusyError, match="unreadable but a process holds its flock"):
+            preflight_gpu(CFG, lock_path=lock, job="t", smi=fake_smi(), locker=LOCKER)
     finally:
         os.close(fd)
     assert lock.read_text(encoding="utf-8") == "garbage"
@@ -92,11 +95,12 @@ def test_bad_or_empty_smi_output_is_a_typed_error(tmp_path: Path) -> None:
         preflight_gpu(CFG, lock_path=tmp_path / "l", job="t", smi=fake_smi(""))
 
 
-def test_context_manager_releases_even_on_error(tmp_path: Path) -> None:
+@pytest.mark.parametrize("locker", [DEFAULT_LOCKER, LOCKER], ids=["default", "host"])
+def test_context_manager_releases_even_on_error(tmp_path: Path, locker: FileLocker | None) -> None:
     lock = tmp_path / "gpu.lock"
     with (
         pytest.raises(RuntimeError),
-        gpu_lock(CFG, lock_path=lock, job="t", smi=fake_smi()) as info,
+        gpu_lock(CFG, lock_path=lock, job="t", smi=fake_smi(), locker=locker) as info,
     ):
         assert info.job == "t" and lock.exists()
         raise RuntimeError("boom")

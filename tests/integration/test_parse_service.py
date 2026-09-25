@@ -167,7 +167,12 @@ def _run_digital_gate() -> tuple[list[FieldScore], int, list[float]]:
 
 def _docker_compose(*args: str, timeout: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["docker", "compose", *args], cwd=INFRA_DIR, capture_output=True, text=True, timeout=timeout
+        ["docker", "compose", *args],
+        cwd=INFRA_DIR,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=timeout,
     )
 
 

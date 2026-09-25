@@ -1,6 +1,6 @@
 # Parse service report (PRD §10 M3.1)
 
-Generated: 2026-09-23T09:04:00.253069+00:00
+Generated: 2026-09-25T12:07:22.072324+00:00
 
 Born-digital PDFs are parsed host-side by `apx.parse.digital` (pdfplumber): word/line boxes come straight from the PDF's own text layer, no model call (I1). This is the path the IoU gate below runs against. Scans go through the PaddleOCR-VL service (`apx.parse.client`) and are reported separately as informational only, per the PRD.
 
@@ -18,8 +18,8 @@ Born-digital PDFs are parsed host-side by `apx.parse.digital` (pdfplumber): word
 
 ## Digital-path latency (pdfplumber, host-side, no GPU)
 
-- p50: 222.42 ms
-- p95: 459.02 ms
+- p50: 187.36 ms
+- p95: 380.53 ms
 
 ## Scan path (PaddleOCR-VL service) -- informational, not gated
 

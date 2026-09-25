@@ -12,7 +12,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy --strict (apx/ factory/ evals/ attacks/)
-        entry: uv run mypy
+        entry: uv run python -m mypy
         language: system
         pass_filenames: false
         types: [python]
@@ -43,22 +43,53 @@ repos:
     hooks:
       - id: gitleaks
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+  # pre-commit-hooks v5.0.0 (pinned in the uv dev group) run through `uv run python -m`, not the
+  # upstream repo's pip-installed .exe shims, which Windows Smart App Control blocks (WinError 4551).
+  - repo: local
     hooks:
       - id: check-added-large-files
+        name: check for added large files
+        entry: uv run python -m pre_commit_hooks.check_added_large_files
+        language: system
         args: [--maxkb=1024]
+        stages: [pre-commit, pre-push, manual]
         # web/public/pdfjs/pdf.worker.min.mjs is pdfjs-dist's own pre-minified worker build,
         # vendored so the pdf.js viewer (PRD §10 M5.4) never depends on a runtime CDN fetch;
         # it can't be made smaller without breaking it. .claude/skills holds vendored agent skills
         # (the cloud-session kit), kept byte-identical to their upstream copies.
         exclude: ^(web/public/pdfjs/|\.claude/skills/)
       - id: end-of-file-fixer
+        name: fix end of files
+        entry: uv run python -m pre_commit_hooks.end_of_file_fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
         exclude: ^(web/public/pdfjs/|\.claude/skills/)
       - id: trailing-whitespace
+        name: trim trailing whitespace
+        entry: uv run python -m pre_commit_hooks.trailing_whitespace_fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
         exclude: ^(web/public/pdfjs/|\.claude/skills/)
       - id: check-merge-conflict
+        name: check for merge conflicts
+        entry: uv run python -m pre_commit_hooks.check_merge_conflict
+        language: system
+        types: [text]
       - id: check-yaml
+        name: check yaml
+        entry: uv run python -m pre_commit_hooks.check_yaml
+        language: system
         args: [--allow-multiple-documents]
+        types: [yaml]
       - id: check-toml
+        name: check toml
+        entry: uv run python -m pre_commit_hooks.check_toml
+        language: system
+        types: [toml]
       - id: check-json
+        name: check json
+        entry: uv run python -m pre_commit_hooks.check_json
+        language: system
+        types: [json]

@@ -106,8 +106,10 @@ What this means:
 - About 4.5% of dev outputs are not valid JSON under unconstrained decoding, and they are not
   truncations. Serving uses schema-constrained decoding, so the number that counts is the P3
   gate measured through llama-server on the test split. This run did not save per-row dev
-  outputs, so the invalid rows cannot be classified yet; the evaluator will write
-  `dev_outputs/step-NNNNNN.jsonl` next time and `make report-b` classifies them.
+  outputs, so its invalid rows cannot be classified. Since #53 the evaluator writes
+  `<run>/dev_outputs/step-NNNNNN.jsonl` (text, parsed_ok, finish_reason, token count) at every
+  generative eval, and `make report-b` splits the invalid rows into truncated, looping and
+  malformed.
 - These are dev numbers on 178 documents. The comparison with A (99.24% field accuracy on the
   750-document test split, [`extraction_a.md`](../reports/extraction_a.md)) happens only at the
   promotion gates, on the same test documents and the same scorer.
