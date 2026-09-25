@@ -7,9 +7,11 @@ carries the run identity (alias, served GGUF sha256, prompt version) and a resum
 written by another build or prompt.
 `--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
 llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
+`--split cal` runs the same harness over the UAE cal split for the M7.4 trust calibration; every
+row also records what the trust features need (mean/min logprob, final value, OCR support).
 
 Usage: python -m evals.extraction_a --data-dir <factory out>/test [--limit N] [--base-url URL]
-       [--extractor a|b] [--model ALIAS]
+       [--extractor a|b] [--model ALIAS] [--split test|cal]
 """
 
 from __future__ import annotations
@@ -19,19 +21,21 @@ import asyncio
 import json
 import statistics
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, TextIO
 
-from apx.common.types import BBox
+from apx.common.types import BBox, FieldValue
 from apx.extract.extractor import LlmExtractor
 from apx.extract.grounding import WordGrounder
-from apx.extract.interfaces import ExtractorId, FieldName, PromptBuilder
+from apx.extract.interfaces import ExtractorId, ExtractorOutput, FieldName, PromptBuilder
 from apx.extract.normalize import NormalizationError, normalize_field
 from apx.extract.prompt import InvoicePromptBuilder
 from apx.extract.prompt_b import ImageOnlyPromptBuilder
 from apx.llm.client import LlamaSwapClient, LlmSettings
+from apx.parse.interfaces import ParsedDocument
 from apx.parse.parser import PaddleOcrDocumentParser
+from apx.trust.features import final_value_of, ocr_support
 from evals.extraction_identity import (
     RowIdentity,
     prompt_version,
@@ -45,6 +49,13 @@ DEFAULT_ROWS_PATH = Path("logs/extraction_a.jsonl")
 VALID_JSON_GATE = 0.99
 BOX_IOU_MATCH = 0.5
 DEFAULT_MODEL: dict[ExtractorId, str] = {ExtractorId.A: "extractor-a", ExtractorId.B: "extractor-b"}
+ROW_SCHEMA = 3
+"""Row format version. 2 added, per field, `mean_logprob`, `final` (the grounded value string the
+trust features read) and `ocr_support` (ADR-0009 §4.3, §4.5), so the M7.4 cal job can rebuild
+the exact runtime features from rows. 3: `ocr_support` matches the printed words against the raw
+value (not the grounder's normalised form), so schema-2 values are stale. A resume re-runs
+documents whose row is older, and the trust job refuses them."""
+SPLITS: tuple[str, ...] = ("test", "cal")
 
 
 def prompt_builder_for(extractor: ExtractorId) -> PromptBuilder:
@@ -86,7 +97,7 @@ def _norm(name: FieldName, value: str | None) -> str | None:
         return "raw:" + value.strip()
 
 
-def _gold(labels_path: Path) -> dict[FieldName, tuple[str, int, list[float]]]:
+def gold_labels(labels_path: Path) -> dict[FieldName, tuple[str, int, list[float]]]:
     """Header-field labels as (value, page, [x, y, w, h])."""
     data = json.loads(labels_path.read_text(encoding="utf-8"))
     names = {name.value: name for name in FieldName}
@@ -97,7 +108,7 @@ def _gold(labels_path: Path) -> dict[FieldName, tuple[str, int, list[float]]]:
     }
 
 
-def _name_aliases(truth_path: Path) -> dict[FieldName, tuple[str, ...]]:
+def name_aliases(truth_path: Path) -> dict[FieldName, tuple[str, ...]]:
     """Every rendering of a party name the factory printed: bilingual layouts print both the
     English and the Arabic legal name, and either one is a correct read of the document (the
     label file records only one of them)."""
@@ -123,15 +134,17 @@ def _iou(boxes: Sequence[BBox], page: int, xywh: list[float]) -> float:
     return inter / union if union > 0 else 0.0
 
 
-async def _run_one(
-    sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
-) -> dict[str, Any]:
-    document = await parser.parse(sha, (data_dir / f"{sha}.pdf").read_bytes())
-    output = await extractor.extract(document)
-    grounded = WordGrounder().ground(document, output.fields)
-    gold = _gold(data_dir / f"{sha}.labels.json")
-    aliases = _name_aliases(data_dir / f"{sha}.truth.json")
-    fields: dict[str, Any] = {}
+def field_cells(
+    output: ExtractorOutput,
+    grounded: Mapping[FieldName, FieldValue],
+    document: ParsedDocument,
+    gold: Mapping[FieldName, tuple[str, int, list[float]]],
+    aliases: Mapping[FieldName, tuple[str, ...]],
+) -> dict[str, dict[str, Any]]:
+    """The per-field cells of a row: the harness's own scoring (pred, correct, grounding, box
+    IoU) and, from row schema 2, what the trust features need (logprobs, final value, OCR
+    support) so `evals.trust_rows` can rebuild the runtime features exactly."""
+    fields: dict[str, dict[str, Any]] = {}
     for field in output.fields:
         name = field.name
         gold_value, gold_page, gold_box = gold.get(name, (None, 0, [0.0, 0.0, 0.0, 0.0]))
@@ -146,9 +159,29 @@ async def _run_one(
             "grounded": bool(value.word_ids),
             "iou": _iou(value.boxes, gold_page, gold_box) if same_rendering else None,
             "min_logprob": output.logprobs[name].min if name in output.logprobs else None,
+            "mean_logprob": output.logprobs[name].mean if name in output.logprobs else None,
+            "final": final_value_of(value),
+            "ocr_support": ocr_support(name, value, document),
         }
+    return fields
+
+
+async def _run_one(
+    sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
+) -> dict[str, Any]:
+    document = await parser.parse(sha, (data_dir / f"{sha}.pdf").read_bytes())
+    output = await extractor.extract(document)
+    grounded = WordGrounder().ground(document, output.fields)
+    fields = field_cells(
+        output,
+        grounded,
+        document,
+        gold_labels(data_dir / f"{sha}.labels.json"),
+        name_aliases(data_dir / f"{sha}.truth.json"),
+    )
     return {
         "sha": sha,
+        "row_schema": ROW_SCHEMA,
         "valid_json": output.valid_json,
         "latency_ms": extractor.last_latency_ms,
         "pages": len(document.pages),
@@ -228,6 +261,11 @@ def render_report(
     return "\n".join(lines)
 
 
+def is_current_row(row: Mapping[str, Any] | None) -> bool:
+    """A row exists and has every field the current `ROW_SCHEMA` writes."""
+    return row is not None and int(row.get("row_schema", 1)) >= ROW_SCHEMA
+
+
 def load_rows(path: Path) -> dict[str, dict[str, Any]]:
     """Rows of a (possibly partial) eval run keyed by document sha256; the last row wins."""
     if not path.exists():
@@ -238,10 +276,11 @@ def load_rows(path: Path) -> dict[str, dict[str, Any]]:
 
 async def run(args: argparse.Namespace) -> int:
     data_dir: Path = args.data_dir
-    test_ids = sorted(load_splits().sets["uae"]["test"])
-    available = [sha for sha in test_ids if (data_dir / f"{sha}.pdf").exists()]
+    split: str = args.split
+    split_ids = sorted(load_splits().sets["uae"][split])
+    available = [sha for sha in split_ids if (data_dir / f"{sha}.pdf").exists()]
     if not available:
-        print(f"no UAE test documents found in {data_dir}", file=sys.stderr)
+        print(f"no UAE {split} documents found in {data_dir}", file=sys.stderr)
         return 2
     if args.limit:
         available = available[: args.limit]
@@ -261,7 +300,7 @@ async def run(args: argparse.Namespace) -> int:
     # Offline tooling names its one alias explicitly (apx.llm.client LlmSettings.allowed_models).
     client = LlamaSwapClient(LlmSettings(base_url=args.base_url, allowed_models=frozenset({model})))
     parser = PaddleOcrDocumentParser()
-    pending = [sha for sha in available if sha not in rows]
+    pending = [sha for sha in available if not is_current_row(rows.get(sha))]
     queue: asyncio.Queue[str] = asyncio.Queue()
     for sha in pending:
         queue.put_nowait(sha)
@@ -311,6 +350,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--concurrency", type=int, default=2, help="llama-server --parallel")
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--extractor", choices=("a", "b"), default="a")
+    parser.add_argument("--split", choices=SPLITS, default="test", help="UAE split to run")
     parser.add_argument("--model", default="", help="llama-swap alias (default per extractor)")
     parser.add_argument("--rows", type=Path, default=DEFAULT_ROWS_PATH)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)

@@ -82,7 +82,8 @@ def learn_then_test(
 
     `calibrator_version` is left as "" and `n_fit_fields` as 0 on the returned `ThresholdResult`:
     this function only sees the LTT partition, not the fitted `Calibrator` or the FIT count. The
-    caller (the M7.13 cal job, or a `TrustGate`) fills them in with `.model_copy(update=...)`.
+    caller (the M7.4/M7.5 cal job in `evals.trust_gate`, or a `TrustGate`) fills them in with
+    `.model_copy(update=...)`.
     """
     if len(p_correct) != len(correct):
         raise TrustGateError("p_correct and correct must have the same length")

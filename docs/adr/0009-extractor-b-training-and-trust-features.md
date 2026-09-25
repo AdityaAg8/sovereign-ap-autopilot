@@ -329,6 +329,42 @@ guarded by validation (VAT math, subtotal = Σ lines, 3-way match), which is a d
    |acc_b − conf_b|. Reported on LTT and on UAE test in `reports/trust.md` as a markdown table
    plus a Mermaid `xychart-beta` (reports stay md/json).
 
+#### 5.A Amendment (2026-09-25): the cal job, the persisted artifact and the runtime gate
+
+Implementation decisions of M7.4/M7.5; none changes a feature, the fit, the grid or a gate.
+
+- **Rows, not cached results.** The cal job reuses the extraction harness (`evals.extraction_a
+  --split cal`). Rows record, per field, the mean and min logprob, the final value the features
+  read and its OCR support, so `evals.trust_rows` rebuilds the features through the same
+  `apx.trust.features.field_features` the worker calls; a unit test proves row features equal
+  `ExtractionFeatureBuilder` features. The job requires row schema 3 (see the OCR fix below);
+  rows of schemas 1 and 2 are refused, never imputed.
+- **No arbiter is served yet** (M7.3), so, as at runtime, every disputed field is INVALID and
+  hard-rejected by H2 on cal, test and at runtime alike.
+- **Label.** `is_correct` of the extracted (raw) final value against the gold or, for party
+  names, any printed rendering. The grounder's normalised form is not used for the label.
+- **Artifact.** `data/trust/calibrators/<version>.json` holds the fitted parameters as numbers
+  (no pickles), λ̂ per α, and the A/B/arbiter identities (served GGUF sha256 + prompt version;
+  the arbiter is an explicit null while none is served). `active_calibrator.json` pins its
+  sha256. The job always saves the artifact, but activates it, and clears the ADR-0015
+  invalidation marker, only after the M7.5 test gate passed (test rows complete and from the
+  fitted builds, error among auto-accepted fields <= alpha at alpha = 1%) and only when the
+  served champion aliases serve those same A/B/arbiter builds; otherwise it says why and the
+  previous active calibrator (or the stale marker) stays.
+- **Runtime.** The gate re-checks the marker, the pinned sha256 and the served identities
+  (A, B and arbiter: an arbiter appearing or disappearing is a mismatch) on every decision; any
+  failure, including an unreadable lock or manifest, is a typed refusal (every field to REVIEW,
+  reason audited), never an activity error that would retry. The
+  interim `AgreementScore` gate survives only as that refusal path. The report is
+  `reports/trust_gate.md` (+ `.json` evidence for `make verify-m7`).
+- **OCR support match (§4.5 fix).** m compares the printed words with the extracted raw value,
+  both through `normalize_for_compare(kind)`; the grounder's normalised form (`INV-001` →
+  `inv 001`) is not comparable under the IDENTIFIER rule and made m = 0. Row schema 3 marks rows
+  computed with the fix; older rows are refused.
+- **Container.** The worker mounts `infra/` and `models/extractor_b/` read-only and points
+  `WORKER_LLAMA_SWAP_CONFIG`, `WORKER_MODELS_LOCK` and `WORKER_MODELS_ROOT` at them, so it can
+  resolve the served identities (`tests/unit/test_worker_trust_mounts.py`).
+
 ### 6. Learn-then-Test (M7.5)
 
 The grid is `default_grid()`: λ₁ = 1.0, then λⱼ = 1 − 10^(−4 + 0.05(j−2)) for j = 2…76 (0.9999

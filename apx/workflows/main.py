@@ -59,7 +59,10 @@ from apx.policy.engine import DefaultPolicyEngine
 from apx.policy.interfaces import PolicyThresholds
 from apx.policy.proposals import DefaultProposalSink, PgProposalStore
 from apx.scan.detector import PdfHiddenContentDetector
+from apx.trust.artifact import CalibratorStore
 from apx.trust.features import ExtractionFeatureBuilder
+from apx.trust.gate import ArtifactTrustGate, FileServedIdentities
+from apx.trust.interfaces import TrustGate
 from apx.trust.ltt import CalibratedTrustGate
 from apx.validate.ids import is_valid_trn
 from apx.validate.interfaces import InvoiceValidator
@@ -137,6 +140,14 @@ class WorkerSettings(BaseSettings):
     parsed_dir: Path = Path("data/parsed")
     """`WORKER_PARSED_DIR`: content-addressed parse store (page PNGs); every worker must reach
     it, so in Compose it sits under the shared `data/` bind mount."""
+    trust_dir: Path = Path("data/trust")
+    """`WORKER_TRUST_DIR`: the calibrator artifacts `make calibrate` writes (M7.5) and the
+    ADR-0015 invalidation marker."""
+    llama_swap_config: Path = Path("infra/llama-swap.yaml")
+    models_lock: Path = Path("infra/models.lock.json")
+    models_root: Path = Path("models")
+    """Where the trust gate reads which GGUF each extractor alias serves. If they are not
+    reachable the served identity is unknown and the gate refuses (every invoice → REVIEW)."""
 
     @field_validator("buyer_trn")
     @classmethod
@@ -247,8 +258,7 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
         ),
         invoices=GroundedInvoiceBuilder(vendors),
         feature_builder=ExtractionFeatureBuilder(),
-        # No calibrator is fitted yet (M7.4): λ̂ = None means nothing is auto-accepted.
-        trust_gate=CalibratedTrustGate(AgreementScore(), None),
+        trust_gate=trust_gate(settings, prompts),
         validator=InvoiceValidator(buyer_trn=settings.buyer_trn),
         fraud_engine=RuleFraudEngine(
             (
@@ -288,6 +298,25 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
         records=SqlInvoiceRecords(get_session),
         session_factory=get_session,
         exception_agent=agent,
+    )
+
+
+def trust_gate(settings: WorkerSettings, prompts: dict[ExtractorId, PromptBuilder]) -> TrustGate:
+    """The calibrated gate (M7.5) over the active artifact in `trust_dir`. Its only fallback is
+    the interim no-calibrator gate (λ̂ = None, AgreementScore just orders fields for review),
+    used when the artifact is missing, invalidated or fitted on other A/B builds."""
+    return ArtifactTrustGate(
+        CalibratorStore(settings.trust_dir),
+        FileServedIdentities(
+            settings.extractor_a_model,
+            settings.extractor_b_model,
+            prompts[ExtractorId.A],
+            prompts[ExtractorId.B],
+            llama_swap_config=settings.llama_swap_config,
+            models_lock=settings.models_lock,
+            models_root=settings.models_root,
+        ),
+        fallback=CalibratedTrustGate(AgreementScore(), None),
     )
 
 

@@ -38,6 +38,7 @@ GPU rows need `make up` (llama-swap serving) unless they say otherwise, and run 
 | [`extraction_a.md`](../reports/extraction_a.md) | Extractor A on the 750 UAE test invoices: valid JSON, field accuracy, grounding, latency | `uv run python -m evals.extraction_a --data-dir data/uae/test` | yes |
 | `extraction_a_schema_delta.md` | A before/after the ADR-0012 prompt on the same documents | `make extraction-a-adr0012`, then `make extraction-a-compare` | yes, then CPU |
 | [`extractor_b.md`](../reports/extractor_b.md) | Extractor B training run: dev F1 curve, selected checkpoint, data guards, resumes | `make report-b` | no |
+| `trust_gate.md` + `.json` | M7.4/M7.5 trust gate: calibrator fitted on UAE cal (reliability, ECE), λ̂ per alpha ∈ {0.5, 1, 2}% at δ = 5%, STP and error curves, UAE test error among auto-accepted fields (gate ≤ 1% at alpha = 1%); the artifact goes to `data/trust/` | `make cal-rows-a`, `make cal-rows-b` (GPU, resumable), then `make calibrate` (CPU); `make verify-m7` checks it | rows yes, then CPU |
 | [`parse.md`](../reports/parse.md) | Word-box IoU of the born-digital parser against factory labels (gate ≥ 98%) | `uv run pytest -m integration tests/integration/test_parse_service.py` | scan path only |
 | [`gold_xml.md`](../reports/gold_xml.md) | 5,000 gold PINT AE invoices through the official schematron | `uv run python -m factory.gold_xml` | no |
 | [`factory_selfcheck.md`](../reports/factory_selfcheck.md) | Factory label text vs the PDF text at each box (gate ≥ 99.5%) | `uv run python -m factory.selfcheck` | no |

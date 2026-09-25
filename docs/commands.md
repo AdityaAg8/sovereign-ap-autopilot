@@ -54,7 +54,9 @@ Details and the report each one writes: [Evaluation guide](evaluation.md).
 | `make e2e-pipeline` | 20 documents through the live stack (GPU); writes `reports/e2e_pipeline.md` |
 | `make eval-chat` / `make eval-chat-dry` | Chat and AgentDojo evals on the local model (GPU) / on a scripted fake |
 | `make extraction-a-adr0012` / `make extraction-a-compare` | Extractor A with the ADR-0012 prompt (GPU, resumable) / paired before-after report |
-| `make verify-mN` / `make verify-all` | Milestone gates (built: m0, m1, m2, m4, m5, m8; the others fail loudly until their milestone lands) / all of them in order |
+| `make cal-rows-a` / `make cal-rows-b` | GPU, needs `make up`, resumable: A / B (`CAL_B_MODEL`, default `extractor-b`) over the 750 UAE cal documents → `logs/cal_a.jsonl`, `logs/cal_b.jsonl` |
+| `make calibrate` | CPU: fit the trust calibrator on cal, LTT λ̂ at alpha 0.5/1/2%, artifact to `data/trust/` (activated only for the served champions), UAE test gate → `reports/trust_gate.md` |
+| `make verify-mN` / `make verify-all` | Milestone gates (built: m0, m1, m2, m4, m5, m7, m8; the others fail loudly until their milestone lands) / all of them in order |
 
 ## Extractor B training
 

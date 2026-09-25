@@ -16,10 +16,10 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
 
 .PHONY: help bootstrap env build up down models smoke gpu-free lint fmt typecheck test test-gpu \
         status open dashboard preview web-stop \
-        seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \
-        train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
+        seed e2e-pipeline factory restore-scans e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \n        train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
-        extraction-a-adr0012 extraction-a-compare guard-data train-guard guard-report \
+        extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
+        guard-data train-guard guard-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all
 
@@ -38,6 +38,7 @@ help:
 	@echo "Extractor B:    train-b-data train-b-probe train-b train-b-new train-b-pause"
 	@echo "                report-b export-b-image export-b smoke-b test-export"
 	@echo "                register-b eval-b gates-b promote-b (M7.1 promotion, docs/training.md)"
+	@echo "Trust gate:     cal-rows-a cal-rows-b (GPU) calibrate (CPU) verify-m7 (M7.4/M7.5)"
 	@echo "All targets, grouped: docs/commands.md"
 
 ## --- Implemented -------------------------------------------------------------------
@@ -94,6 +95,12 @@ test:
 factory:
 	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py, PRD §10 M2.3)"
 	uv run python -m factory.build --out-dir "$(OUT_DIR)" --seed $(SEED) --n-total $(N_TOTAL)
+
+# Adds the planned 30% Augraphy scan variants to an existing corpus without changing its PDFs,
+# labels, splits or sha256s (ADR-0012 amendment 3). Idempotent: re-running skips finished docs.
+restore-scans:
+	@echo "==> restoring scan variants under $(OUT_DIR) (factory/restore_scans.py, PRD §10 M2.3)"
+	uv run python -m factory.restore_scans --data-dir "$(OUT_DIR)" --seed $(SEED)
 
 ## --- Stack, models and tests ------------------------------------------------------
 
@@ -240,6 +247,28 @@ report-b:
 	@echo "==> Extractor B training report -> reports/extractor_b.md (CPU; MLflow via the gateway if up)"
 	uv run python -m ml.extractor_b.report
 
+# M7.4/M7.5 trust calibration (ADR-0009 §5-§6). The cal rows are GPU runs of the extraction
+# harness over the 750 UAE cal documents (resumable, identity-checked rows under logs/, never
+# committed); `calibrate` is CPU only. CAL_B_MODEL may name the challenger alias instead.
+CAL_A_ROWS ?= logs/cal_a.jsonl
+CAL_B_ROWS ?= logs/cal_b.jsonl
+CAL_B_MODEL ?= extractor-b
+
+cal-rows-a:
+	@echo "==> Extractor A on UAE cal (750 docs; GPU; needs make up; resumable rows: $(CAL_A_ROWS))"
+	uv run python -m evals.extraction_a --split cal --data-dir data/uae/cal --extractor a \
+		--rows $(CAL_A_ROWS) --report logs/cal_rows_a.md
+
+cal-rows-b:
+	@echo "==> Extractor B ($(CAL_B_MODEL)) on UAE cal (750 docs; GPU; needs make up; rows: $(CAL_B_ROWS))"
+	uv run python -m evals.extraction_a --split cal --data-dir data/uae/cal --extractor b \
+		--model $(CAL_B_MODEL) --rows $(CAL_B_ROWS) --report logs/cal_rows_b.md
+
+calibrate:
+	@echo "==> trust calibrator on cal, LTT at alpha 0.5/1/2%, UAE test gate -> reports/trust_gate.md (CPU)"
+	uv run python -m evals.trust_gate calibrate --cal-a-rows $(CAL_A_ROWS) --cal-b-rows $(CAL_B_ROWS) \
+		$(if $(A_ROWS),--test-a-rows $(A_ROWS)) $(if $(B_ROWS),--test-b-rows $(B_ROWS))
+
 e2e:
 	@echo "==> Playwright end-to-end tests of the review UI on fixtures (web/e2e); fixture build first"
 	@mkdir -p logs
@@ -361,7 +390,11 @@ verify-m6:
 	@echo "not implemented yet (M6.6)"; exit 1
 
 verify-m7:
-	@echo "not implemented yet (M7.5)"; exit 1
+	@echo "==> verify-m7: trust unit tests + LTT coverage simulation (M7.5) + real-data gate (reports/trust_gate.json)"
+	uv run python -m pytest -q --no-cov tests/test_ltt_simulation.py tests/unit/test_trust_features.py \
+		tests/unit/test_trust_calibration.py tests/unit/test_trust_ltt.py tests/unit/test_trust_artifact.py \
+		tests/unit/test_trust_gate_runtime.py tests/unit/test_trust_rows.py tests/unit/test_trust_gate_job.py
+	uv run python -m evals.trust_gate verify
 
 verify-m8:
 	@echo "==> verify-m8: unit tests + fraud recall gate (>= 90% per typology at 1% FPR) + flag explanations e2e"

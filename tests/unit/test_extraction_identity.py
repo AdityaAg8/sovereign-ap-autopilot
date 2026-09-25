@@ -65,6 +65,44 @@ def test_local_gguf_sha_comes_from_the_export_manifest(tmp_path: Path) -> None:
         served_gguf_sha256("extractor-b-challenger", **kwargs)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        "{not json",
+        "[1, 2]",
+        json.dumps({"artifacts": [{"name": "__NAME__"}]}),
+        json.dumps({"artifacts": [{"name": "__NAME__", "sha256": "NOT-A-SHA"}]}),
+    ],
+    ids=["corrupt", "not-object", "no-sha", "malformed-sha"],
+)
+def test_broken_export_manifest_is_a_served_model_error(tmp_path: Path, manifest: str) -> None:
+    """The runtime trust gate treats ServedModelError as a refusal; any other exception type
+    would fail the activity and Temporal would retry it forever (M7.5 review F4)."""
+    model, _ = served_paths(SWAP, "extractor-b-challenger")
+    export = tmp_path / model.removeprefix("/models/")
+    export.parent.mkdir(parents=True)
+    (export.parent / "export.json").write_text(
+        manifest.replace("__NAME__", export.name), encoding="utf-8"
+    )
+    kwargs = {"llama_swap_config": SWAP, "models_lock": LOCK, "models_root": tmp_path}
+    with pytest.raises(ServedModelError):
+        served_gguf_sha256("extractor-b-challenger", **kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "lock",
+    ["{broken", "[]", json.dumps({"models": [None]})],
+    ids=["corrupt", "not-object", "bad-entry"],
+)
+def test_broken_models_lock_is_a_served_model_error(tmp_path: Path, lock: str) -> None:
+    lock_path = tmp_path / "models.lock.json"
+    lock_path.write_text(lock, encoding="utf-8")
+    with pytest.raises(ServedModelError):
+        served_gguf_sha256(
+            "extractor-a", llama_swap_config=SWAP, models_lock=lock_path, models_root=tmp_path
+        )
+
+
 def test_prompt_version_tracks_the_prompt_contract() -> None:
     a, b = prompt_builder_for(ExtractorId.A), prompt_builder_for(ExtractorId.B)
     assert prompt_version(a) == prompt_version(prompt_builder_for(ExtractorId.A))
@@ -96,6 +134,7 @@ async def test_harness_refuses_to_resume_rows_of_another_run(tmp_path: Path) -> 
         limit=0,
         rows=rows,
         extractor="a",
+        split="test",
         model="",
         base_url="http://llm.test",
         concurrency=1,

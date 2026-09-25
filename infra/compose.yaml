@@ -326,8 +326,21 @@ services:
     image: sovereign-ap-autopilot/apx:local
     restart: unless-stopped
     command: ["python", "-m", "apx.workflows.main"]
-    environment: *apx-env
-    volumes: *apx-volumes
+    environment:
+      <<: *apx-env
+      # The trust gate (M7.5) checks that the calibrator was fitted on the A/B builds llama-swap
+      # serves: it reads the served --model paths, the pinned sha256s and the Extractor B export
+      # manifests from these read-only mounts (apx.extract.identity.served_gguf_sha256).
+      WORKER_LLAMA_SWAP_CONFIG: /repo/infra/llama-swap.yaml
+      WORKER_MODELS_LOCK: /repo/infra/models.lock.json
+      WORKER_MODELS_ROOT: /repo/models
+    volumes:
+      - ../data:/app/data
+      # Directory mount, not single files: promote-b rewrites llama-swap.yaml atomically, and a
+      # single-file bind mount would keep showing the old inode.
+      - ../infra:/repo/infra:ro
+      # Only B's export manifests (export.json); Hub GGUF sha256s come from models.lock.
+      - ../models/extractor_b:/repo/models/extractor_b:ro
     networks: [app]
     deploy:
       resources:
