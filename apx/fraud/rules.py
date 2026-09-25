@@ -20,6 +20,7 @@ from PIL import Image, UnidentifiedImageError
 
 from apx.common.errors import FraudError
 from apx.common.invoice import Invoice
+from apx.common.purchasing import attribute_po_line
 from apx.common.types import InvoiceId, Money
 from apx.fraud.interfaces import (
     FraudFlag,
@@ -34,6 +35,7 @@ from apx.fraud.normalize import normalize_iban, normalize_invoice_number
 RULE_ID_DUPLICATE_INVOICE = "duplicate_invoice"
 RULE_ID_NEAR_DUPLICATE_PAGE = "near_duplicate_page"
 RULE_ID_NEAR_DUPLICATE_EMBEDDING = "near_duplicate_embedding"
+RULE_ID_PO_LINE_UNMATCHED = "po_line_unmatched"
 
 
 def same_kind(a: Invoice, b: Invoice) -> bool:
@@ -407,12 +409,17 @@ class SharedIbanRule:
 
 @dataclass(frozen=True, slots=True)
 class PriceVarianceRule:
-    """Flags invoice lines whose unit price differs from the matching PO line by more than a
-    tolerance (PRD §3: "price variance against the PO")."""
+    """Flags invoice lines whose unit price differs from the PO line they bill by more than a
+    tolerance (PRD §3: "price variance against the PO"). Lines are attributed to PO lines only by
+    `attribute_po_line` (stated reference, else unique description + quantity), never by
+    position. Lines that cannot be attributed get one low-severity `po_line_unmatched` flag
+    scored below the review threshold: the reviewer sees them, but they are not a variance."""
 
     tolerance_pct: Decimal = Decimal("0.10")
     rule_id: str = "price_variance_po"
     typology: FraudTypology = FraudTypology.PRICE_ANOMALY
+    unmatched_score: float = 0.25
+    """Score of the `po_line_unmatched` flag: informational, below the 0.5 review line."""
 
     def evaluate(self, invoice: Invoice, history: InvoiceHistory) -> list[FraudFlag]:
         if invoice.po_number is None:
@@ -420,13 +427,12 @@ class PriceVarianceRule:
         po = history.purchase_order(invoice.po_number)
         if po is None:
             return []
-        po_lines_by_ref = {line.line_ref: line for line in po.lines}
         flags: list[FraudFlag] = []
-        for line in invoice.lines:
-            if line.po_line_ref is None:
-                continue
-            po_line = po_lines_by_ref.get(line.po_line_ref)
+        unmatched: list[int] = []
+        for index, line in enumerate(invoice.lines):
+            po_line = attribute_po_line(line, po)
             if po_line is None:
+                unmatched.append(index)
                 continue
             if po_line.unit_price.currency != line.unit_price.currency:
                 continue
@@ -448,7 +454,7 @@ class PriceVarianceRule:
                     score=round(_clamp_score(float(variance / (2 * self.tolerance_pct))), 4),
                     evidence=(
                         f"Line {line.description!r} bills {line.unit_price.amount} "
-                        f"{line.unit_price.currency} vs PO {po.number} line {line.po_line_ref} "
+                        f"{line.unit_price.currency} vs PO {po.number} line {po_line.line_ref} "
                         f"price {po_price} ({variance:.1%} variance, tolerance "
                         f"{self.tolerance_pct:.0%})."
                     ),
@@ -460,4 +466,26 @@ class PriceVarianceRule:
                     related_invoices=(),
                 )
             )
+        if unmatched:
+            flags.append(self._unmatched_flag(invoice, po.number, unmatched))
         return flags
+
+    def _unmatched_flag(self, invoice: Invoice, po_number: str, indexes: list[int]) -> FraudFlag:
+        """One informational flag naming every line no PO line could be attributed to."""
+        described = ", ".join(f"{i} ({invoice.lines[i].description!r})" for i in indexes)
+        return FraudFlag(
+            rule_id=RULE_ID_PO_LINE_UNMATCHED,
+            typology=self.typology,
+            severity=FraudSeverity.LOW,
+            score=self.unmatched_score,
+            evidence=(
+                f"{len(indexes)} of {len(invoice.lines)} line(s) match no line on PO "
+                f"{po_number} by stated line reference or by description and quantity: "
+                f"{described}. Their prices were not compared."
+            ),
+            explanation=(
+                "Some lines on this invoice could not be tied to a specific purchase order "
+                "line, so their prices could not be checked against the agreed price."
+            ),
+            related_invoices=(),
+        )

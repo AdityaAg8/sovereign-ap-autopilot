@@ -24,6 +24,7 @@ from apx.fraud.interfaces import FraudSeverity, FraudTypology, SimilarPage
 from apx.fraud.rules import (
     RULE_ID_NEAR_DUPLICATE_EMBEDDING,
     RULE_ID_NEAR_DUPLICATE_PAGE,
+    RULE_ID_PO_LINE_UNMATCHED,
     BankDetailChangeRule,
     DuplicateInvoiceRule,
     NewVendorHighAmountRule,
@@ -728,9 +729,9 @@ def test_price_variance_ignores_when_po_number_is_none() -> None:
     assert rule.evaluate(invoice, FakeHistory()) == []
 
 
-def test_price_variance_ignores_a_line_without_a_po_line_ref() -> None:
-    """Guard branch: an invoice line never matched to a PO line (po_line_ref is None) cannot
-    be checked for price variance."""
+def test_price_variance_attributes_a_line_without_a_ref_by_description_and_quantity() -> None:
+    """No stated PO line ref: the line is attributed by unique description + quantity, so a real
+    price change on it is still a variance."""
     rule = PriceVarianceRule()
     po = PurchaseOrder(
         number="PO-NOREF",
@@ -756,12 +757,16 @@ def test_price_variance_ignores_a_line_without_a_po_line_ref() -> None:
     invoice = _invoice(seed="pv-noref", number="PV-NOREF", po_number="PO-NOREF", lines=(line,))
     history = FakeHistory(purchase_orders={"PO-NOREF": po})
 
-    assert rule.evaluate(invoice, history) == []
+    flags = rule.evaluate(invoice, history)
+
+    assert [(f.rule_id, f.score) for f in flags] == [("price_variance_po", 1.0)]
+    assert "PO PO-NOREF line L1" in flags[0].evidence
 
 
-def test_price_variance_ignores_a_line_whose_po_line_ref_is_not_found() -> None:
-    """Guard branch: the invoice cites a PO line ref that does not exist on the PO (already
-    reported separately by validate's 3-way match; fraud just skips it)."""
+def test_price_variance_reports_a_line_whose_po_line_ref_is_not_found_as_unmatched() -> None:
+    """The invoice cites a PO line ref that does not exist on the PO: a stated ref is never
+    overridden by a description match, so the line is unmatched (low, below review), not a
+    variance."""
     rule = PriceVarianceRule()
     po = PurchaseOrder(
         number="PO-MISSREF",
@@ -789,7 +794,12 @@ def test_price_variance_ignores_a_line_whose_po_line_ref_is_not_found() -> None:
     )
     history = FakeHistory(purchase_orders={"PO-MISSREF": po})
 
-    assert rule.evaluate(invoice, history) == []
+    flags = rule.evaluate(invoice, history)
+
+    assert [(f.rule_id, f.severity) for f in flags] == [
+        (RULE_ID_PO_LINE_UNMATCHED, FraudSeverity.LOW)
+    ]
+    assert flags[0].score < 0.5
 
 
 def test_price_variance_ignores_a_line_currency_mismatch() -> None:
