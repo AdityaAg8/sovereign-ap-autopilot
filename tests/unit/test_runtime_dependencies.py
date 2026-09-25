@@ -1,6 +1,8 @@
 """Every third-party module the runtime package (`apx/`) imports is installed by the app image:
 the image runs `uv sync --no-dev`, so a package that is only in a dev dependency group is missing
-there and the worker crash-loops on import (as it did for PyYAML in apx/extract/identity.py)."""
+there and the worker crash-loops on import (as it did for PyYAML in apx/extract/identity.py).
+The one sanctioned exception: packages the app Dockerfile pins itself outside uv.lock (CPU torch
+and transformers for the scan guard, ADR-0017), which the Windows host venv never installs."""
 
 from __future__ import annotations
 
@@ -12,6 +14,13 @@ from importlib.metadata import PackageNotFoundError, packages_distributions, req
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+APP_DOCKERFILE = ROOT / "infra" / "docker" / "apx" / "Dockerfile"
+
+
+def _image_pins() -> set[str]:
+    """Distributions the app Dockerfile installs with an exact `name==version` pin."""
+    text = APP_DOCKERFILE.read_text(encoding="utf-8")
+    return {_norm(m) for m in re.findall(r'"([A-Za-z0-9][A-Za-z0-9._-]*)==[^"]+"', text)}
 
 
 def _norm(name: str) -> str:
@@ -61,12 +70,14 @@ def _imported_top_levels() -> dict[str, Path]:
 
 def test_every_apx_third_party_import_is_a_runtime_dependency() -> None:
     dists = packages_distributions()
-    closure = _runtime_closure()
+    closure = _runtime_closure() | _image_pins()
     missing = []
     for module, path in _imported_top_levels().items():
         if module in sys.stdlib_module_names or module in {"apx", "__future__"}:
             continue
         owners = {_norm(d) for d in dists.get(module, [])}
+        if not owners and _norm(module) in closure:
+            continue  # pinned by the app Dockerfile only, absent from the host venv
         if not owners:
             missing.append(f"{module} ({path.relative_to(ROOT)}): not installed")
         elif not owners & closure:
