@@ -7,6 +7,7 @@ raises (or returns the last 5xx) instead of being swallowed. Also: an expired to
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 from pathlib import Path
@@ -14,6 +15,8 @@ from types import ModuleType
 
 import httpx
 import pytest
+from PIL import Image
+from reportlab.pdfgen import canvas
 
 _PATH = Path(__file__).resolve().parents[2] / "scripts" / "e2e_pipeline.py"
 _spec = importlib.util.spec_from_file_location("e2e_pipeline_script", _PATH)
@@ -60,6 +63,18 @@ def test_a_persistent_timeout_still_fails_the_run() -> None:
     assert len(sleeps) == e2e.RETRIES and max(sleeps) == 30.0
 
 
+def _scan_files(test: Path, sha: str, *, shade: int) -> None:
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(595, 842))
+    c.drawString(40, 780, "Invoice Number INV-1")
+    c.showPage()
+    c.save()
+    (test / f"{sha}.pdf").write_bytes(buf.getvalue())
+    png = io.BytesIO()
+    Image.new("RGB", (40, 56), (shade, shade, shade)).save(png, format="PNG")
+    (test / f"{sha}.page0.scan.png").write_bytes(png.getvalue())
+
+
 def _data(tmp: Path) -> Path:
     """Two invoices per needed one of every PICK shape, plus four attack PDFs."""
     test = tmp / "uae" / "test"
@@ -77,6 +92,8 @@ def _data(tmp: Path) -> Path:
                 "attack_hooks": [],
             }
             (test / f"doc{n:04d}.truth.json").write_text(json.dumps(truth), encoding="utf-8")
+            if scan:  # scanned picks are dropped as their scan: a one-page PDF and its scan PNG
+                _scan_files(test, truth["sha256"], shade=n)
     (tmp / "attacks").mkdir()
     for i in range(4):
         (tmp / "attacks" / f"attack{i}.pdf").write_bytes(f"attack {i}".encode())

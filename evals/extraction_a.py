@@ -9,6 +9,9 @@ written by another build or prompt.
 llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
 `--split cal` runs the same harness over the UAE cal split for the M7.4 trust calibration; every
 row also records what the trust features need (mean/min logprob, final value, OCR support).
+A `has_scan` document is fed as its runtime scan form (evals.scan_input: the scan PNGs as an
+image-only PDF, parsed by the OCR service like any scanned upload); every row records its
+`input_kind` and the report splits every metric by input kind and Arabic-first layout.
 
 Usage: python -m evals.extraction_a --data-dir <factory out>/test [--limit N] [--base-url URL]
        [--extractor a|b] [--model ALIAS] [--split test|cal]
@@ -18,10 +21,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import statistics
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -42,6 +47,7 @@ from evals.extraction_identity import (
     require_identity,
     served_gguf_sha256,
 )
+from evals.scan_input import INPUT_KINDS, document_input, load_truth
 from evals.splits import load_splits
 
 REPORT_PATH = Path("reports/extraction_a.md")
@@ -49,12 +55,14 @@ DEFAULT_ROWS_PATH = Path("logs/extraction_a.jsonl")
 VALID_JSON_GATE = 0.99
 BOX_IOU_MATCH = 0.5
 DEFAULT_MODEL: dict[ExtractorId, str] = {ExtractorId.A: "extractor-a", ExtractorId.B: "extractor-b"}
-ROW_SCHEMA = 3
+ROW_SCHEMA = 4
 """Row format version. 2 added, per field, `mean_logprob`, `final` (the grounded value string the
 trust features read) and `ocr_support` (ADR-0009 §4.3, §4.5), so the M7.4 cal job can rebuild
 the exact runtime features from rows. 3: `ocr_support` matches the printed words against the raw
-value (not the grounder's normalised form), so schema-2 values are stale. A resume re-runs
-documents whose row is older, and the trust job refuses them."""
+value (not the grounder's normalised form), so schema-2 values are stale. 4: `has_scan`
+documents are fed as their scan (earlier rows read the born-digital PDF for them) and rows carry
+`input_kind` and `arabic_first`. A resume re-runs documents whose row is older, and the trust job
+refuses them."""
 SPLITS: tuple[str, ...] = ("test", "cal")
 
 
@@ -169,7 +177,10 @@ def field_cells(
 async def _run_one(
     sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
 ) -> dict[str, Any]:
-    document = await parser.parse(sha, (data_dir / f"{sha}.pdf").read_bytes())
+    truth = load_truth(data_dir, sha)
+    kind, data = document_input(data_dir, sha, truth)
+    # The runtime keys a document by the sha256 of its uploaded bytes (the scan's, for a scan).
+    document = await parser.parse(hashlib.sha256(data).hexdigest(), data)
     output = await extractor.extract(document)
     grounded = WordGrounder().ground(document, output.fields)
     fields = field_cells(
@@ -182,15 +193,15 @@ async def _run_one(
     return {
         "sha": sha,
         "row_schema": ROW_SCHEMA,
+        "input_kind": kind,
+        "arabic_first": bool(truth["arabic_first"]),
         "valid_json": output.valid_json,
         "latency_ms": extractor.last_latency_ms,
         "pages": len(document.pages),
         "arabic": "ar" in {str(language) for language in document.languages},
         "fields": fields,
         # ADR-0012 §7: classified values, scored per tax case by evals.extraction_a_compare.
-        "tax_case": json.loads((data_dir / f"{sha}.truth.json").read_text(encoding="utf-8")).get(
-            "tax_case"
-        ),
+        "tax_case": truth.get("tax_case"),
         "invoice_type_code": (
             None if output.invoice_type_code is None else output.invoice_type_code.value
         ),
@@ -205,59 +216,145 @@ def _pct(numerator: int, denominator: int) -> str:
     return f"{100 * numerator / denominator:.2f}%" if denominator else "n/a"
 
 
+@dataclass(frozen=True)
+class SliceMetrics:
+    """Every report metric over one slice of rows (all, one input kind, one layout language)."""
+
+    documents: int
+    valid: int
+    predicted: int
+    grounded: int
+    with_box: int
+    box_ok: int
+    correct: int
+    cells: int
+    latency_p50_s: float | None
+    latency_p95_s: float | None
+
+    @property
+    def valid_rate(self) -> float:
+        return self.valid / self.documents if self.documents else 0.0
+
+
+def slice_metrics(rows: Sequence[Mapping[str, Any]]) -> SliceMetrics:
+    valid = [row for row in rows if row["valid_json"]]
+    cells = [f for row in valid for f in row["fields"].values()]
+    predicted = [f for f in cells if f["pred"] is not None]
+    grounded = [f for f in predicted if f["grounded"]]
+    with_box = [f for f in grounded if f["correct"] and f["iou"] is not None]
+    latencies = sorted(row["latency_ms"] for row in rows if row["latency_ms"] is not None)
+    return SliceMetrics(
+        documents=len(rows),
+        valid=len(valid),
+        predicted=len(predicted),
+        grounded=len(grounded),
+        with_box=len(with_box),
+        box_ok=sum(f["iou"] >= BOX_IOU_MATCH for f in with_box),
+        correct=sum(bool(f["correct"]) for f in cells),
+        cells=len(cells),
+        latency_p50_s=statistics.median(latencies) / 1000 if latencies else None,
+        latency_p95_s=latencies[int(0.95 * (len(latencies) - 1))] / 1000 if latencies else None,
+    )
+
+
+def report_slices(rows: Sequence[Mapping[str, Any]]) -> list[tuple[str, list[Mapping[str, Any]]]]:
+    """The report's slices: everything, each input kind, each layout language and their cross
+    product. A row without `input_kind` predates row schema 4 and cannot be sliced."""
+    missing = [row["sha"] for row in rows if row.get("input_kind") not in INPUT_KINDS]
+    if missing:
+        raise ValueError(f"{len(missing)} rows lack input_kind (row schema < 4), e.g. {missing[0]}")
+    languages = (("English-first", False), ("Arabic-first", True))
+    slices: list[tuple[str, list[Mapping[str, Any]]]] = [("All", list(rows))]
+    slices += [
+        (kind.capitalize(), [r for r in rows if r["input_kind"] == kind]) for kind in INPUT_KINDS
+    ]
+    slices += [(name, [r for r in rows if bool(r["arabic_first"]) is ar]) for name, ar in languages]
+    slices += [
+        (
+            f"{kind.capitalize()}, {name}",
+            [r for r in rows if r["input_kind"] == kind and bool(r["arabic_first"]) is ar],
+        )
+        for kind in INPUT_KINDS
+        for name, ar in languages
+    ]
+    return slices
+
+
+def _latency(metrics: SliceMetrics) -> str:
+    if metrics.latency_p50_s is None or metrics.latency_p95_s is None:
+        return "n/a"
+    return f"{metrics.latency_p50_s:.1f} s / {metrics.latency_p95_s:.1f} s"
+
+
 def render_report(
     rows: list[dict[str, Any]], model: str, extractor: ExtractorId = ExtractorId.A
 ) -> str:
-    valid = [row for row in rows if row["valid_json"]]
-    predicted = [f for row in valid for f in row["fields"].values() if f["pred"] is not None]
-    grounded = [f for f in predicted if f["grounded"]]
-    with_box = [f for f in grounded if f["correct"] and f["iou"] is not None]
-    box_ok = [f for f in with_box if f["iou"] >= BOX_IOU_MATCH]
-    latencies = sorted(row["latency_ms"] for row in rows if row["latency_ms"] is not None)
-    valid_rate = len(valid) / len(rows) if rows else 0.0
+    slices = report_slices(rows)
+    overall = slice_metrics(rows)
     title = "# Extractor A (M3.3)" if extractor is ExtractorId.A else "# Extractor B (M7.1)"
     command = "`python -m evals.extraction_a`" + (
         "" if extractor is ExtractorId.A else f" `--extractor b --model {model}`"
     )
+    n_scan = sum(row["input_kind"] == "scan" for row in rows)
     lines = [
         title,
         "",
         f"Model `{model}` on the UAE factory test split, {len(rows)} documents "
-        f"({sum(r['arabic'] for r in rows)} with Arabic text). Generated by {command}.",
+        f"({n_scan} fed as scans, {sum(bool(r['arabic_first']) for r in rows)} Arabic-first, "
+        f"{sum(r['arabic'] for r in rows)} with Arabic text parsed). Generated by {command}.",
+        "",
+        "Scanned documents are fed as the runtime receives a scan: their Augraphy page images as "
+        "an image-only PDF, parsed by the OCR service; born-digital ones as their PDF.",
         "",
         "| Metric | Value | Gate |",
         "|---|---:|---|",
-        f"| Valid JSON | {_pct(len(valid), len(rows))} | ≥ 99% "
-        f"{'PASS' if valid_rate >= VALID_JSON_GATE else 'FAIL'} |",
+        f"| Valid JSON | {_pct(overall.valid, overall.documents)} | ≥ 99% "
+        f"{'PASS' if overall.valid_rate >= VALID_JSON_GATE else 'FAIL'} |",
         f"| Grounding rate (non-null fields matched to parse words) | "
-        f"{_pct(len(grounded), len(predicted))} | reported |",
+        f"{_pct(overall.grounded, overall.predicted)} | reported |",
         f"| Grounded box IoU ≥ {BOX_IOU_MATCH} with the label (correct values) | "
-        f"{_pct(len(box_ok), len(with_box))} | reported |",
-        f"| Latency p50 / p95 | {statistics.median(latencies) / 1000:.1f} s / "
-        f"{latencies[int(0.95 * (len(latencies) - 1))] / 1000:.1f} s | reported |"
-        if latencies
-        else "| Latency | n/a | reported |",
+        f"{_pct(overall.box_ok, overall.with_box)} | reported |",
+        f"| Latency p50 / p95 | {_latency(overall)} | reported |",
+        "",
+        "## By input kind and layout language",
+        "",
+        "| Slice | Docs | Valid JSON | Field accuracy | Grounding | Box IoU ≥ "
+        f"{BOX_IOU_MATCH} | Latency p50 / p95 |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for name, subset in slices:
+        m = slice_metrics(subset)
+        lines.append(
+            f"| {name} | {m.documents} | {_pct(m.valid, m.documents)} | {_pct(m.correct, m.cells)} "
+            f"| {_pct(m.grounded, m.predicted)} | {_pct(m.box_ok, m.with_box)} | {_latency(m)} |"
+        )
+    lines += [
         "",
         "## Field accuracy (normalised exact match against factory labels, valid outputs)",
         "",
         "Party names on bilingual invoices are printed in both scripts; either printed rendering "
         "counts as correct (the prompt asks for the English one).",
         "",
-        "| Field | Accuracy | Grounded |",
-        "|---|---:|---:|",
+        "| Field | Accuracy | Digital | Scan | English-first | Arabic-first | Grounded |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
-    total_correct = total = 0
-    for name in FieldName:
-        cells = [row["fields"][name.value] for row in valid]
-        correct = sum(cell["correct"] for cell in cells)
-        non_null = [cell for cell in cells if cell["pred"] is not None]
-        total_correct += correct
-        total += len(cells)
+    by_name = dict(slices)
+    columns = ("All", "Digital", "Scan", "English-first", "Arabic-first")
+    for field_name in FieldName:
+        accuracy = []
+        for column in columns:
+            cells = [r["fields"][field_name.value] for r in by_name[column] if r["valid_json"]]
+            accuracy.append(_pct(sum(bool(c["correct"]) for c in cells), len(cells)))
+        non_null = [
+            r["fields"][field_name.value]
+            for r in rows
+            if r["valid_json"] and r["fields"][field_name.value]["pred"] is not None
+        ]
         lines.append(
-            f"| {name.value} | {_pct(correct, len(cells))} | "
+            f"| {field_name.value} | {' | '.join(accuracy)} | "
             f"{_pct(sum(c['grounded'] for c in non_null), len(non_null))} |"
         )
-    lines += ["", f"Overall field accuracy: {_pct(total_correct, total)}.", ""]
+    lines += ["", f"Overall field accuracy: {_pct(overall.correct, overall.cells)}.", ""]
     return "\n".join(lines)
 
 
