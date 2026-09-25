@@ -35,6 +35,7 @@ GATEWAY_PROXY_CHECKS: dict[int, tuple[str, str]] = {
     6006: ("/", ""),  # Phoenix UI: any 200 is enough, body is opaque HTML
     5000: ("/", ""),  # MLflow UI: any 200 is enough
     8233: ("/", ""),  # Temporal Web UI: any 200 is enough
+    8010: ("/health", '"service":"parse"'),  # parse, for host-run GPU evals (ADR-0001 amdt 2)
 }
 
 

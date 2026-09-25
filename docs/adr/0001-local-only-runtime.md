@@ -79,3 +79,17 @@ torch/transformers container on `app` only (no `edge`), used by `make smoke` and
 evals/training. It exists because the Windows host blocks native DLLs from these wheels
 under Smart App Control (ADR-0006's addendum); it carries the same no-egress guarantee as
 llama-swap, proven by the same integration test.
+
+## Amendment 2 (2026-09-25): parse on the gateway for host-run GPU evals
+
+The GPU evals (`make bakeoff-probe`, `bakeoff`, `extraction-a-adr0012`, `cal-rows-a/b`,
+`eval-b`, `gates-b`) run on the host through `uv run`, since the toolbox image carries only the
+smoke/training stack, not the project's dependencies. They parse through the same
+`ParseServiceClient` the worker uses, whose default `http://parse:8000` resolves only on `app`,
+so no host run could reach it.
+
+**Decision:** `gateway` proxies parse on `127.0.0.1:8010` (loopback only, like every other
+gateway port), and those Makefile targets set `PARSE_BASE_URL=http://127.0.0.1:8010`. The
+runtime path is unchanged: api and worker still call `parse:8000` over `app`. Parse holds no
+secrets and makes no outbound calls; it is one more fixed `proxy_pass` target, and
+`tests/integration/test_no_egress.py` checks that 8010 reaches parse and nothing else.

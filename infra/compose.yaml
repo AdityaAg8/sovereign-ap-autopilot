@@ -179,9 +179,9 @@ services:
       # Same read-only model mount pattern as llama-swap; only the one checkpoint this
       # service needs, not the whole models/ tree.
       - ../models/PaddlePaddle/PaddleOCR-VL-1.6:/models/PaddleOCR-VL-1.6:ro
-    # No `ports:` here (see the network comment above): parse is called by the ingest
-    # pipeline (api/worker, once M5 adds them) over `app`, not by host tools or a browser,
-    # so it isn't added to `gateway` either.
+    # No `ports:` here (see the network comment above): the ingest pipeline (api/worker)
+    # calls parse over `app`; `gateway` proxies it on 127.0.0.1:8010 only for the host-run
+    # GPU evals (docs/adr/0001 amendment 2).
     networks: [app]
     deploy:
       resources:
@@ -243,6 +243,7 @@ services:
       - "127.0.0.1:8233:8233" # Temporal Web UI
       - "127.0.0.1:5432:5432" # Postgres (TCP passthrough, `stream` block -- dev tools only)
       - "127.0.0.1:8000:8000" # apx API (REST + SSE) for the web app
+      - "127.0.0.1:8010:8010" # parse, for host-run GPU evals (ADR-0001 amendment 2)
     networks: [app, edge]
     depends_on:
       llama-swap:

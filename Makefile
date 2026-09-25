@@ -153,6 +153,10 @@ test-artifacts:
 	@echo "==> PINT AE schematron tests (needs: uv run python -m evals.pint_ae.fetch)"
 	uv run python -m pytest -m artifacts --no-cov -p no:cacheprovider tests
 
+# Host-run GPU evals reach the parse service through gateway's loopback-only 127.0.0.1:8010
+# (ADR-0001 amendment 2); the runtime default `http://parse:8000` resolves only on `app`.
+HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010)
+
 ## --- ADR-0012 §7: M3.3 before/after on the same documents ---------------------------
 M33_DATA_DIR ?= data/uae/test
 M33_BEFORE ?= .claude/worktrees/int-m3b/logs/extraction_a.jsonl
@@ -160,7 +164,7 @@ M33_AFTER ?= logs/extraction_a.adr0012.jsonl
 
 extraction-a-adr0012:
 	@echo "==> Extractor A on $(M33_DATA_DIR) with the ADR-0012 prompt (GPU; needs make up; resumable rows: $(M33_AFTER))"
-	uv run python -m evals.extraction_a --data-dir $(M33_DATA_DIR) --rows $(M33_AFTER) \
+	$(HOST_PARSE) uv run python -m evals.extraction_a --data-dir $(M33_DATA_DIR) --rows $(M33_AFTER) \
 		--report reports/extraction_a_adr0012.md
 
 extraction-a-compare:
@@ -176,11 +180,11 @@ BAKEOFF_ARMS ?=
 
 bakeoff-probe:
 	@echo "==> M3.4 5-page VRAM probe per arm -> reports/bakeoff_probe.json (GPU; needs make up)"
-	uv run python -m evals.bakeoff.probe --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
+	$(HOST_PARSE) uv run python -m evals.bakeoff.probe --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
 
 bakeoff:
 	@echo "==> M3.4 bake-off: 200 UAE + ExtractBench short per in-budget arm (GPU, resumable rows: logs/bakeoff/)"
-	uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
+	$(HOST_PARSE) uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
 	$(MAKE) bakeoff-report
 
 bakeoff-report:
@@ -254,11 +258,11 @@ register-b:
 
 eval-b:
 	@echo "==> Extractor B on UAE test via extractor-b-challenger -> reports/extractor_b_test.md (GPU, resumable)"
-	uv run python -m ml.extractor_b.promote eval-b $(if $(B_ROWS),--b-rows $(B_ROWS))
+	$(HOST_PARSE) uv run python -m ml.extractor_b.promote eval-b $(if $(B_ROWS),--b-rows $(B_ROWS))
 
 gates-b:
 	@echo "==> P1-P5: A vs B F1, 200-doc sequential latency + VRAM run, hygiene -> reports/extractor_b_gates.md (GPU)"
-	uv run python -m ml.extractor_b.promote gates $(if $(A_ROWS),--a-rows $(A_ROWS)) $(if $(B_ROWS),--b-rows $(B_ROWS))
+	$(HOST_PARSE) uv run python -m ml.extractor_b.promote gates $(if $(A_ROWS),--a-rows $(A_ROWS)) $(if $(B_ROWS),--b-rows $(B_ROWS))
 
 promote-b:
 	@echo "==> move champion only if every gate passed: calibrator, models.lock, llama-swap, alias (CPU)"
@@ -277,12 +281,12 @@ CAL_B_MODEL ?= extractor-b
 
 cal-rows-a:
 	@echo "==> Extractor A on UAE cal (750 docs; GPU; needs make up; resumable rows: $(CAL_A_ROWS))"
-	uv run python -m evals.extraction_a --split cal --data-dir data/uae/cal --extractor a \
+	$(HOST_PARSE) uv run python -m evals.extraction_a --split cal --data-dir data/uae/cal --extractor a \
 		--rows $(CAL_A_ROWS) --report logs/cal_rows_a.md
 
 cal-rows-b:
 	@echo "==> Extractor B ($(CAL_B_MODEL)) on UAE cal (750 docs; GPU; needs make up; rows: $(CAL_B_ROWS))"
-	uv run python -m evals.extraction_a --split cal --data-dir data/uae/cal --extractor b \
+	$(HOST_PARSE) uv run python -m evals.extraction_a --split cal --data-dir data/uae/cal --extractor b \
 		--model $(CAL_B_MODEL) --rows $(CAL_B_ROWS) --report logs/cal_rows_b.md
 
 calibrate:
@@ -330,7 +334,8 @@ guard-data:
 train-guard: gpu-free
 	@echo "==> ModernBERT-base guard fine-tune + cal threshold, then test-split scores (GPU, ~2 min)"
 	$(GUARD_TOOLBOX) python -m ml.guard.train
-	$(GUARD_TOOLBOX) python -m ml.guard.infer --model-dir data/guard/checkpoints/guard-modernbert 		--out data/guard/scores/modernbert-ft.jsonl
+	$(GUARD_TOOLBOX) python -m ml.guard.infer --model-dir data/guard/checkpoints/guard-modernbert \
+		--out data/guard/scores/modernbert-ft.jsonl
 
 guard-report:
 	@echo "==> reports/guard.md: our fine-tune vs baselines on the test split (CPU)"
