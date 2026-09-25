@@ -1,6 +1,7 @@
 """M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document once into the parse cache,
 then runs each probed, in-budget arm strictly sequentially over the fixed 200-document UAE subset
-and ExtractBench short, appending identity-stamped rows (resumable) and one whole-card VRAM
+(a scanned document as its image-only scan PDF, as the runtime receives it) and ExtractBench
+short, appending identity-stamped rows (resumable) and one whole-card VRAM
 session per invocation under logs/bakeoff/. `evals.bakeoff.report` turns them into the report.
 
 Usage: python -m evals.bakeoff.run [--arms a,q38-27b,...] [--data-dir data/uae/test] [--limit N]
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -38,6 +40,7 @@ from evals.extraction_identity import (
     require_identity,
     served_gguf_sha256,
 )
+from evals.scan_input import document_input, input_kind, load_truth
 from ml.extractor_b.gates import StrictVramSampler, VramUnavailableError
 
 ROWS_DIR: Final[Path] = Path("logs/bakeoff")
@@ -120,13 +123,17 @@ async def uae_row(
 ) -> dict[str, Any]:
     """`evals.extraction_a.extract_row`, except that a request llama-server rejects for this
     document (context overflow, HTTP 400) is an invalid row with its error, not a dead run."""
+    truth = load_truth(data_dir, sha)
+    kind = input_kind(truth)
     try:
-        return {**await extract_row(sha, document, data_dir, extractor), "error": None}
+        return {**await extract_row(sha, document, data_dir, extractor, kind), "error": None}
     except ModelServingError as exc:
         if not is_request_rejection(exc):
             raise
         return {
             "sha": sha,
+            "input_kind": kind,
+            "arabic_first": bool(truth["arabic_first"]),
             "valid_json": False,
             "latency_ms": None,
             "pages": len(document.pages),
@@ -134,6 +141,29 @@ async def uae_row(
             "fields": {},
             "error": str(exc),
         }
+
+
+def uae_inputs(
+    shas: Sequence[str], data_dir: Path, scan_dir: Path
+) -> tuple[list[tuple[str, Path]], dict[str, str]]:
+    """The parse input of each bake-off UAE document in the form the runtime receives it
+    (`evals.scan_input.document_input`: a has_scan document is its image-only scan PDF, written
+    under `scan_dir`), keyed by the sha256 of those bytes as the runtime keys an upload; also
+    the factory sha -> cache key map."""
+    items: list[tuple[str, Path]] = []
+    keys: dict[str, str] = {}
+    for sha in shas:
+        kind, data = document_input(data_dir, sha, load_truth(data_dir, sha))
+        key = hashlib.sha256(data).hexdigest()
+        path = data_dir / f"{sha}.pdf"
+        if kind == "scan":
+            path = scan_dir / f"{key}.pdf"
+            if not path.is_file():
+                scan_dir.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+        items.append((key, path))
+        keys[sha] = key
+    return items, keys
 
 
 def _write(sink: TextIO, row: Mapping[str, Any]) -> None:
@@ -154,11 +184,13 @@ async def run_arm(
     unload: UnloadFn,
     sample_fn: SampleFn,
     cache: ParseCache,
+    uae_cache_keys: Mapping[str, str] | None = None,
     log: Callable[[str], None] = print,
     interval_s: float = 0.2,
 ) -> None:
     """Every pending UAE then ExtractBench document of `arm`, one at a time, inside one
-    whole-card VRAM window that starts from an empty llama-swap (so it includes the load)."""
+    whole-card VRAM window that starts from an empty llama-swap (so it includes the load).
+    `uae_cache_keys` maps a factory sha to its parse-cache key (`uae_inputs`; default: itself)."""
     uae_rows = load_rows(files.uae)
     require_identity(uae_rows, identities.uae, files.uae)
     eb_rows = load_extractbench_rows(files.extractbench)
@@ -183,7 +215,7 @@ async def run_arm(
         with sampler:
             with files.uae.open("a", encoding="utf-8") as sink:
                 for sha in uae_pending:
-                    document = cache.get(sha)
+                    document = cache.get((uae_cache_keys or {}).get(sha, sha))
                     row = await uae_row(sha, document, uae_data_dir, extractor)
                     _write(sink, {**row, **identities.uae.as_row_fields()})
                     uae_done += 1
@@ -269,7 +301,7 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
     cache = ParseCache(args.parse_cache)
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
-    items = [(sha, args.data_dir / f"{sha}.pdf") for sha in uae_shas]
+    items, uae_keys = uae_inputs(uae_shas, args.data_dir, args.parse_cache / "scan_inputs")
     items += [(eb_shas[doc_id], eb_paths[doc_id]) for doc_id in records]
     if await cache.fill(items, parser.parse):
         await parse_client.unload()  # parse stage over before any arm's VRAM window opens
@@ -292,6 +324,7 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
                 arm,
                 uae_shas=uae_shas,
                 uae_data_dir=args.data_dir,
+                uae_cache_keys=uae_keys,
                 extractbench_records=records,
                 extractbench_shas=eb_shas,
                 files=arm_files(args.rows_dir, arm),

@@ -83,7 +83,13 @@ def write_uae_doc(data_dir: Path, sha: str, *, arabic: bool = False, number: str
         {"field": "invoice_number", "value": number, "page": 0, "bbox": [0.1, 0.1, 0.1, 0.02]}
     ]
     (data_dir / f"{sha}.labels.json").write_text(json.dumps({"labels": labels}), "utf-8")
-    truth = {"arabic_first": arabic, "context": {}, "tax_case": "standard", "n_pages": 1}
+    truth = {
+        "arabic_first": arabic,
+        "has_scan": False,
+        "context": {},
+        "tax_case": "standard",
+        "n_pages": 1,
+    }
     (data_dir / f"{sha}.truth.json").write_text(json.dumps(truth), "utf-8")
 
 

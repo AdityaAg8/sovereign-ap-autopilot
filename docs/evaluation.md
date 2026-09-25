@@ -53,7 +53,22 @@ GPU rows need `make up` (llama-swap serving) unless they say otherwise, and run 
 | [`env.md`](../reports/env.md) | Host preflight | `bash scripts/preflight.sh` | no |
 
 Long GPU jobs are resumable: `evals.extraction_a` appends one row per document to a JSONL file
-and skips documents already scored, so an interrupted run continues where it stopped.
+and skips documents already scored, so an interrupted run continues where it stopped. Rows
+written under an older row schema are re-run (schema 4: before it, scanned documents were fed as
+their born-digital PDF).
+
+### Scanned documents
+
+30% of the UAE factory invoices carry an Augraphy scan variant (`has_scan` in the truth file,
+pages in `<sha>.pageN.scan.png`). The extraction eval (`evals.extraction_a`, both extractors)
+and the e2e run (`scripts/e2e_pipeline.py`) feed such a document the way the runtime receives a
+scan: its scan pages assembled into an image-only PDF (`evals.scan_input`, A4 at 96 dpi, no
+text layer), so the parser sends every page to the OCR service and the model sees the scan
+render. Born-digital documents are fed as their PDF. Label boxes, the scan raster and the
+service's boxes share one page-fraction frame, so the same scorer and box IoU apply to both.
+Every row records `input_kind` (`digital` or `scan`), and `reports/extraction_a.md` splits every
+metric by input kind, by English-first vs Arabic-first layout, and by both. The e2e run writes
+the scanned uploads under `data/e2e_scans/`.
 
 ## The quality gates
 

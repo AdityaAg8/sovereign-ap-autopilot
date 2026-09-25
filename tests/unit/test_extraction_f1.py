@@ -93,7 +93,14 @@ def test_extractor_b_profile_uses_the_image_only_prompt() -> None:
 
 
 def test_report_title_names_the_extractor() -> None:
-    row = {**_row(True, {}), "sha": EN, "latency_ms": 1000.0, "arabic": False}
+    row = {
+        **_row(True, {}),
+        "sha": EN,
+        "latency_ms": 1000.0,
+        "arabic": False,
+        "arabic_first": False,
+        "input_kind": "digital",
+    }
     for name in row["fields"].values():
         name.update(correct=False, grounded=False, iou=None)
     b_report = render_report([row], "extractor-b-challenger", ExtractorId.B)

@@ -6,7 +6,9 @@ invoice's route, final status, timing and extracted-vs-truth check. Needs `make 
 backoff on timeouts, transport errors and 5xx (the API is shared with a GPU-bound worker under
 load); a call that still fails after the retries ends the run with that error. An expired access
 token is renewed by logging in again (`LoginAuth`), and `--resume` re-polls the selection a
-previous invocation dropped (written next to the report) without dropping anything."""
+previous invocation dropped (written next to the report) without dropping anything. A scanned pick
+is dropped as the runtime receives a scan (its Augraphy page images as an image-only PDF, built by
+`evals.scan_input` under data/e2e_scans/), so the live pipeline takes the OCR route for it."""
 
 from __future__ import annotations
 
@@ -26,6 +28,11 @@ from typing import Any
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:  # `uv run python scripts/e2e_pipeline.py` puts only scripts/ there
+    sys.path.insert(0, str(ROOT))
+
+from evals.scan_input import scan_document  # noqa: E402  (needs ROOT on sys.path)
+
 SETTLED = {"blocked", "archived", "failed"}
 PICK = (  # (label, tax_case, has_scan, arabic_first, count): 18 factory invoices
     ("EN digital", "standard", False, False, 9),
@@ -74,6 +81,19 @@ class Doc:
     status: str = "pending"
     approved: bool = False
     notes: list[str] = field(default_factory=list)
+    truth_path: Path | None = None
+
+
+def scan_upload(data: Path, sha: str) -> tuple[str, Path]:
+    """Builds (once; the bytes are deterministic) the scanned upload of test invoice `sha` under
+    data/e2e_scans/ and returns its sha256 (the key ingest and the API use) and path."""
+    payload = scan_document(data / "uae" / "test", sha)
+    scan_sha = hashlib.sha256(payload).hexdigest()
+    path = data / "e2e_scans" / f"{scan_sha}.pdf"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    return scan_sha, path
 
 
 def select(data: Path, offset: int = 0, known: Callable[[str], bool] | None = None) -> list[Doc]:
@@ -95,10 +115,14 @@ def select(data: Path, offset: int = 0, known: Callable[[str], bool] | None = No
             if skipped < offset:
                 skipped += 1
                 continue
-            if known is not None and known(truth["sha256"]):
+            if scan:
+                sha, upload = scan_upload(data, truth["sha256"])
+            else:
+                sha = truth["sha256"]
+                upload = path.with_name(path.name.replace(".truth.json", ".pdf"))
+            if known is not None and known(sha):
                 continue
-            pdf = path.with_name(path.name.replace(".truth.json", ".pdf"))
-            docs.append(Doc(truth["sha256"], pdf, label, truth))
+            docs.append(Doc(sha, upload, label, truth, truth_path=path))
             taken += 1
             if taken == count:
                 break
@@ -253,7 +277,13 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
 
 def save_selection(path: Path, docs: list[Doc]) -> None:
     rows = [
-        {"sha": d.sha, "path": str(d.path), "kind": d.kind, "dropped_at": d.dropped_at}
+        {
+            "sha": d.sha,
+            "path": str(d.path),
+            "truth": None if d.truth_path is None else str(d.truth_path),
+            "kind": d.kind,
+            "dropped_at": d.dropped_at,
+        }
         for d in docs
     ]
     path.write_text(json.dumps(rows, indent=1), encoding="utf-8")
@@ -263,9 +293,22 @@ def load_selection(path: Path) -> list[Doc]:
     docs = []
     for row in json.loads(path.read_text(encoding="utf-8")):
         pdf = Path(row["path"])
-        truth_path = pdf.with_name(pdf.name.replace(".pdf", ".truth.json"))
-        truth = None if row["kind"] == "attack" else json.loads(truth_path.read_text("utf-8"))
-        docs.append(Doc(row["sha"], pdf, row["kind"], truth, dropped_at=row["dropped_at"]))
+        truth_path: Path | None = None
+        if row["kind"] != "attack":
+            # Selections written before scanned picks had their own upload name the truth by
+            # the PDF's name; those only ever held born-digital files.
+            truth_path = Path(row["truth"]) if row.get("truth") else pdf.with_suffix(".truth.json")
+        truth = None if truth_path is None else json.loads(truth_path.read_text("utf-8"))
+        docs.append(
+            Doc(
+                row["sha"],
+                pdf,
+                row["kind"],
+                truth,
+                dropped_at=row["dropped_at"],
+                truth_path=truth_path,
+            )
+        )
     return docs
 
 
