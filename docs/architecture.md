@@ -15,7 +15,7 @@ e-invoices on one 12 GB laptop GPU, with no outbound network at runtime. Source 
 | `apx/extract` | `interfaces.py` | Field schema, tool-free Extractor A/B and arbiter, grounding of values onto parse words |
 | `apx/trust` | `interfaces.py` | Per-field features, isotonic calibration, Learn-then-Test threshold |
 | `apx/validate` | `interfaces.py` | VAT math, TRN, IBAN, mandatory fields, 3-way match |
-| `apx/fraud` | `interfaces.py`, `page_similarity.py` | Typology rules, isolation forest, page similarity. Fraud owns the `PageEmbedder` port; `InMemoryPageSimilarityIndex` embeds pages through it and serves `DuplicateInvoiceRule.evaluate_similarity` (0.9 cosine threshold). An unavailable embedder raises, never passes (M8.1; not yet wired into the workflow) |
+| `apx/fraud` | `interfaces.py`, `page_similarity.py`, `pg_page_similarity.py` | Typology rules, isolation forest, page similarity. Fraud owns the `PageEmbedder` port. `PgPageSimilarityIndexes` keeps one vector per page in pgvector (`page_embeddings`) and answers vendor-scoped cosine top-k for `DuplicateInvoiceRule.evaluate_similarity` (0.9 threshold, rule `near_duplicate_embedding`); `InMemoryPageSimilarityIndex` is the eval/test twin. An unavailable embedder or database raises, never passes (M8.1) |
 | `apx/policy` | `interfaces.py` | Capabilities, SoD, P1–P5 routing, action authorisation, proposals. P1 `select_payee(vendor, invoice_iban)` picks among admin-verified accounts only, and `route` pins the result as `RoutingDecision.payee` (ADR-0014) |
 | `apx/einvoice` | `interfaces.py` | PINT AE UBL 2.1 builder, schematron validation |
 | `apx/asp_mock` | `interfaces.py` | Exactly-once receipts and archive by idempotency key |
@@ -34,7 +34,8 @@ domain module); `extract` adds `llm`, `parse`; `trust` adds
 `agent` adds `llm`, `policy`; `workflows` imports the pipeline modules; `api` adds `workflows`.
 Ports keep this direction: `fraud` never imports `llm`. It owns `PageEmbedder` and `PageVector`,
 `apx.llm.embedding.HttpPageEmbedder` satisfies them structurally, and a composition root wires
-the two (not yet wired into the workflow). `ml/promotion` imports `apx.common`, `apx.audit` and `evals`, and `apx` never imports `ml`.
+the two (`apx.workflows.main` builds the fraud engine with `PgPageSimilarityIndexes` over
+`HttpPageEmbedder`). `ml/promotion` imports `apx.common`, `apx.audit` and `evals`, and `apx` never imports `ml`.
 
 ## Data flow
 
@@ -70,6 +71,35 @@ activities carry `IdempotencyKey = "<invoice_id>:<step>"` (§6.4).
 An invoice goes straight through only if every field is accepted by the trust gate and
 validation, fraud and policy all pass (§6.1).
 
+**Fraud step.** `RuleFraudEngine` runs the typology rules over one history snapshot, then two
+page checks against the same vendor's earlier invoices: a perceptual hash over their rendered
+pages, and learned page similarity. For the second, every page is embedded once by
+Qwen3-VL-Embedding-2B (the `page-embed` Compose service, in its own `page-similarity` GPU stage),
+compared by cosine with that vendor's stored pages in pgvector (`page_embeddings`, migration
+`0010`, exact vendor-scoped scan: pgvector's ANN indexes stop at 2000 dimensions), and a
+neighbour at similarity ≥ 0.9 raises `near_duplicate_embedding` with its plain-language
+explanation. The assessed invoice's own pages are excluded in the query (a retried step has
+stored them), and its pages are stored after the lookup. Both page checks need a resolved vendor.
+
+The 0.9 threshold was checked on the GPU (2026-09-25, `tests/integration/test_page_embed_quality.py`,
+50 factory test invoices, page 0; digital render at 100 dpi, re-scanned twin at 150 dpi through
+`factory.scan`):
+
+| Pair | n | min | median | max | ≥ 0.9 |
+|---|---|---|---|---|---|
+| Same invoice, re-scanned | 50 | 0.922 | 0.965 | 0.980 | 50 |
+| Same vendor, other invoice | 57 | 0.526 | 0.742 | 0.901 | 1 |
+| Other vendor | 1168 | 0.373 | 0.701 | 0.888 | 0 |
+
+The margin is thin on the same-vendor side (one pair at 0.9005, a review flag, not a block), so
+the threshold stays at 0.9; raising it would need these numbers re-measured on real scans.
+1/57 is a per-pair rate: each invoice is compared with every stored page of its vendor, so the
+chance of a false review flag grows with that vendor's history, and these numbers come from
+synthetic factory scans. Re-check both on real scans; the false-flag cap in
+`tests/integration/test_page_embed_quality.py` guards against regressions meanwhile.
+A down embedder or database fails the step (retried by Temporal); it is never a pass.
+`WORKER_PAGE_SIMILARITY=false` turns the learned check off explicitly.
+
 ## Trust boundaries
 
 1. **Document → system.** All document content is attacker-controlled. The scan stage flags hidden
@@ -96,7 +126,10 @@ that stage; the previous group is unloaded first (ADR-0002). ADR-0013 sets the b
 card, as `nvidia-smi` reports it with the Windows desktop included: at most 11.8 GB of the 12.28 GB
 card per stage, which leaves at most 9.5 GB for a stage's models. Stages never co-reside, and
 inside `extract` Extractor A and B swap (`swap: true`): together they measured 10.3-10.6 GB of
-model memory under a 5-page load, over budget with the usual ~2.3 GB desktop.
+model memory under a 5-page load, over budget with the usual ~2.3 GB desktop. The page-embed
+service is a fourth worker stage (`GpuStage.PAGE_SIMILARITY`, released through its `/unload`),
+so it never co-resides with Extractor A. Measured alone at 4.7 GB (6.1 GB whole card with the
+desktop), far inside the 11.8 GB stage budget.
 
 Before every stage switch, and before the trainer starts, `apx.llm.preflight` compares free VRAM
 (and RAM for the trainer) with the stage's need plus a 0.3 GB margin and fails typed

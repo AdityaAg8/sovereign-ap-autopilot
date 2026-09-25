@@ -186,7 +186,7 @@ partway through a load.
 | extractor-b | 4.4 | 0 | Measurements above, B alone |
 | parse | 4.3 | 0 | 0.35 × 12 GB fraction cap |
 | arbiter | 8.0 | 0 | **unmeasured** estimate |
-| page-similarity | 4.5 | 0 | estimate |
+| page-similarity | 4.7 | 0 | Measured 2026-09-25 (M8.1): `page-embed` alone, 5-page A4 invoice at 150 dpi, every page at the reference 1750-token cap. Whole-card peak 6260 MiB minus 1465 MiB idle desktop = 4.68 GiB (service `peak_vram_gb`, CUDA-reserved, 4.87 GB). Resize matches the reference embedder's smart_resize exactly (the processor's own resize capped pages at 1260 tokens, so pages are pre-resized) |
 | guard | 1.0 | 0 | estimate |
 | trainer | 6.0 | 12.0 | trainer budget |
 

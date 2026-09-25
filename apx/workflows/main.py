@@ -34,6 +34,7 @@ from apx.extract.interfaces import ExtractorId, PromptBuilder
 from apx.extract.pipeline import DualExtractionPipeline
 from apx.extract.prompt import InvoicePromptBuilder
 from apx.extract.prompt_b import ImageOnlyPromptBuilder
+from apx.fraud.pg_page_similarity import PgPageSimilarityIndexes
 from apx.fraud.rules import (
     BankDetailChangeRule,
     DuplicateInvoiceRule,
@@ -47,6 +48,7 @@ from apx.ingest.settings import IngestSettings
 from apx.ingest.store import FileDocumentStore
 from apx.ingest.watcher import watch_inbox
 from apx.llm.client import LlamaSwapClient
+from apx.llm.embedding import HttpPageEmbedder
 from apx.llm.interfaces import LlmClient
 from apx.llm.slots import ModelSlots, SlotLimitedLlmClient
 from apx.observability.llm_calls import PgLlmCallRecorder, RecordingLlmClient
@@ -111,6 +113,11 @@ class WorkerSettings(BaseSettings):
     extractor_a_model: str = "extractor-a"
     extractor_b_model: str = "extractor-b"
     agent_model: str = "exception-agent"
+    page_similarity: bool = True
+    """Learned near-duplicate pages (M8.1): embed each page with the `page-embed` service in its
+    own GPU stage and compare it with the vendor's stored pages in pgvector. Off only by an
+    explicit `WORKER_PAGE_SIMILARITY=false`; when on, an unreachable service fails the fraud
+    step (retried), it never passes."""
     review_notes: bool = True
     """Write the exception agent's cited review note on REVIEW-routed invoices (M9.3)."""
     watch_inbox: bool = True
@@ -163,17 +170,20 @@ class GpuServing:
         self.parse_client = ParseServiceClient(
             gate=lambda: self._parse_gate()  # bound below, once the scheduler exists
         )
+        self.page_embedder = HttpPageEmbedder(gate=lambda: self._embed_gate())
         self._control = LlamaSwapClient()
         self.scheduler = GpuStageScheduler(
             {
                 GpuStage.PARSE: self.parse_client.unload,
                 GpuStage.EXTRACTOR_A: self._control.unload,
                 GpuStage.EXTRACTOR_B: self._control.unload,
+                GpuStage.PAGE_SIMILARITY: self.page_embedder.unload,
             },
             max_hold_s=settings.gpu_stage_max_hold_s,
         )
         self._b_model = settings.extractor_b_model
         self._parse_gate = SerialStageGate(self.scheduler, GpuStage.PARSE)
+        self._embed_gate = SerialStageGate(self.scheduler, GpuStage.PAGE_SIMILARITY)
         self.slots = ModelSlots(
             {
                 settings.extractor_a_model: settings.extractor_a_slots,
@@ -251,6 +261,9 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
             ),
             PgInvoiceHistory(get_session),
             pages=StoredPageSource(documents),
+            page_index=(
+                PgPageSimilarityIndexes(gpu.page_embedder) if settings.page_similarity else None
+            ),
         ),
         vendors=vendors,
         policy_engine=DefaultPolicyEngine(

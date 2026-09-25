@@ -388,7 +388,7 @@ def test_needs_table_matches_adr_0013() -> None:
         GpuWorkload.EXTRACTOR_B: MemoryNeed(4.4, 0.0),
         GpuWorkload.PARSE: MemoryNeed(4.3, 0.0),
         GpuWorkload.ARBITER: MemoryNeed(8.0, 0.0),
-        GpuWorkload.PAGE_SIMILARITY: MemoryNeed(4.5, 0.0),
+        GpuWorkload.PAGE_SIMILARITY: MemoryNeed(4.7, 0.0),
         GpuWorkload.GUARD: MemoryNeed(1.0, 0.0),
         GpuWorkload.TRAINER: MemoryNeed(6.0, 12.0),
     }

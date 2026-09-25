@@ -38,7 +38,7 @@ from apx.extract.interfaces import (
     RawLineItem,
     resolve_classification,
 )
-from apx.fraud.interfaces import FraudFlag, FraudReport, InvoiceHistory
+from apx.fraud.interfaces import FraudFlag, FraudReport, InvoiceHistory, PageSimilarityIndex
 from apx.fraud.rules import DuplicateInvoiceRule
 from apx.scan.cap import cap_flags
 from apx.scan.interfaces import HiddenContentDetector, ScanFlagKind, ScanReport
@@ -275,10 +275,27 @@ class StoredPageSource:
             pdf.close()
 
 
+class VendorPageIndex(PageSimilarityIndex, Protocol):
+    """A `PageSimilarityIndex` over one vendor's stored pages that can also store an invoice's
+    pages (`apx.fraud.pg_page_similarity.VendorPageSimilarityIndex`)."""
+
+    async def add(self, invoice_id: InvoiceId, page_images: Sequence[bytes]) -> object: ...
+
+
+class PageIndexes(Protocol):
+    """`apx.fraud.pg_page_similarity.PgPageSimilarityIndexes`: one scoped index per assessment."""
+
+    def for_vendor(
+        self, vendor_id: VendorId, *, exclude: InvoiceId | None = None
+    ) -> VendorPageIndex: ...
+
+
 class RuleFraudEngine:
     """`FraudEngine`: every M8.1 rule over one history snapshot, plus perceptual-hash
-    near-duplicate pages against the same vendor's recent invoices when a `PageSource` is given.
-    Learned page similarity and the isolation forest join with their models (M8.1 index, M8.2)."""
+    near-duplicate pages against the same vendor's recent invoices when a `PageSource` is given,
+    plus learned (Qwen3-VL-Embedding-2B) near-duplicate pages against the same vendor's stored
+    pages when `page_index` is given; this invoice's pages are then stored for later ones.
+    Both page checks need a resolved vendor. The isolation forest joins with its model (M8.2)."""
 
     def __init__(
         self,
@@ -287,11 +304,13 @@ class RuleFraudEngine:
         *,
         pages: PageSource | None = None,
         near_duplicates: DuplicateInvoiceRule | None = None,
+        page_index: PageIndexes | None = None,
     ) -> None:
         self._rules = tuple(rules)
         self._history = history
         self._pages = pages
         self._near = near_duplicates or DuplicateInvoiceRule()
+        self._page_index = page_index
 
     async def assess(self, invoice: Invoice, page_images: Sequence[bytes]) -> FraudReport:
         snapshot = await self._history.snapshot(invoice)
@@ -305,6 +324,12 @@ class RuleFraudEngine:
                 snapshot.recent_for_vendor(invoice.vendor_id, self._near.window_days),
             )
             flags.extend(self._near.evaluate_pages(invoice, page_images, candidates))
+        if self._page_index is not None and invoice.vendor_id is not None and page_images:
+            index = self._page_index.for_vendor(invoice.vendor_id, exclude=invoice.id)
+            flags.extend(await self._near.evaluate_similarity(invoice, page_images, index))
+            # The index excludes this invoice's own pages (stored by a retried step) in the
+            # query itself, so they can never crowd real neighbours out of the top k.
+            await index.add(invoice.id, page_images)
         max_score = max((f.score for f in flags), default=0.0)
         return FraudReport(flags=tuple(flags), max_score=max_score)
 

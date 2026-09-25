@@ -30,6 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 from apx.common.types import Language, Role, Route, Stage
 from apx.db.base import Base, CreatedAtMixin
@@ -429,6 +430,45 @@ class FraudFlag(Base):
     score: Mapped[float] = mapped_column(nullable=False)
     evidence: Mapped[str] = mapped_column(Text, nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+PAGE_VECTOR_DIMENSIONS = 2048
+"""Qwen3-VL-Embedding-2B's full embedding size (its `1_Pooling/config.json`); the
+`page_embeddings.embedding` column is fixed to it, so a vector of any other size is refused."""
+
+
+class PgVector(UserDefinedType[list[float]]):
+    """pgvector's `vector(n)` column type, for DDL and drift checks only: rows are written and
+    queried with explicit SQL casts (`apx.fraud.pg_page_similarity`), not through the ORM."""
+
+    cache_ok = True
+
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return f"vector({self.dimensions})"
+
+
+class PageEmbedding(Base):
+    """One page's Qwen3-VL-Embedding-2B vector, scoped to the invoice's resolved vendor, for
+    learned near-duplicate detection (PRD §3 apx/fraud, §10 M8.1). Created by
+    `0010_page_embeddings`, which also enables the `vector` extension."""
+
+    __tablename__ = "page_embeddings"
+    __table_args__ = (CheckConstraint("page >= 0", name="page_non_negative"),)
+
+    invoice_id: Mapped[str] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), primary_key=True
+    )
+    page: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vendor_id: Mapped[str] = mapped_column(
+        ForeignKey("vendors.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    embedding: Mapped[list[float]] = mapped_column(PgVector(PAGE_VECTOR_DIMENSIONS), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

@@ -41,6 +41,9 @@ class GpuStage(StrEnum):
     """Extractor A in llama-swap, and every model served as its alias (the exception agent)."""
     EXTRACTOR_B = "extractor-b"
     """Extractor B in llama-swap."""
+    PAGE_SIMILARITY = "page-similarity"
+    """Qwen3-VL-Embedding-2B page vectors for fraud near-duplicates (page-embed service). Its
+    own stage, so it never shares the card with Extractor A (ADR-0013 whole-card budget)."""
 
 
 class HeadroomPreflight:

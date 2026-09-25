@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -22,10 +23,12 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Connection
+from sqlalchemy.exc import SAWarning
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import apx.db.models  # noqa: F401 -- import side effect registers every table on Base.metadata
 from apx.db.base import Base
+from apx.db.models import PgVector
 
 pytestmark = pytest.mark.integration
 
@@ -62,6 +65,7 @@ EXPECTED_TABLES = {
     "llm_calls",
     "idempotency_keys",
     "labels",
+    "page_embeddings",
 }
 
 
@@ -234,7 +238,38 @@ async def _assert_audit_anchor_is_append_only() -> None:
 
 def _compare_metadata_sync(sync_conn: Connection) -> list[Any]:
     context = MigrationContext.configure(sync_conn)
-    return list(compare_metadata(context, Base.metadata))
+    # SQLAlchemy cannot reflect pgvector's `vector` (it reflects as NullType, which Alembic does
+    # not compare); `_vector_column_drift` checks those columns' types exactly instead.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Did not recognize type 'vector'", SAWarning)
+        return list(compare_metadata(context, Base.metadata))
+
+
+async def _vector_column_drift(dsn: str) -> list[str]:
+    """Every `PgVector` model column whose migrated type (`format_type`, e.g. `vector(2048)`)
+    differs from the model's, as readable strings."""
+    expected = {
+        (table.name, column.name): column.type.get_col_spec()
+        for table in Base.metadata.tables.values()
+        for column in table.columns
+        if isinstance(column.type, PgVector)
+    }
+    assert expected, "no PgVector columns found; this check would be vacuous"
+    conn = await asyncpg.connect(dsn)
+    try:
+        drift = []
+        for (table, column), spec in sorted(expected.items()):
+            actual = await conn.fetchval(
+                "SELECT format_type(atttypid, atttypmod) FROM pg_attribute "
+                "WHERE attrelid = $1::regclass AND attname = $2",
+                table,
+                column,
+            )
+            if actual != spec:
+                drift.append(f"{table}.{column}: migrated {actual}, model {spec}")
+        return drift
+    finally:
+        await conn.close()
 
 
 async def _autogenerate_diff(database_url: str) -> list[Any]:
@@ -259,6 +294,7 @@ def test_models_have_no_undeclared_migration_drift(env_database_url: str) -> Non
         assert diffs == [], (
             f"apx/db/models.py has drifted from db/migrations (see db/migrations/README): {diffs}"
         )
+        assert asyncio.run(_vector_column_drift(ASYNCPG_DSN)) == []
     finally:
         command.downgrade(cfg, "base")
 

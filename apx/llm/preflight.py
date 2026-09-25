@@ -35,8 +35,9 @@ CGROUP_MEMORY_CURRENT: Final[Path] = Path("/sys/fs/cgroup/memory.current")
 
 
 class GpuWorkload(StrEnum):
-    """Everything that takes a share of the card. The first three values equal
-    `apx.workflows.gpu_stage.GpuStage`'s, so a stage maps to its workload by value."""
+    """Everything that takes a share of the card. `apx.workflows.gpu_stage.GpuStage`'s values
+    (parse, extractor-a, extractor-b, page-similarity) are workloads here, so a stage maps to
+    its workload by value."""
 
     PARSE = "parse"
     EXTRACTOR_A = "extractor-a"
@@ -63,7 +64,9 @@ MEMORY_NEEDS: Final[Mapping[GpuWorkload, MemoryNeed]] = MappingProxyType(
         GpuWorkload.EXTRACTOR_B: MemoryNeed(vram_gb=4.4, ram_gb=0.0),
         GpuWorkload.PARSE: MemoryNeed(vram_gb=4.3, ram_gb=0.0),  # 0.35 x 12 GB fraction cap
         GpuWorkload.ARBITER: MemoryNeed(vram_gb=8.0, ram_gb=0.0),  # unmeasured: an estimate
-        GpuWorkload.PAGE_SIMILARITY: MemoryNeed(vram_gb=4.5, ram_gb=0.0),
+        # Measured 2026-09-25 (ADR-0013 needs table): page-embed alone embedding a 5-page A4
+        # invoice at the 1750-token cap, whole-card peak 6260 MiB minus 1465 MiB idle = 4.68.
+        GpuWorkload.PAGE_SIMILARITY: MemoryNeed(vram_gb=4.7, ram_gb=0.0),
         GpuWorkload.GUARD: MemoryNeed(vram_gb=1.0, ram_gb=0.0),
         GpuWorkload.TRAINER: MemoryNeed(vram_gb=6.0, ram_gb=12.0),
     }

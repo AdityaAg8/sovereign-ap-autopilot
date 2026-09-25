@@ -6,6 +6,7 @@ unreachable, busy or failing service raises `PageEmbeddingUnavailableError`, a m
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
@@ -18,6 +19,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from apx.common.errors import ModelOutputError, ModelServingError
 from apx.common.types import Frozen
+
+logger = logging.getLogger(__name__)
 
 PageVector = tuple[float, ...]
 """One page's embedding. Not normalized by contract; cosine similarity normalizes."""
@@ -75,6 +78,27 @@ class HttpPageEmbedder:
         if not all(math.isfinite(x) for x in vector):
             raise ModelOutputError("page-embedding response contains a non-finite value")
         return vector
+
+    async def unload(self) -> None:
+        """Free the service's GPU memory (the GPU stage release hook, ADR-0013); it reloads on
+        the next page. A service that is not running (connection refused, name not resolved)
+        holds no GPU memory, so that is logged and treated as released, like the parse service;
+        any other failure raises `PageEmbeddingUnavailableError`."""
+        timeout = httpx.Timeout(
+            self._settings.request_timeout_s, connect=self._settings.connect_timeout_s
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self._settings.base_url, timeout=timeout, transport=self._transport
+            ) as http:
+                response = await http.post("/unload")
+                response.raise_for_status()
+        except httpx.ConnectError as exc:
+            logger.warning("page-embedding service unreachable on unload: %s", exc)
+        except httpx.HTTPError as exc:
+            raise PageEmbeddingUnavailableError(
+                f"page-embedding service /unload failed: {exc!r}"
+            ) from exc
 
     async def _post(self, page_png: bytes) -> Any:
         timeout = httpx.Timeout(

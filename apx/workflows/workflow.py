@@ -208,7 +208,8 @@ class InvoiceWorkflow:
             "fraud",
             args=[invoice, parsed],
             result_type=FraudReport,
-            start_to_close_timeout=_ACTIVITY_TIMEOUT,
+            # Holds the page-similarity GPU stage, which may wait out another stage's batch.
+            start_to_close_timeout=_GPU_ACTIVITY_TIMEOUT,
             retry_policy=_retry_policy("fraud"),
         )
         self._status = InvoiceStatus.FRAUD_CHECKED

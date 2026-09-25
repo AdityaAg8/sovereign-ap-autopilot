@@ -74,8 +74,14 @@ async def test_stages_never_overlap_and_switches_release_the_previous_stage() ->
     await asyncio.gather(*jobs)
     assert not card.overlap
     # First entry (A) released every other stage; the later switch to PARSE released A.
-    assert card.released[:3] == [GpuStage.PARSE, GpuStage.EXTRACTOR_B, GpuStage.EXTRACTOR_A]
-    assert len(scheduler.switches) == len(card.released) - 1
+    assert card.released[:4] == [
+        GpuStage.PARSE,
+        GpuStage.EXTRACTOR_B,
+        GpuStage.PAGE_SIMILARITY,
+        GpuStage.EXTRACTOR_A,
+    ]
+    # The first entry released three stages; every later switch releases exactly one.
+    assert len(scheduler.switches) == len(card.released) - 2
 
 
 async def test_active_stage_yields_after_its_hold_expires() -> None:
@@ -196,7 +202,7 @@ async def test_failed_release_propagates_and_the_next_caller_retries_it() -> Non
     assert scheduler.active is None
     await card.work(scheduler, GpuStage.EXTRACTOR_A, 0.0)
     assert scheduler.active is GpuStage.EXTRACTOR_A
-    assert card.released == [GpuStage.PARSE, GpuStage.EXTRACTOR_B]
+    assert card.released == [GpuStage.PARSE, GpuStage.EXTRACTOR_B, GpuStage.PAGE_SIMILARITY]
 
 
 async def test_staged_llm_client_holds_each_models_own_stage() -> None:

@@ -63,13 +63,29 @@ async def test_each_stage_entry_checks_its_table_numbers_after_the_release() -> 
     # Joining an already-active stage loads nothing, so it is not checked again.
     async with scheduler.hold(GpuStage.PARSE):
         pass
-    assert recorder.calls == [(7.2, 0.0, 5.0), (4.4, 0.0, 5.0), (4.3, 0.0, 5.0)]
-    assert order[:3] == ["release:parse", "release:extractor-b", "check:extractor-a"]
-    assert order[3:] == [
+    async with scheduler.hold(GpuStage.PAGE_SIMILARITY):
+        pass
+    assert recorder.calls == [
+        (7.2, 0.0, 5.0),
+        (4.4, 0.0, 5.0),
+        (4.3, 0.0, 5.0),
+        (4.7, 0.0, 5.0),
+    ]
+    # The first entry releases every other stage, since a fresh worker cannot know what an
+    # earlier process left resident.
+    assert order[:4] == [
+        "release:parse",
+        "release:extractor-b",
+        "release:page-similarity",
+        "check:extractor-a",
+    ]
+    assert order[4:] == [
         "release:extractor-a",
         "check:extractor-b",
         "release:extractor-b",
         "check:parse",
+        "release:parse",
+        "check:page-similarity",
     ]
 
 
