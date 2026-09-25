@@ -49,21 +49,29 @@ async def _read_when_stable(
 
 async def watch_inbox(inbox_dir: Path, ingestor: Ingestor) -> None:
     """Runs until cancelled, ingesting (with `source="watch"`) every file added to or modified
-    in `inbox_dir`. A document that fails ingest hardening (unsupported type, oversized, too
-    many pages, encrypted) is logged and left in place rather than crashing the watcher; every
-    other failure propagates so the process supervisor can restart it."""
+    in `inbox_dir`, after first sweeping the files already there. A document that fails ingest
+    hardening (unsupported type, oversized, too many pages, encrypted) is logged and left in
+    place rather than crashing the watcher; every other failure propagates so the process
+    supervisor can restart it."""
     inbox_dir.mkdir(parents=True, exist_ok=True)
+    # Files that landed while the watcher was down raise no event now; ingest dedupes by
+    # sha256, so sweeping them on start never starts a second workflow for the same bytes.
+    for path in sorted(p for p in inbox_dir.iterdir() if p.is_file()):
+        await _ingest_file(path, ingestor)
     async for changes in awatch(inbox_dir):
         for change, raw_path in changes:
             if change is Change.deleted:
                 continue
             path = Path(raw_path)
-            if not path.is_file():
-                continue
-            data = await _read_when_stable(path)
-            if data is None:
-                continue
-            try:
-                await ingestor.ingest(data, path.name, "watch")
-            except ApxError:
-                logger.exception("failed to ingest %s from the inbox watcher", path)
+            if path.is_file():
+                await _ingest_file(path, ingestor)
+
+
+async def _ingest_file(path: Path, ingestor: Ingestor) -> None:
+    data = await _read_when_stable(path)
+    if data is None:
+        return
+    try:
+        await ingestor.ingest(data, path.name, "watch")
+    except ApxError:
+        logger.exception("failed to ingest %s from the inbox watcher", path)

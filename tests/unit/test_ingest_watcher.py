@@ -123,3 +123,27 @@ async def test_watch_inbox_logs_and_continues_on_a_hardening_rejection(tmp_path:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+async def test_watch_inbox_ingests_files_already_waiting_at_startup(tmp_path: Path) -> None:
+    """Files dropped while the worker was down (a crash, a restart) raise no filesystem event
+    once it is back, so the watcher sweeps the inbox when it starts; ingest dedupes by sha256,
+    so a file that was already ingested does not start a second workflow."""
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "a.pdf").write_bytes(b"%PDF-1.4 waiting a")
+    (inbox / "b.pdf").write_bytes(b"%PDF-1.4 waiting b")
+    (inbox / "sub").mkdir()
+    ingestor = _FakeIngestor()
+    task = asyncio.create_task(watch_inbox(inbox, ingestor))
+    try:
+        await _run_until(lambda: len(ingestor.calls) == 2, timeout_s=10.0)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert sorted((name, source) for _data, name, source in ingestor.calls) == [
+        ("a.pdf", "watch"),
+        ("b.pdf", "watch"),
+    ]
