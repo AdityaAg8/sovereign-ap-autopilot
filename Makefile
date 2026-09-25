@@ -16,7 +16,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
 
 .PHONY: help bootstrap env build up down models smoke gpu-free lint fmt typecheck test test-gpu \
         status open dashboard preview web-stop \
-        seed e2e-pipeline factory e2e eval eval-quick eval-chat eval-chat-dry retrain demo fresh-clone \
+        seed e2e-pipeline factory restore-scans e2e eval eval-quick eval-chat eval-chat-dry retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare guard-data train-guard guard-report \
@@ -94,6 +94,12 @@ test:
 factory:
 	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py, PRD §10 M2.3)"
 	uv run python -m factory.build --out-dir "$(OUT_DIR)" --seed $(SEED) --n-total $(N_TOTAL)
+
+# Adds the planned 30% Augraphy scan variants to an existing corpus without changing its PDFs,
+# labels, splits or sha256s (ADR-0012 amendment 3). Idempotent: re-running skips finished docs.
+restore-scans:
+	@echo "==> restoring scan variants under $(OUT_DIR) (factory/restore_scans.py, PRD §10 M2.3)"
+	uv run python -m factory.restore_scans --data-dir "$(OUT_DIR)" --seed $(SEED)
 
 ## --- Stack, models and tests ------------------------------------------------------
 

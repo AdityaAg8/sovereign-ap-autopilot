@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from evals.datasets.manifest import (
     MANIFEST_PATH,
@@ -208,19 +208,16 @@ def _init_worker(erp_json: str, scale: float) -> None:
     _WORKER = RenderWorker(scale=scale)
 
 
-def _render_one(plan: DocPlan, *, out_dir: Path) -> DocResult:
-    """Renders one planned invoice end to end and writes its PDF/labels/truth (and, if
-    `plan.is_scan`, its Augraphy scan PNGs) under `out_dir/<split>/`."""
-    if _WORKER is None or _ERP is None:
-        raise RuntimeError("factory.build worker not initialized (missing _init_worker call)")
-
+def plan_html(plan: DocPlan, erp: Erp) -> tuple[str, dict[str, Any]]:
+    """Builds one planned invoice's HTML and its render context (with any fraud/attack hooks
+    applied), exactly as the factory renders it. Shared with `factory.restore_scans`, which must
+    reproduce the same PDF bytes for an existing document."""
     layout = _LAYOUTS_BY_ID[plan.layout_id]
-    tax_case = TaxCase(plan.tax_case)
     context = build_invoice_context(
         layout,
-        _ERP,
+        erp,
         vendor_index=plan.vendor_index,
-        tax_case=tax_case,
+        tax_case=TaxCase(plan.tax_case),
         n_lines=plan.n_lines,
         seed=plan.doc_seed,
     )
@@ -235,7 +232,18 @@ def _render_one(plan: DocPlan, *, out_dir: Path) -> DocResult:
     html = ATTACK_HOOKS.apply_html(
         html, context=context, names=plan.attack_hooks, seed=plan.doc_seed
     )
+    return html, context
 
+
+def _render_one(plan: DocPlan, *, out_dir: Path) -> DocResult:
+    """Renders one planned invoice end to end and writes its PDF/labels/truth (and, if
+    `plan.is_scan`, its Augraphy scan PNGs) under `out_dir/<split>/`."""
+    if _WORKER is None or _ERP is None:
+        raise RuntimeError("factory.build worker not initialized (missing _init_worker call)")
+
+    layout = _LAYOUTS_BY_ID[plan.layout_id]
+    tax_case = TaxCase(plan.tax_case)
+    html, context = plan_html(plan, _ERP)
     rendered = _WORKER.render(
         html,
         layout_id=layout.id,

@@ -253,6 +253,33 @@ the run repeated; only failing twice needs an ADR amendment with the evidence.
   factory's gold exempt invoices rely on this default. Removing it needs a contract field and
   gold regeneration, so it is a follow-up.
 
+## Amendment 3 (2026-09-25): the promoted corpus had no scan variants
+
+What happened. §2 promoted `data/uae_full2` to `data/uae`. That build was rendered scan-free:
+every `truth.json` said `has_scan: false` and there were no `<sha>.pageN.scan.png` files, while
+PRD §10 M2.3 requires 30% scanned variants (the stale build, now `data/uae_stale_m2`, had 1,498
+of 4,995 documents, 30.0%). The session notes of the day record the new build as "Noto,
+scan-free": Smart App Control then blocked numba on the host, and Augraphy needs numba. Nothing
+failed loudly because no consumer reads the scan PNGs (see Impact) and the plan, splits and
+sha256s do not depend on the scan fraction (`build_plan` draws the scan subset with its own salt).
+
+Fix. `python -m factory.restore_scans --data-dir data/uae --seed 2026` (`make restore-scans`)
+rebuilds the default plan (seed 2026, 5,000 = 3,500/750/750, 25% Arabic-first, 30% scans, 20
+vendors, 8 users), matches every document on disk to it by `doc_seed` and refuses with a typed
+error on any split, layout, tax case, Arabic-first or hook mismatch. For each planned scan
+document it re-renders the same HTML with `capture_pages=True` and requires the re-rendered PDF to
+be byte-identical to the one on disk and the labels JSON to be identical (both held for all 1,500
+documents, so no rasterization fallback was needed), then runs `factory.scan.scan_page` with the
+factory's own per-page seeds, writes the PNGs atomically and flips `has_scan` last. PDFs, labels,
+splits, sha256s and `data/manifest.json` are unchanged; the run is idempotent and resumable.
+Report: `reports/restore_scans.md`.
+
+Impact. A's M3.3 numbers (`reports/extraction_a.md`), the §7 before/after run and B's M7.1
+training run were all digital-only: they read `<sha>.pdf`, never a scan PNG. B's training
+manifest (`data/ml/extractor_b/manifest.jsonl`, fingerprinted by B's run) is left as is.
+Measuring the scan path needs a consumer change (feed the scan PNG instead of the PDF for
+`has_scan` documents), which is out of this amendment's scope.
+
 ## Consequences
 
 - Positive: E, AE, O and credit notes are representable end to end. The money path loses its
