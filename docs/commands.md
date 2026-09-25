@@ -40,6 +40,7 @@ Every workflow in this repo is a `make` target (run from the repo root, in Git B
 | `make test-gpu` | Tests marked `gpu` or `integration` (live stack with models) |
 | `make test-artifacts` | PINT AE schematron tests (bundles from `uv run python -m evals.pint_ae.fetch`) |
 | `make e2e` | Fixture build of the web app, then the full Playwright suite (`web/e2e`) |
+| `bash scripts/commit.sh -m "msg"` | Commit the staged files: runs the auto-fixing hooks and re-stages first, so a reformat never aborts the commit (real failures still stop it) |
 | `uv run pre-commit run --all-files` | Every commit hook; all run through `uv run python -m`, so Windows Smart App Control doesn't block them |
 | `make ci-local REF=<branch>` | Every CI job (python, web, headers, gitleaks) on a clean clone of a branch; report in `logs/ci-local/` (use when GitHub Actions can't run) |
 | `make fresh-clone` | Clean clone of `HEAD`: install, lint, typecheck, tests, compose config, image build |

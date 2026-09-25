@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M3.4 bake-off VRAM probe (`make bakeoff-probe`, 2026-09-25): every arm fits the 11.8 GB whole-card budget: `q38-27b` peak 10.53 GB (model 8.97 GB), `q35-9b-mtp` 8.94 GB, `q38-9b-distill` 7.00 GB, plus the current Extractor A (`reports/bakeoff_probe.json`). The bake-off parses each UAE document as its runtime input (a scanned invoice as its image-only scan PDF).
+- Scanned invoices are evaluated as scans: `evals/scan_input.py` assembles a document's scan PNGs into an image-only PDF (the form a scanned upload takes), used by the extraction eval, the e2e run and the bake-off; rows carry `input_kind` and `arabic_first` (row schema 4) and every report metric is split by input kind and layout language.
+- Ops dashboard redesign: papaya-on-carbon livery (McLaren-inspired), dark by default; light theme stays on `T`.
+- `scripts/commit.sh`: runs the auto-fixing pre-commit hooks on the staged files and re-stages them before `git commit`, so a reformat never aborts a commit.
 - M6.4 injection guard fine-tune (ModernBERT-base, `make train-guard` / `make guard-report`): test F1 0.800, precision 1.000, recall 0.667, hard-negative FPR 0.000 (n=406) vs best baseline F1 0.658; ModernBERT loads with `reference_compile=False` (the toolbox has no C compiler for Triton).
 - M9.5 live chat evals (`make eval-chat`, 2026-09-25): stock `ops-chat` 65.0% exact tool calls, 92.4% citation faithfulness, 88.2% refusal accuracy; AgentDojo banking utility 87.5%, attack success 22.2% (uncensored red-team model: 56.0%, 81.0%, 5.9%, 87.5%, 30.6%).
 - Make targets `build` (rebuild app images after a pull; `make up` reuses the existing ones), `test-integration`, `test-artifacts`; `test-gpu`, `e2e`, `verify-m4`, `verify-m8` and `verify-all` now run real checks instead of printing "not implemented".
@@ -16,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Worker crash-loop: `apx/extract/identity.py` imports PyYAML, which was only a dev dependency, so the `--no-dev` app image died on import and processed nothing. PyYAML is now a runtime dependency; a new unit test fails if any `apx/` import is missing from the runtime dependency closure.
+- The inbox watcher ingests files already waiting when it starts (files dropped while the worker was down were never picked up); ingest dedupes by sha256.
+- Host-run GPU evals (bake-off, cal rows, Extractor A/B evals) could not reach the parse service: `gateway` now proxies it on loopback `127.0.0.1:8010` for those targets only (ADR-0001 amendment 2); the runtime path is unchanged.
+- `price_variance_po` no longer fires on clean invoices: the grounded invoice linked line N to PO line N regardless of content (20/20 clean invoices flagged before, 0/20 after). A line now matches a PO line only by a printed reference, or by a unique same-description, same-quantity PO line; unmatched lines get a low-severity `po_line_unmatched` flag (0.25, below review).
 - Login: the form posts and its button stays disabled until hydration, so a pre-hydration submit can no longer put the email and password in the URL (new `login-prehydration.spec.ts`).
 - `make e2e` builds the web app in fixture mode first (48/53 specs failed against a stale build); `pdf-viewer-errors.spec.ts` now injects a failure the nested parser worker really sees.
 - Windows host: the unit suite collects and passes (gpu.lock via a `FileLocker` seam, lock file closed before delete), host scripts print UTF-8 (`PYTHONUTF8=1`, explicit subprocess encodings), and every pre-commit hook runs through `uv run python -m` so Smart App Control no longer blocks commits.
