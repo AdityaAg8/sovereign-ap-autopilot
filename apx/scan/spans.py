@@ -1,16 +1,15 @@
 """Collects the text spans the injection classifier scores (PRD §3 apx/scan, §6.3 P4): every
-text line of the PDF's text layer, visible or hidden, plus each pair of adjacent lines (an
-instruction wrapped over a line break), plus the text the hidden-content detector found in
-metadata, annotations and attachments. Zero-width and bidi controls are removed first, so a
-payload reads as the renderer shows it; their presence is already a separate scan flag."""
+text line of the PDF's text layer, visible or hidden, plus the text the hidden-content detector
+found in metadata, annotations and attachments. Text is cut down to the guard's validated domain:
+NFKC, controls removed (flagged separately), and Arabic-script runs removed (ADR-0017 §5)."""
 
 from __future__ import annotations
 
 import io
 import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from itertools import pairwise
 from typing import Any, Final
 
 import pdfplumber
@@ -25,9 +24,17 @@ DOCUMENT_TEXT_KINDS: Final[frozenset[ScanFlagKind]] = frozenset(
 """Detector flags whose evidence is document text a page's text layer does not contain (Info,
 XMP, annotation contents, attachment names). Hidden page text is already in the page lines."""
 
-_STRIP = {cp: None for cp in SUSPICIOUS_CODEPOINTS}
+_C0_CONTROLS = frozenset(range(0x00, 0x20)) - {0x09, 0x0A, 0x0D}
+_STRIP = {cp: None for cp in SUSPICIOUS_CODEPOINTS | _C0_CONTROLS | {0x7F}}
 _ESCAPE = re.compile(r"\\u[0-9a-f]{4}")
 _SPACE = re.compile(r"\s+")
+_ARABIC_BLOCKS: Final[tuple[tuple[int, int], ...]] = (
+    (0x0600, 0x06FF),
+    (0x0750, 0x077F),
+    (0x08A0, 0x08FF),
+)
+_ARABIC_RUN = re.compile("[" + "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi in _ARABIC_BLOCKS) + "]+")
+"""Arabic script after NFKC (which folds the presentation forms into these blocks)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,8 +47,17 @@ class TextSpan:
 
 
 def clean_span_text(text: str) -> str:
-    """Drop zero-width/bidi controls and collapse whitespace."""
-    return _SPACE.sub(" ", text.translate(_STRIP)).strip()
+    """NFKC, drop zero-width/bidi/C0 controls, collapse whitespace."""
+    stripped = unicodedata.normalize("NFKC", text).translate(_STRIP)
+    return _SPACE.sub(" ", stripped).strip()
+
+
+def without_arabic(text: str) -> str:
+    """`text` with its Arabic-script runs removed. The guard never saw the text layer's Arabic
+    (visual-order glyphs, mixed with table numbers) in training or calibration, and on clean
+    UAE invoices it scores those lines as injections (ADR-0017 §5), so only the Latin part of
+    a line is scored. Arabic hidden text is still caught by the rule-based detector."""
+    return _SPACE.sub(" ", _ARABIC_RUN.sub(" ", text)).strip()
 
 
 def _unescape_evidence(text: str) -> str:
@@ -67,35 +83,21 @@ def _line_bbox(line: dict[str, Any], page: int, width: float, height: float) -> 
     return BBox(page=page, x0=min(x0, x1), y0=min(y0, y1), x1=max(x0, x1), y1=max(y0, y1))
 
 
-def _union(a: BBox | None, b: BBox | None) -> BBox | None:
-    if a is None or b is None:
-        return a or b
-    return BBox(
-        page=a.page, x0=min(a.x0, b.x0), y0=min(a.y0, b.y0), x1=max(a.x1, b.x1), y1=max(a.y1, b.y1)
-    )
-
-
 def page_spans(pdf_bytes: bytes) -> list[TextSpan]:
-    """Each text line of every page, then each adjacent pair of lines on the same page.
-    Raises whatever pdfplumber raises on an unreadable PDF; the caller wraps it."""
+    """Each text line of every page, one span per line: the unit the guard was trained on
+    (`ml.guard.mine` mines single text-layer lines). Joining adjacent lines was measured to
+    flag clean address/date concatenations (ADR-0017 §5). Raises whatever pdfplumber raises on
+    an unreadable PDF; the caller wraps it."""
     spans: list[TextSpan] = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as doc:
         for page_index, page in enumerate(doc.pages):
             width, height = float(page.width), float(page.height)
-            lines: list[TextSpan] = []
             for raw in page.extract_text_lines(strip=True, return_chars=False):
-                text = clean_span_text(str(raw["text"]))
+                text = without_arabic(clean_span_text(str(raw["text"])))
                 if text:
-                    lines.append(
+                    spans.append(
                         TextSpan(page_index, text, _line_bbox(raw, page_index, width, height))
                     )
-            spans.extend(lines)
-            for first, second in pairwise(lines):
-                spans.append(
-                    TextSpan(
-                        page_index, f"{first.text} {second.text}", _union(first.bbox, second.bbox)
-                    )
-                )
     return spans
 
 
@@ -105,7 +107,7 @@ def evidence_spans(flags: Iterable[ScanFlag]) -> list[TextSpan]:
     spans: list[TextSpan] = []
     for flag in flags:
         if flag.kind in DOCUMENT_TEXT_KINDS:
-            text = clean_span_text(_unescape_evidence(flag.evidence.text))
+            text = without_arabic(clean_span_text(_unescape_evidence(flag.evidence.text)))
             if text:
                 spans.append(TextSpan(flag.page, text, flag.bbox))
     return spans

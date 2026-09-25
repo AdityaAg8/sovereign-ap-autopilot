@@ -71,10 +71,14 @@ class ModernBertInjectionClassifier:
             raise ScanError(f"guard inference failed: {exc}") from exc
 
     def _score(self, texts: Sequence[str]) -> list[float]:
-        out: list[float] = []
-        for start in range(0, len(texts), BATCH_SIZE):
+        # Batch spans of similar length together (a page mixes 2-word cells with long notes), so
+        # padding stays small; results are written back in input order.
+        order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+        out = [0.0] * len(texts)
+        for start in range(0, len(order), BATCH_SIZE):
+            indices = order[start : start + BATCH_SIZE]
             enc = self._tokenizer(
-                list(texts[start : start + BATCH_SIZE]),
+                [texts[i] for i in indices],
                 truncation=True,
                 max_length=MAX_LENGTH,
                 padding=True,
@@ -82,5 +86,6 @@ class ModernBertInjectionClassifier:
             ).to(self._device)
             logits = self._model(**enc).logits.float()
             probs = self._torch.softmax(logits, dim=-1)[:, self._positive]
-            out.extend(float(p) for p in probs.cpu().tolist())
+            for index, prob in zip(indices, probs.cpu().tolist(), strict=True):
+                out[index] = float(prob)
         return out

@@ -115,8 +115,8 @@ class InjectionGuard:
         self._max_spans = max_spans
 
     def detect(self, pdf_bytes: bytes, detector_flags: Sequence[ScanFlag]) -> list[ScanFlag]:
-        """Score every text line of the PDF (visible and hidden), adjacent line pairs, and the
-        document text in `detector_flags` (metadata, annotations, attachments)."""
+        """Score every text line of the PDF (visible and hidden) and the document text in
+        `detector_flags` (metadata, annotations, attachments), Latin script only (ADR-0017)."""
         try:
             found = page_spans(pdf_bytes)
         except Exception as exc:

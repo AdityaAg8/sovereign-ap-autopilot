@@ -21,11 +21,12 @@ worker) is a slim CPU image built from `uv.lock`, without torch or transformers.
 ## Decision
 
 1. **Where it runs: CPU, in the worker process.** ModernBERT-base is 150M parameters; a
-   one-page invoice is ~20-60 short spans, scored in one or two batches of 32 at 256 tokens.
-   Measured in the built image (CPU, this host): model load ~1 s at worker start, ~0.1 s for a
-   one-page scan including the guard. The apx image gains CPU-only `torch==2.6.0` (the version
-   the checkpoint was trained and scored with in the toolbox) and `transformers==5.0.0` (the
-   version its config.json names), installed by `uv pip` after the deps-only `uv sync`, with
+   UAE test invoice averages 44 scored lines, sorted by length and batched 32 at a time at
+   256 tokens. Measured in the built image (CPU, this host, with the compose stack running):
+   model load ~1 s at worker start, 0.86 s per invoice on average over 40 UAE test invoices
+   (text layer + inference), on top of the detector's ~0.2-0.7 s render pass. The apx image
+   gains CPU-only `torch==2.6.0` (the version the checkpoint was trained and scored with in the
+   toolbox) and `transformers==5.0.0` (the version its config.json names), installed by `uv pip` after the deps-only `uv sync`, with
    the source sync made `--inexact` so it keeps them. They stay out of `uv.lock` on purpose:
    the Windows host venv must not pull torch (ADR-0006), and unit tests never import it
    (`apx.scan.modernbert` imports it lazily).
@@ -57,12 +58,31 @@ worker) is a slim CPU image built from `uv.lock`, without torch or transformers.
    emitted per span at or above review. `DetectorScanner` already counts INJECTION as an
    attack kind, so `injection_score` (max over attack kinds) blocks at the cal block point and
    any INJECTION flag reviews. The engine is unchanged.
-5. **What is scored.** Every pdfplumber text line of every page (the text layer holds hidden
-   text too), every adjacent pair of lines (an instruction wrapped over a line break), and the
-   evidence text of metadata/annotation/attachment flags. Zero-width and bidi controls are
-   removed first, so the model reads what the renderer shows (the controls are flagged
-   separately). Spans without a letter are skipped. Non-PDF uploads have no text layer and
-   are not scored (unchanged from the detector).
+5. **What is scored.** Every pdfplumber text line of every page, one span per line (the text
+   layer holds hidden text too), and the evidence text of metadata/annotation/attachment
+   flags. NFKC, then zero-width, bidi and C0
+   controls are removed, so the model reads what the renderer shows (the controls are
+   flagged separately). Spans without a letter are skipped. Non-PDF uploads have no text
+   layer and are not scored (unchanged from the detector).
+   - **Arabic-script runs are removed before scoring (Latin only).** The guard never saw the
+     text layer's Arabic: `ml.guard.mine` deliberately took only Arabic-free PDF lines, and its
+     Arabic rows are clean logical-order sentences from ground truth. Measured on the clean
+     UAE test invoices with the current checkpoint, scoring lines with their Arabic blocked
+     32 of the first 60 (bilingual table rows, headers, tax notes scored 0.92-0.9999), even
+     after NFKC and a visual-to-logical reorder. Removing Arabic runs keeps the Latin part of
+     bilingual lines in scope. Not a regression: before this ADR nothing was scored. Arabic hidden text is
+     still caught by the rule-based detector (score 1.0, blocks); a visible Arabic instruction
+     is not caught by the guard until the follow-up below.
+   - **No joined lines.** Scoring each adjacent pair of lines as well (to catch an instruction
+     wrapped over a line break) flagged 33 of 750 clean invoices and blocked 17: every one
+     an address line joined to a date/PO/TRN line. Single lines flagged 0 of 750 at review.
+     A wrapped instruction is scored as its two halves.
+   - **Result on the clean split:** 0 of the 750 clean UAE test invoices reach review
+     (M6.2's zero-flag bar), with the thresholds of point 3.
+   - **Follow-up (M6.4 retrain, GPU):** mine hard negatives through `apx.scan.spans`
+     (the runtime span extractor), with Arabic text-layer lines and joined lines included, so
+     train and serve see the same text; re-run `evals.guard`; then delete `without_arabic`
+     and restore line pairs.
 6. **Fail closed.** Missing or unreadable checkpoint files, a guard.json without either
    threshold, block below review, a smoke-run checkpoint, an inference error, a wrong-length
    or non-finite score, an unreadable text layer, or more than 5,000 spans raise `ScanError`.
