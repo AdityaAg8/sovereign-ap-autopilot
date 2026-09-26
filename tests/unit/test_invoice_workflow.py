@@ -16,6 +16,7 @@ import pytest
 from temporalio import activity
 from temporalio.client import WorkflowFailureError, WorkflowHandle
 from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
@@ -153,6 +154,7 @@ class FakeInvoiceActivities:
     received_refs: dict[str, ParsedDocumentRef] = field(default_factory=dict)
     extract_error: Exception | None = None
     failures: list[tuple[str, str]] = field(default_factory=list)
+    mark_failed_error: Exception | None = None
 
     @activity.defn(name="scan")
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport:
@@ -237,6 +239,8 @@ class FakeInvoiceActivities:
     @activity.defn(name="mark_failed")
     async def mark_failed(self, invoice_id: str, error: str) -> None:
         self.calls.append("mark_failed")
+        if self.mark_failed_error is not None:
+            raise self.mark_failed_error
         self.failures.append((invoice_id, error))
 
 
@@ -527,3 +531,22 @@ async def test_llm_activities_run_only_on_the_bounded_llm_queue(
         )
     assert result.status is InvoiceStatus.ARCHIVED
     assert queues == [llm_queue]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_mark_failed_never_masks_the_original_failure(
+    temporal_env: WorkflowEnvironment,
+) -> None:
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.AUTO, reasons=()),
+        extract_error=ParsedArtifactIntegrityError("stored parse does not match its ref"),
+        mark_failed_error=ApplicationError("database is down", non_retryable=True),
+    )
+
+    with pytest.raises(WorkflowFailureError) as raised:
+        await _run_workflow(temporal_env, fake)
+
+    # The execution fails with the extract error, not the status write's.
+    assert "ParsedArtifactIntegrityError" in repr(raised.value.cause.cause)
+    assert fake.calls.count("mark_failed") == 1
+    assert fake.failures == []

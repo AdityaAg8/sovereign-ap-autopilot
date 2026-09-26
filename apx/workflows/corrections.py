@@ -6,6 +6,7 @@ rows, fixed through the existing field-edit flow, and reach the workflow typed i
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Final
@@ -34,6 +35,9 @@ SUPPLIER_TRN_FIELD: Final[str] = "supplier_trn"
 SUPPLIER_ADDRESS_FIELD: Final[str] = "supplier_address"
 """The grounded supplier address (`FieldName.SUPPLIER_ADDRESS`): BT-35, and through its emirate
 the seller city and country subdivision (BT-37, BT-39; ADR-0012 amendment 4)."""
+SUPPLIER_ADDRESS_MAX_LENGTH: Final[int] = 500
+"""A reviewer's supplier address longer than this (after collapsing whitespace) is refused."""
+_ORDINARY_WHITESPACE: Final[frozenset[str]] = frozenset(" \t\n\r")
 
 
 def kind_value(kind: InvoiceKind | None) -> str | None:
@@ -111,6 +115,17 @@ class ReviewCorrections(Frozen):
     amendment 4 still deserialize on replay."""
 
 
+def _address_problem(address: str) -> str | None:
+    """Why a reviewer's raw supplier address cannot go into the e-invoice, else None: a
+    control character other than ordinary whitespace, or more than the cap once whitespace is
+    collapsed."""
+    if any(unicodedata.category(ch) == "Cc" and ch not in _ORDINARY_WHITESPACE for ch in address):
+        return "the supplier address contains control characters"
+    if len(" ".join(address.split())) > SUPPLIER_ADDRESS_MAX_LENGTH:
+        return f"the supplier address is longer than {SUPPLIER_ADDRESS_MAX_LENGTH} characters"
+    return None
+
+
 def _rate(raw: str) -> Decimal | None:
     text = raw.strip().removesuffix("%").strip()
     try:
@@ -130,8 +145,10 @@ def corrections_from_fields(
     recorded). `extracted` holds the model-sourced values the workflow's invoice was built from:
     a missing supplier TRN raises `SupplierTrnMissingError`, and a currency override that
     relabels a valid extracted code as AED raises `CurrencyRelabelError`. The supplier address
-    (the latest value, a reviewer's winning) must name a UAE emirate; a reviewer's address that
-    differs from the extracted one is carried as `supplier_address`."""
+    (the latest value, a reviewer's winning) must name a UAE emirate. A reviewer's address (one
+    that differs from the extracted one once whitespace is collapsed) must hold no control
+    characters besides ordinary whitespace and at most `SUPPLIER_ADDRESS_MAX_LENGTH` characters;
+    it is carried, whitespace-collapsed, as `supplier_address`."""
     if not (extracted.get(SUPPLIER_TRN_FIELD) or "").strip():
         raise SupplierTrnMissingError(
             "cannot approve: the document has no supplier TRN (BT-31); a reviewer's edit of "
@@ -151,11 +168,17 @@ def corrections_from_fields(
         problems.append(f"{CURRENCY_FIELD} (must be AED, got {currency})")
     elif (relabel := currency_relabel(extracted.get(CURRENCY_FIELD), currency)) is not None:
         raise CurrencyRelabelError(f"cannot approve: {relabel}")
-    address = (values.get(SUPPLIER_ADDRESS_FIELD) or "").strip()
-    address_problem = resolve_emirate(address) is None
-    if address_problem:
+    raw_address = values.get(SUPPLIER_ADDRESS_FIELD) or ""
+    address = " ".join(raw_address.split())
+    extracted_address = " ".join((extracted.get(SUPPLIER_ADDRESS_FIELD) or "").split())
+    reviewed = address != extracted_address
+    # A reviewer's address is checked before anything is recorded (ADR-0012 amendment 4).
+    address_why = _address_problem(raw_address) if reviewed else None
+    if address_why is None and resolve_emirate(address) is None:
         # The builder takes the seller city and subdivision from this emirate (ibr-143-ae), so
         # approving without one would only fail at the e-invoice build.
+        address_why = "the supplier address names no UAE emirate (PINT AE ibr-143-ae)"
+    if address_why is not None:
         problems.append(SUPPLIER_ADDRESS_FIELD)
     indices = sorted(
         {int(m.group(1)) for name in values if (m := _LINE_FIELD.match(name)) is not None}
@@ -179,19 +202,15 @@ def corrections_from_fields(
         elif category is not None and rate is not None:
             lines.append(LineCorrection(index=index, vat_category=category, vat_rate=rate))
     if problems or kind is None:
-        why = (
-            "the supplier address names no UAE emirate (PINT AE ibr-143-ae); "
-            if address_problem
-            else ""
-        )
+        why = "" if address_why is None else f"{address_why}; "
         raise MissingCorrectionsError(
             f"cannot approve: {why}correct these fields first: " + ", ".join(problems)
         )
-    corrected_address = (
-        address if address != (extracted.get(SUPPLIER_ADDRESS_FIELD) or "").strip() else None
-    )
     return ReviewCorrections(
-        kind=kind, currency=currency, lines=tuple(lines), supplier_address=corrected_address
+        kind=kind,
+        currency=currency,
+        lines=tuple(lines),
+        supplier_address=address if reviewed else None,
     )
 
 

@@ -12,7 +12,7 @@ from typing import Final
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError
+from temporalio.exceptions import ActivityError, FailureError
 
 with workflow.unsafe.imports_passed_through():
     # Every one of these is a Pydantic model with no I/O of its own; `execute_activity`'s
@@ -74,12 +74,16 @@ so exact-name matching retries it; the
 process may free memory) and keep the default retries."""
 
 
+_MAX_ATTEMPTS: Final[Mapping[str, int]] = {"mark_failed": 0}
+"""Per-activity attempt caps other than the default 5; 0 is Temporal's "no limit"."""
+
+
 def _retry_policy(activity: str) -> RetryPolicy:
     return RetryPolicy(
         initial_interval=timedelta(seconds=1),
         backoff_coefficient=2.0,
         maximum_interval=timedelta(seconds=30),
-        maximum_attempts=5,
+        maximum_attempts=_MAX_ATTEMPTS.get(activity, 5),
         non_retryable_error_types=list(NON_RETRYABLE_ERRORS.get(activity, ())),
     )
 
@@ -155,9 +159,16 @@ class InvoiceWorkflow:
             # workflow execution itself fails in Temporal (I4: nothing is silently dropped).
             self._status = InvoiceStatus.FAILED
             self._error = str(exc)
-            if workflow.patched(FAILED_STATUS_PATCH):
+            # Only a Temporal failure (activity retries exhausted, a non-retryable typed error)
+            # ends the execution; a workflow-code bug fails the *task*, which Temporal retries
+            # until the code is fixed, so writing FAILED for it would record a marker the fixed
+            # code then replays against.
+            if isinstance(exc, FailureError) and workflow.patched(FAILED_STATUS_PATCH):
                 # The API and the reviewer read `invoices.status`, not this query: without the
                 # write, an invoice whose post-review build failed sat at APPROVED forever.
+                # Retried without limit (`_MAX_ATTEMPTS`): the write is cheap and idempotent,
+                # and until it lands the execution stays Running, which is visible, rather
+                # than failing with the row still showing its last in-flight status.
                 try:
                     await workflow.execute_activity(
                         "mark_failed",

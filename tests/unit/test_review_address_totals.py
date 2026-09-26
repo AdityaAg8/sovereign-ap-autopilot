@@ -10,10 +10,11 @@ from decimal import Decimal
 
 import pytest
 from lxml import etree  # type: ignore[import-untyped]
-from pydantic import JsonValue
+from pydantic import JsonValue, ValidationError
 
+from apx.api.interfaces import FIELD_VALUE_MAX_LENGTH, FieldEdit
 from apx.api.service import corrections_for_rows, refuse_totals_mismatch
-from apx.common.invoice import Invoice
+from apx.common.invoice import Invoice, VatCategory
 from apx.common.types import Money
 from apx.db.enums import FieldSource
 from apx.db.models import Field as FieldRow
@@ -37,6 +38,7 @@ from apx.validate.interfaces import (
 from apx.workflows.components import PintAeUblBuilder
 from apx.workflows.corrections import (
     SUPPLIER_ADDRESS_FIELD,
+    LineCorrection,
     MissingCorrectionsError,
     ReviewCorrections,
     TotalsMismatchError,
@@ -328,3 +330,126 @@ def test_only_error_severity_violations_become_findings() -> None:
     assert validation["violations"] == [
         ValidationFinding(code=ViolationCode.IBAN_INVALID, field="iban").model_dump(mode="json")
     ]
+
+
+# --- 5. review fixes (reviewer FAIL on 1a72e40) ----------------------------------------------
+
+
+def _zero_rated_read_as_standard() -> Invoice:
+    """The extractors said S/5 on a zero-rated line; the printed VAT total is 0.00."""
+    invoice = _with_address(FIXED_ADDRESS)
+    line = invoice.lines[0].model_copy(
+        update={"vat_category": VatCategory.STANDARD, "vat_rate": Decimal("5")}
+    )
+    return invoice.model_copy(update={"lines": (line,)})
+
+
+async def test_a_vat_total_mismatch_a_category_correction_clears_is_not_refused() -> None:
+    """F1: `check_vat` recomputes the VAT total from the lines, so correcting the line to Z/0
+    clears the finding; the API leaves it to `apply_review`'s re-validation."""
+    invoice = _zero_rated_read_as_standard()
+    reasons = _route_reasons(invoice)
+    (validation,) = [r for r in reasons if r.get("rule") == PolicyRule.VALIDATION.value]
+    assert {"code": "totals_mismatch", "field": "vat_total"} in _findings(validation)
+    refuse_totals_mismatch(reasons)
+    real = _real(_Audit(), _Records(), _Rules(), _Rules())
+    corrected = await real.apply_review(invoice, CORRECTIONS)
+    assert corrected.lines[0].vat_category is VatCategory.ZERO_RATED
+    with pytest.raises(MissingCorrectionsError, match="totals_mismatch"):
+        uncorrected = CORRECTIONS.model_copy(
+            update={
+                "lines": (
+                    LineCorrection(
+                        index=1, vat_category=VatCategory.STANDARD, vat_rate=Decimal("5")
+                    ),
+                )
+            }
+        )
+        await real.apply_review(invoice, uncorrected)
+
+
+def _findings(reason: dict[str, JsonValue]) -> list[JsonValue]:
+    findings = reason["violations"]
+    assert isinstance(findings, list)
+    return findings
+
+
+@pytest.mark.parametrize("field", ["subtotal", "total", "lines[3].net_amount", None])
+def test_amounts_no_correction_can_change_are_refused(field: str | None) -> None:
+    reasons: list[dict[str, object]] = [
+        {"rule": "validation", "violations": [{"code": "totals_mismatch", "field": field}]}
+    ]
+    with pytest.raises(TotalsMismatchError):
+        refuse_totals_mismatch(reasons)
+
+
+def test_a_vat_total_finding_alone_is_left_to_apply_review() -> None:
+    refuse_totals_mismatch(
+        [{"rule": "validation", "violations": [{"code": "totals_mismatch", "field": "vat_total"}]}]
+    )
+
+
+@pytest.mark.parametrize(
+    ("address", "emirate"),
+    [
+        ("مستودع 4، دبي، الإمارات العربية المتحدة", "Dubai"),
+        ("شارع الكورنيش، أبوظبي", "Abu Dhabi"),
+        ("أبو ظبي", "Abu Dhabi"),
+        ("المنطقة الصناعية، الشارقة", "Sharjah"),
+        ("عجمان", "Ajman"),
+        ("أم القيوين", "Umm Al Quwain"),
+        ("الحمرا، رأس الخيمة", "Ras Al Khaimah"),
+        ("الفجيرة", "Fujairah"),
+        ("Plot 7, Umm Al Qaiwain", "Umm Al Quwain"),
+        ("Umm Al-Quwain", "Umm Al Quwain"),
+        ("Al Hamra, Ras Al-Khaimah", "Ras Al Khaimah"),
+        ("Al Hamra, Ras al Khaimah", "Ras Al Khaimah"),
+        ("RAS-AL-KHAIMAH", "Ras Al Khaimah"),
+        ("Corniche, Abudhabi", "Abu Dhabi"),
+        ("Corniche, Abu-Dhabi", "Abu Dhabi"),
+        ("Port Road, Fujeirah", "Fujairah"),
+    ],
+)
+def test_arabic_names_and_official_variants_resolve_to_the_canonical_emirate(
+    address: str, emirate: str
+) -> None:
+    """F2: exact aliases only."""
+    assert resolve_emirate(address) == emirate
+
+
+@pytest.mark.parametrize("address", ["Ras Al Khalaimah", "Dubay", "رأس الخيمه"])
+def test_misspellings_are_not_aliases(address: str) -> None:
+    assert resolve_emirate(address) is None
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["Al Quoz\u000b Dubai", "Al Quoz\x00, Dubai", "Al Quoz\x85, Dubai", "Al Quoz\x1b, Dubai"],
+)
+def test_a_reviewer_address_with_control_characters_is_refused(address: str) -> None:
+    """F3: validated before anything is recorded (the API's 422)."""
+    with pytest.raises(MissingCorrectionsError, match=SUPPLIER_ADDRESS_FIELD) as err:
+        corrections_from_fields(_fields(address), extracted=_extracted(OCR_ADDRESS))
+    assert "control characters" in str(err.value)
+
+
+def test_a_reviewer_address_longer_than_500_characters_is_refused() -> None:
+    long = "Unit 1, " + "x" * 490 + ", Dubai"
+    assert len(long) > 500
+    with pytest.raises(MissingCorrectionsError, match="500 characters") as err:
+        corrections_from_fields(_fields(long), extracted=_extracted(OCR_ADDRESS))
+    assert err.value.args[0].endswith(SUPPLIER_ADDRESS_FIELD)
+
+
+def test_a_reviewer_address_has_its_whitespace_collapsed() -> None:
+    spaced = "  Warehouse 4,\n\tAl Nakheel,   Ras Al Khaimah  "
+    fixed = corrections_from_fields(_fields(spaced), extracted=_extracted(OCR_ADDRESS))
+    assert fixed.supplier_address == FIXED_ADDRESS
+    same = corrections_from_fields(_fields(spaced), extracted=_extracted(FIXED_ADDRESS))
+    assert same.supplier_address is None
+
+
+def test_a_field_edit_value_is_capped() -> None:
+    FieldEdit(field="supplier_address", value="x" * FIELD_VALUE_MAX_LENGTH, reason="r")
+    with pytest.raises(ValidationError):
+        FieldEdit(field="supplier_address", value="x" * (FIELD_VALUE_MAX_LENGTH + 1), reason="r")

@@ -2,8 +2,9 @@
 PDFs) into the running stack's inbox, approves the ones routed to review through the API the
 way a reviewer would, waits for each to settle, and writes `reports/e2e_pipeline.md` with every
 invoice's route, final status, timing and extracted-vs-truth check (header fields, seller address
-and line count; an approval of values that differ from truth is noted, as the API has no
-correction that reaches the e-invoice for them). Needs `make up` and
+and line count). Like a reviewer, it corrects a misread seller address through the fields API
+before approving (ADR-0012 amendment 4); an accepted approval of values no correction reaches
+(the lines) is noted. Needs `make up` and
 `make seed` first; talks to the API through the gateway only. Every API call is retried with
 backoff on timeouts, transport errors and 5xx (the API is shared with a GPU-bound worker under
 load); a call that still fails after the retries ends the run with that error. An expired access
@@ -198,13 +199,11 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
                 doc.settled_at = time.time()
                 continue
             if doc.status == "awaiting_review" and not doc.approved:
-                if doc.truth is not None and (
-                    wrong := truth_mismatches(field_values(detail), doc.truth)
-                ):
-                    # A real reviewer would fix these first, but no API correction reaches the
-                    # e-invoice for them (a fix-field row is recorded for learning only; the
-                    # approval carries just kind, currency and line VAT): approved as extracted.
-                    doc.notes.append("approved uncorrectable: " + ", ".join(wrong))
+                wrong = (
+                    [] if doc.truth is None else truth_mismatches(field_values(detail), doc.truth)
+                )
+                if doc.truth is not None and _ADDRESS_FIELD in wrong:
+                    wrong = correct_address(client, doc, url, wrong)
                 decided = call(
                     lambda url=url: client.post(f"{url}/decisions", json={"action": "approve"}),
                     f"approve {doc.sha[:12]}",
@@ -213,12 +212,37 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
                 if not doc.approved:
                     doc.notes.append(f"approve refused: {decided.status_code} {decided.text[:120]}")
                     doc.settled_at = time.time()
+                elif wrong:
+                    # The approval carries kind, currency, line VAT and the seller address; any
+                    # other difference from truth (the lines) went through as extracted.
+                    doc.notes.append("approved uncorrectable: " + ", ".join(wrong))
             if doc.status in SETTLED:
                 doc.settled_at = time.time()
         done = sum(d.settled_at is not None for d in by_sha.values())
         print(f"\r{done}/{len(docs)} settled", end="", flush=True)
         time.sleep(3)
     print()
+
+
+_ADDRESS_FIELD = "supplier_address"
+
+
+def correct_address(client: httpx.Client, doc: Doc, url: str, wrong: list[str]) -> list[str]:
+    """PATCH the true seller address, as a reviewer would fix a misread emirate before approving
+    (the approval carries it to the e-invoice, ADR-0012 amendment 4). Returns what is still
+    wrong."""
+    assert doc.truth is not None
+    edit = {
+        "field": _ADDRESS_FIELD,
+        "value": str(doc.truth["context"][_TRUTH_KEYS[_ADDRESS_FIELD]]),
+        "reason": "e2e reviewer: seller address as printed on the document",
+    }
+    fixed = call(lambda: client.patch(f"{url}/fields", json=edit), f"fix address {doc.sha[:12]}")
+    if fixed.status_code != 204:
+        doc.notes.append(f"address fix refused: {fixed.status_code} {fixed.text[:120]}")
+        return wrong
+    doc.notes.append(f"corrected: {_ADDRESS_FIELD}")
+    return [name for name in wrong if name != _ADDRESS_FIELD]
 
 
 _LINE_FIELD = re.compile(r"^line_items\[(\d+)\]\.")
@@ -274,7 +298,10 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
     rows = []
     for doc in docs:
         if doc.approved and doc.status == "approved":
-            doc.notes.append("approved but no e-invoice: the post-review build failed (audit log)")
+            # `mark_failed` writes FAILED when the workflow gives up, so this one is in flight.
+            doc.notes.append(
+                "approved, still in flight at timeout (a failed build is marked failed)"
+            )
         seconds = (doc.routed_at - doc.dropped_at) if doc.routed_at else None
         rows.append(
             f"| `{doc.sha[:12]}` | {doc.kind} | {doc.route or '—'} | {doc.status} | "

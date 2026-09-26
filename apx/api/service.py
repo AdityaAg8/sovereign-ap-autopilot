@@ -161,11 +161,18 @@ def corrections_for_rows(rows: Sequence[FieldRow]) -> ReviewCorrections:
     return corrections_from_fields(latest, extracted=extracted)
 
 
+_CORRECTABLE_TOTALS = frozenset({"vat_total"})
+"""`totals_mismatch` fields a reviewer's line VAT category/rate correction can clear."""
+
+
 def refuse_totals_mismatch(route_reasons: Sequence[Mapping[str, object]] | None) -> None:
     """ADR-0012 amendment 4: raises `TotalsMismatchError` (422) while the invoice's newest
-    `policy_route` decision (`routing_record`) lists an error-severity `totals_mismatch`. No
-    review correction carries amounts and the PINT AE build refuses them, so the reviewer
-    rejects. A decision routed before the amendment carries no findings; `apply_review`
+    `policy_route` decision (`routing_record`) lists an error-severity `totals_mismatch` that
+    no review correction can clear: a line net amount, the subtotal or the total (or one with
+    no field). No correction carries amounts and the PINT AE build refuses them, so the
+    reviewer rejects. A `vat_total` finding is left alone: `check_vat` recomputes the VAT from
+    the line categories and rates a reviewer may correct, and `apply_review` re-validates after
+    the corrections. A decision routed before the amendment carries no findings; `apply_review`
     refuses the approval then (defence in depth)."""
     fields: list[str] = []
     for reason in route_reasons or ():
@@ -176,6 +183,7 @@ def refuse_totals_mismatch(route_reasons: Sequence[Mapping[str, object]] | None)
             if (
                 isinstance(finding, Mapping)
                 and finding.get("code") == ViolationCode.TOTALS_MISMATCH.value
+                and finding.get("field") not in _CORRECTABLE_TOTALS
             ):
                 fields.append(str(finding.get("field") or "totals"))
     if fields:

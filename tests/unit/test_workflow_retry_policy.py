@@ -17,7 +17,7 @@ import apx.ingest.errors
 import apx.workflows.corrections
 from apx.workflows import workflow as workflow_module
 from apx.workflows.activities import DefaultInvoiceActivities
-from apx.workflows.workflow import NON_RETRYABLE_ERRORS
+from apx.workflows.workflow import NON_RETRYABLE_ERRORS, _retry_policy
 
 _ERROR_MODULES = (
     apx.common.errors,
@@ -76,3 +76,10 @@ def test_each_activity_call_uses_its_own_policy() -> None:
         assert ast.literal_eval(policy.args[0]) == first.value
         checked += 1
     assert checked == 13  # incl. mark_failed on the failure path
+
+
+def test_the_failed_status_write_retries_without_limit_and_others_stay_capped() -> None:
+    # Cheap and idempotent: until it lands the execution stays Running (visible), instead of
+    # failing with the row still at its last in-flight status.
+    assert _retry_policy("mark_failed").maximum_attempts == 0
+    assert _retry_policy("extract").maximum_attempts == 5

@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Literal, Protocol
 
-from pydantic import JsonValue
+from pydantic import Field, JsonValue
 
 from apx.common.master import User
 from apx.common.types import BBox, Frozen, InvoiceId, Role, Route, Sha256Hex, UserId, VendorId
@@ -135,9 +135,14 @@ class InvoiceDocument(Frozen):
     filename: str
 
 
+FIELD_VALUE_MAX_LENGTH = 1000
+"""Longest value a reviewer's field edit may carry (422 beyond it); the supplier address has its
+own, tighter cap in `apx.workflows.corrections` (ADR-0012 amendment 4)."""
+
+
 class FieldEdit(Frozen):
     field: str
-    value: str
+    value: str = Field(max_length=FIELD_VALUE_MAX_LENGTH)
     reason: str
 
 

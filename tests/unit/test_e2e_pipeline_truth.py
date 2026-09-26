@@ -1,7 +1,9 @@
 """`scripts/e2e_pipeline.py`'s extracted-vs-truth check. Two scanned M5.6 invoices were reported
 "ok" yet failed PINT AE after approval: one had an OCR'd seller emirate ("Ras Al Khalaimah",
 ibr-143-ae), one had 26 of its 39 lines (ibr-147-ae). The check now compares the seller address
-and the line count too, and an approval of such values is noted in the report."""
+and the line count too. The driver corrects a misread seller address through the fields API before
+approving, as a reviewer would (ADR-0012 amendment 4), and notes an accepted approval of values no
+correction reaches."""
 
 from __future__ import annotations
 
@@ -73,16 +75,25 @@ def test_dropped_lines_are_a_mismatch() -> None:
     assert _check(_fields(_ADDRESS, 26), _truth(39)) == "mismatch: lines (26 of 39)"
 
 
-def test_approving_values_that_differ_from_truth_is_noted() -> None:
-    posted: list[httpx.Request] = []
+def _review(approve_status: int) -> tuple[e2e.Doc, list[httpx.Request]]:
+    """One poll pass over an awaiting-review invoice whose seller emirate was misread and whose
+    lines were dropped, with the API answering the approval with `approve_status`."""
+    sent: list[httpx.Request] = []
     detail = {
         "summary": {"status": "awaiting_review", "route": "review"},
         "fields": _fields(_ADDRESS.replace("Khaimah", "Khalaimah"), 26),
     }
 
     def handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "PATCH":
+            sent.append(request)
+            edit = json.loads(request.content)
+            detail["fields"] = [*detail["fields"], {"name": edit["field"], "value": edit["value"]}]
+            return httpx.Response(204)
         if request.method == "POST":
-            posted.append(request)
+            sent.append(request)
+            if approve_status != 204:
+                return httpx.Response(approve_status, json={"detail": "cannot approve"})
             detail["summary"] = {"status": "archived", "route": "review"}
             return httpx.Response(204)
         return httpx.Response(200, json=detail)
@@ -90,5 +101,39 @@ def test_approving_values_that_differ_from_truth_is_noted() -> None:
     doc = e2e.Doc("f" * 64, Path("x.pdf"), "scanned", _truth(39))
     with httpx.Client(base_url="http://api", transport=httpx.MockTransport(handle)) as client:
         e2e.poll(client, [doc], timeout_s=30)
-    assert [json.loads(r.content) for r in posted] == [{"action": "approve"}]
-    assert doc.notes == ["approved uncorrectable: supplier_address, lines (26 of 39)"]
+    return doc, sent
+
+
+def test_the_driver_corrects_the_seller_address_like_a_reviewer_before_approving() -> None:
+    doc, sent = _review(204)
+    assert [(r.method, json.loads(r.content)) for r in sent] == [
+        (
+            "PATCH",
+            {
+                "field": "supplier_address",
+                "value": _ADDRESS,
+                "reason": "e2e reviewer: seller address as printed on the document",
+            },
+        ),
+        ("POST", {"action": "approve"}),
+    ]
+    # Only what no correction reaches is noted, and only once the approval was accepted.
+    assert doc.notes == ["corrected: supplier_address", "approved uncorrectable: lines (26 of 39)"]
+
+
+def test_a_refused_approval_is_not_noted_as_approved() -> None:
+    doc, _ = _review(422)
+    assert not doc.approved
+    assert doc.notes[0] == "corrected: supplier_address"
+    assert doc.notes[1].startswith("approve refused: 422")
+    assert not any(n.startswith("approved uncorrectable") for n in doc.notes)
+
+
+def test_an_invoice_still_approved_at_timeout_is_reported_in_flight(tmp_path: Path) -> None:
+    detail = {"summary": {"status": "approved", "route": "review"}, "fields": []}
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=detail))
+    doc = e2e.Doc("f" * 64, Path("x.pdf"), "scanned", None)
+    doc.approved, doc.status = True, "approved"
+    with httpx.Client(base_url="http://api", transport=transport) as client:
+        e2e.report([doc], client, tmp_path / "report.md")
+    assert doc.notes == ["approved, still in flight at timeout (a failed build is marked failed)"]

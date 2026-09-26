@@ -99,6 +99,8 @@ export interface InvoiceDetail {
 
 export interface FieldEdit {
   field: string;
+  /** At most 1,000 characters (the API answers 422 beyond that); a reviewer's supplier_address
+   * is refused on approval above 500 characters or with control characters (ADR-0012 amdt 4). */
   value: string;
   reason: string;
 }
