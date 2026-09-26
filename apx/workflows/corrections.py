@@ -1,6 +1,7 @@
 """Reviewer corrections of the ADR-0012 values (document kind, currency, per-line VAT category
-and rate). They travel as ordinary `fields` rows, fixed through the existing field-edit flow,
-and reach the workflow typed inside the `review` signal. Pure: safe to import from workflow code."""
+and rate) and of a supplier address that names no UAE emirate. They travel as ordinary `fields`
+rows, fixed through the existing field-edit flow, and reach the workflow typed inside the
+`review` signal. Pure: safe to import from workflow code."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from typing import Final
 from apx.common.errors import ApxError
 from apx.common.invoice import Invoice, InvoiceKind, VatCategory
 from apx.common.types import Frozen, Money
+from apx.validate.address import resolve_emirate
 from apx.validate.interfaces import vat_rate_fits_category
 
 KIND_FIELD: Final[str] = "invoice_type_code"
@@ -29,6 +31,9 @@ _DOCUMENT_CURRENCY: Final[str] = "AED"
 _LINE_FIELD = re.compile(r"^line_items\[(\d+)\]\.(vat_category|vat_rate)$")
 SUPPLIER_TRN_FIELD: Final[str] = "supplier_trn"
 """The grounded supplier TRN (`FieldName.SUPPLIER_TRN`): BT-31 and the seller EndpointID."""
+SUPPLIER_ADDRESS_FIELD: Final[str] = "supplier_address"
+"""The grounded supplier address (`FieldName.SUPPLIER_ADDRESS`): BT-35, and through its emirate
+the seller city and country subdivision (BT-37, BT-39; ADR-0012 amendment 4)."""
 
 
 def kind_value(kind: InvoiceKind | None) -> str | None:
@@ -57,6 +62,13 @@ class SupplierTrnMissingError(MissingCorrectionsError):
     """Approval refused: the document has no supplier TRN. The e-invoice needs it (BT-31, the
     BT-34 EndpointID) and a reviewer's field edit cannot supply it (the workflow builds from the
     extracted invoice), so the approval would only fail at the build. 422, nothing recorded."""
+
+
+class TotalsMismatchError(MissingCorrectionsError):
+    """Approval refused: validation found line or document amounts that do not add up
+    (`totals_mismatch`). No correction carries amounts and the PINT AE build refuses them
+    (`ibr-147-ae` and the totals rules), so the reviewer rejects instead. 422, nothing recorded
+    (ADR-0012 amendment 4)."""
 
 
 class CurrencyRelabelError(MissingCorrectionsError):
@@ -93,6 +105,10 @@ class ReviewCorrections(Frozen):
     kind: InvoiceKind
     currency: str
     lines: tuple[LineCorrection, ...]
+    supplier_address: str | None = None
+    """The reviewer's supplier address, set only when it differs from the extracted one; None
+    keeps the invoice's own. Optional with a default so review signals recorded before ADR-0012
+    amendment 4 still deserialize on replay."""
 
 
 def _rate(raw: str) -> Decimal | None:
@@ -113,7 +129,9 @@ def corrections_from_fields(
     rate that does not fit its category (so the approval is refused before anything is
     recorded). `extracted` holds the model-sourced values the workflow's invoice was built from:
     a missing supplier TRN raises `SupplierTrnMissingError`, and a currency override that
-    relabels a valid extracted code as AED raises `CurrencyRelabelError`."""
+    relabels a valid extracted code as AED raises `CurrencyRelabelError`. The supplier address
+    (the latest value, a reviewer's winning) must name a UAE emirate; a reviewer's address that
+    differs from the extracted one is carried as `supplier_address`."""
     if not (extracted.get(SUPPLIER_TRN_FIELD) or "").strip():
         raise SupplierTrnMissingError(
             "cannot approve: the document has no supplier TRN (BT-31); a reviewer's edit of "
@@ -133,6 +151,12 @@ def corrections_from_fields(
         problems.append(f"{CURRENCY_FIELD} (must be AED, got {currency})")
     elif (relabel := currency_relabel(extracted.get(CURRENCY_FIELD), currency)) is not None:
         raise CurrencyRelabelError(f"cannot approve: {relabel}")
+    address = (values.get(SUPPLIER_ADDRESS_FIELD) or "").strip()
+    address_problem = resolve_emirate(address) is None
+    if address_problem:
+        # The builder takes the seller city and subdivision from this emirate (ibr-143-ae), so
+        # approving without one would only fail at the e-invoice build.
+        problems.append(SUPPLIER_ADDRESS_FIELD)
     indices = sorted(
         {int(m.group(1)) for name in values if (m := _LINE_FIELD.match(name)) is not None}
     )
@@ -155,14 +179,25 @@ def corrections_from_fields(
         elif category is not None and rate is not None:
             lines.append(LineCorrection(index=index, vat_category=category, vat_rate=rate))
     if problems or kind is None:
-        raise MissingCorrectionsError(
-            "cannot approve: correct these fields first: " + ", ".join(problems)
+        why = (
+            "the supplier address names no UAE emirate (PINT AE ibr-143-ae); "
+            if address_problem
+            else ""
         )
-    return ReviewCorrections(kind=kind, currency=currency, lines=tuple(lines))
+        raise MissingCorrectionsError(
+            f"cannot approve: {why}correct these fields first: " + ", ".join(problems)
+        )
+    corrected_address = (
+        address if address != (extracted.get(SUPPLIER_ADDRESS_FIELD) or "").strip() else None
+    )
+    return ReviewCorrections(
+        kind=kind, currency=currency, lines=tuple(lines), supplier_address=corrected_address
+    )
 
 
 def apply_corrections(invoice: Invoice, corrections: ReviewCorrections) -> Invoice:
-    """`invoice` with the reviewer's kind and line categories/rates. Every line must be covered
+    """`invoice` with the reviewer's kind, line categories/rates and, when given, supplier
+    address. Every line must be covered
     exactly once; anything else is a `MissingCorrectionsError` (never a partial apply). So is a
     currency that would relabel the invoice's valid extracted code as AED (`currency_relabel`):
     raised as the base class, which `apply_review` already lists as non-retryable."""
@@ -190,9 +225,13 @@ def apply_corrections(invoice: Invoice, corrections: ReviewCorrections) -> Invoi
         )
         for i, line in enumerate(invoice.lines, start=1)
     )
+    supplier = invoice.supplier
+    if corrections.supplier_address is not None:
+        supplier = supplier.model_copy(update={"address": corrections.supplier_address})
     return invoice.model_copy(
         update={
             "kind": corrections.kind,
+            "supplier": supplier,
             "lines": lines,
             "subtotal": money(invoice.subtotal),
             "vat_total": money(invoice.vat_total),

@@ -29,6 +29,7 @@ volumes:
   postgres-data:
   phoenix-data:
   mlflow-data:
+  temporal-data:
 
 services:
   postgres:
@@ -53,13 +54,28 @@ services:
       retries: 30
 
   temporal:
-    # Bundles the `temporal` CLI's ephemeral dev server (in-memory SQLite, frontend gRPC
-    # on 7233, Web UI on 8233) -- PRD §3 calls for "Temporal dev server", not a production
-    # cluster with its own Postgres schema.
+    # Bundles the `temporal` CLI's dev server (frontend gRPC on 7233, Web UI on 8233) -- PRD
+    # §3 calls for "Temporal dev server", not a production cluster with its own Postgres
+    # schema. Its SQLite store is a file on a named volume, not in-memory: an in-memory store
+    # dropped every in-flight workflow on `make down` or a reboot, and ingest dedupes by
+    # sha256, so those documents were never processed again. The volume is mounted on the
+    # image user's home so it starts out owned by that user (uid 1000).
     image: temporalio/temporal:1.9.1
     restart: unless-stopped
     entrypoint: ["temporal"]
-    command: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8233"]
+    command:
+      - server
+      - start-dev
+      - --ip
+      - 0.0.0.0
+      - --port
+      - "7233"
+      - --ui-port
+      - "8233"
+      - --db-filename
+      - /home/temporal/temporal.db
+    volumes:
+      - temporal-data:/home/temporal
     # No `ports:` here: `app` is internal, so a direct publish never worked (see the network
     # comment above). The Web UI (8233) is reachable from the host through `gateway`; the
     # gRPC frontend (7233) is for in-network clients only (the `api` and `worker` services).

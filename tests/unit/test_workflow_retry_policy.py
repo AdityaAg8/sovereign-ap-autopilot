@@ -75,4 +75,4 @@ def test_each_activity_call_uses_its_own_policy() -> None:
         assert isinstance(policy, ast.Call), first.value
         assert ast.literal_eval(policy.args[0]) == first.value
         checked += 1
-    assert checked == 12
+    assert checked == 13  # incl. mark_failed on the failure path

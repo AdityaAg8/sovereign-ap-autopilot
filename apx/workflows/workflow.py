@@ -84,6 +84,18 @@ def _retry_policy(activity: str) -> RetryPolicy:
     )
 
 
+def _failure_text(exc: BaseException) -> str:
+    """The failure and its cause chain, innermost last: an `ActivityError` only says "Activity
+    task failed"; the typed `apx` error (its `ApplicationError` type and message) is the cause."""
+    parts: list[str] = []
+    current: BaseException | None = exc
+    while current is not None and len(parts) < 5:
+        kind = getattr(current, "type", None) or type(current).__name__
+        parts.append(f"{kind}: {current}")
+        current = current.__cause__
+    return " <- ".join(parts)
+
+
 _ACTIVITY_TIMEOUT = timedelta(minutes=5)
 """Generous enough for an LLM-backed extract/arbiter call; tightened per-activity once M3/M7
 land real latency numbers."""
@@ -100,6 +112,9 @@ REVIEW_CORRECTIONS_PATCH = "adr12-review-corrections"
 """`workflow.patched` id: histories recorded before ADR-0012 replay without apply_review."""
 REVIEW_NOTE_PATCH = "m9-review-note"
 """`workflow.patched` id: histories recorded before M9.3 replay without the review-note step."""
+FAILED_STATUS_PATCH = "p0-failed-status"
+"""`workflow.patched` id: histories recorded before Phase 0 replay a failure without the
+`mark_failed` activity that writes FAILED to `invoices.status`."""
 PAYEE_PIN_PATCH = "adr14-payee-pin"
 """`workflow.patched` id: histories recorded before ADR-0014 §7 replay `build_einvoice` with the
 invoice alone; new executions also pass the payee pinned at routing (`RoutingDecision.payee`)."""
@@ -140,6 +155,18 @@ class InvoiceWorkflow:
             # workflow execution itself fails in Temporal (I4: nothing is silently dropped).
             self._status = InvoiceStatus.FAILED
             self._error = str(exc)
+            if workflow.patched(FAILED_STATUS_PATCH):
+                # The API and the reviewer read `invoices.status`, not this query: without the
+                # write, an invoice whose post-review build failed sat at APPROVED forever.
+                try:
+                    await workflow.execute_activity(
+                        "mark_failed",
+                        args=[inp.invoice_id, _failure_text(exc)],
+                        start_to_close_timeout=_ACTIVITY_TIMEOUT,
+                        retry_policy=_retry_policy("mark_failed"),
+                    )
+                except ActivityError:
+                    workflow.logger.error("could not record FAILED for invoice %s", inp.invoice_id)
             raise
         return self._snapshot()
 

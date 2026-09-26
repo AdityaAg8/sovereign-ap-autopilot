@@ -77,6 +77,7 @@ FIXTURES: dict[type[Any], Callable[[], object]] = {
     ArchiveRecord: fx.archive_record,
     str: fx.idempotency_key,
     bool: lambda: True,
+    type(None): lambda: None,
 }
 
 
@@ -118,6 +119,7 @@ def test_every_registered_activity_is_covered() -> None:
         "build_einvoice",
         "send_to_asp",
         "archive",
+        "mark_failed",
     }
     missing = {label: t for label, t in _boundary_types() if t not in FIXTURES}
     assert not missing, f"add a realistic fixture for {missing}"

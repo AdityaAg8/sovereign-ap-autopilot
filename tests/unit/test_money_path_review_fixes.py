@@ -177,6 +177,7 @@ _COMPLETE = {
     "currency": "AED",
     "line_items[1].vat_category": "S",
     "line_items[1].vat_rate": "5",
+    "supplier_address": "Al Quoz, Dubai",
 }
 
 
@@ -237,7 +238,12 @@ def test_a_human_currency_override_to_aed_of_a_valid_code_is_refused(extracted: 
 def test_resolving_a_missing_or_unreadable_currency_is_allowed(extracted: str | None) -> None:
     values = dict(_COMPLETE)
     corrections = corrections_from_fields(
-        values, extracted={"supplier_trn": SUPPLIER_TRN, "currency": extracted}
+        values,
+        extracted={
+            "supplier_trn": SUPPLIER_TRN,
+            "currency": extracted,
+            "supplier_address": values["supplier_address"],
+        },
     )
     assert corrections.currency == "AED"
 

@@ -3,12 +3,15 @@
 dev server plus a real, throwaway Postgres container back `DefaultInvoiceActivities`'s
 idempotency-guarded `send_to_asp`/`archive` steps; every other pipeline stage is a fake (those
 modules live on their own branches). Worker 1 is shut down while `archive` is in flight; worker
-2 resumes it. Marked `integration` (needs Docker), like `tests/integration/test_migrations.py`.
+2 resumes it. Also checks `mark_failed` against the same Postgres: FAILED lands on the row
+unless it is already terminal. Marked `integration` (needs Docker), like
+`tests/integration/test_migrations.py`.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import subprocess
 import time
@@ -17,7 +20,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 import asyncpg  # type: ignore[import-untyped]
 import pytest
@@ -51,7 +54,7 @@ from apx.policy.interfaces import (
 from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import FieldFeatures, TrustDecision
 from apx.validate.interfaces import ValidationReport
-from apx.workflows.activities import InvoiceActivityDeps
+from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
 from apx.workflows.idempotency import SqlIdempotencyStore
 from apx.workflows.interfaces import InvoiceStatus, InvoiceWorkflowInput
 from apx.workflows.sql import SqlInvoiceRecords
@@ -491,3 +494,72 @@ async def test_crash_mid_archive_then_restart_completes_exactly_once(
         ).all()
         assert len(asp_rows) == 1
         assert len(archive_rows) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (DbInvoiceStatus.APPROVED, DbInvoiceStatus.FAILED),  # post-review build failed
+        (DbInvoiceStatus.SENT, DbInvoiceStatus.SENT),  # the ASP already has it
+        (DbInvoiceStatus.BLOCKED, DbInvoiceStatus.BLOCKED),
+    ],
+)
+async def test_mark_failed_writes_failed_but_never_overwrites_a_terminal_status(
+    session_factory: SessionFactory,
+    before: DbInvoiceStatus,
+    after: DbInvoiceStatus,
+) -> None:
+    # One row per case: the Postgres container is shared by every test in this module.
+    invoice_id = InvoiceId(hashlib.sha256(before.value.encode()).hexdigest())
+    async with session_factory() as session:
+        session.add(
+            InvoiceRow(
+                id=invoice_id,
+                document_sha256=invoice_id,
+                language=Language.EN,
+                number="INV-F",
+                issue_date=date(2026, 1, 1),
+                currency="AED",
+                subtotal=Decimal("100.00"),
+                vat_total=Decimal("5.00"),
+                total=Decimal("105.00"),
+                status=before,
+            )
+        )
+    audit = FakeAuditLog()
+    unused = cast(Any, None)
+    activities = DefaultInvoiceActivities(
+        InvoiceActivityDeps(
+            documents=unused,
+            scanner=unused,
+            parser=unused,
+            parsed=unused,
+            extraction=unused,
+            invoices=unused,
+            feature_builder=unused,
+            trust_gate=unused,
+            validator=unused,
+            fraud_engine=unused,
+            vendors=unused,
+            policy_engine=unused,
+            ubl_builder=unused,
+            schematron=unused,
+            asp_client=unused,
+            archive=unused,
+            audit=audit,
+            records=SqlInvoiceRecords(session_factory),
+            session_factory=session_factory,
+            idempotency=SqlIdempotencyStore(),
+        )
+    )
+
+    await activities.mark_failed(invoice_id, "SchematronFailedError: ibr-147-ae")
+
+    async with session_factory() as session:
+        row = await session.get(InvoiceRow, invoice_id)
+        assert row is not None
+        assert row.status is after
+    assert [(e.action, e.payload) for e in audit.events] == [
+        ("activity:failed", {"error": "SchematronFailedError: ibr-147-ae"})
+    ]

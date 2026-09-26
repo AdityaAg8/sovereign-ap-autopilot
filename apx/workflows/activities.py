@@ -93,10 +93,23 @@ _CLASSIFICATION_CODES = frozenset(
 category/rate mismatch is included: the builder refuses it (an E/O line with a non-zero rate
 would otherwise lose its VAT), so approving it would only fail later, at the build."""
 
-_UNREVIEWABLE_CODES = frozenset({ViolationCode.MISSING_MANDATORY})
-"""Values an approved review cannot supply (no correction carries them, e.g. a missing supplier
-TRN) and the e-invoice build refuses. `apply_review` stops them before the build; the API
-already refuses such an approval (`SupplierTrnMissingError`), so this is defence in depth."""
+_UNREVIEWABLE_CODES = frozenset({ViolationCode.MISSING_MANDATORY, ViolationCode.TOTALS_MISMATCH})
+"""Errors the e-invoice build refuses that `apply_review` stops before it, re-checked after the
+corrections: a missing supplier TRN (no correction carries it), a supplier address naming no
+emirate (a corrected address clears it; ADR-0012 amendment 4) and amounts that do not add up
+(no correction carries amounts). The API already refuses such approvals
+(`MissingCorrectionsError` and its subclasses), so this is defence in depth."""
+
+_NEVER_MARKED_FAILED = (
+    DbInvoiceStatus.SENT,
+    DbInvoiceStatus.ARCHIVED,
+    DbInvoiceStatus.BLOCKED,
+    DbInvoiceStatus.FAILED,
+)
+"""Terminal statuses `mark_failed` leaves alone: the invoice already reached the ASP, was kept
+out of payment on purpose, or is already FAILED."""
+_FAILED_ERROR_CHARS = 2000
+"""The failure message is audited; a long activity error chain is cut to this length."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,7 +289,8 @@ class DefaultInvoiceActivities:
     @activity.defn(name="apply_review")
     async def apply_review(self, invoice: Invoice, corrections: ReviewCorrections) -> Invoice:
         """ADR-0012 amendment: the approved reviewer corrections (kind, line VAT category and
-        rate) applied to the invoice before it is re-validated and turned into an e-invoice."""
+        rate, supplier address) applied to the invoice before it is re-validated and turned
+        into an e-invoice."""
         corrected = apply_corrections(invoice, corrections)
         # Re-validated here, not via the `validate` activity, which would move the row's status
         # back from APPROVED. A classified value still unresolved is a non-retryable failure.
@@ -528,3 +542,21 @@ class DefaultInvoiceActivities:
             {"xml_sha256": record.xml_sha256, "retain_until": record.retain_until.isoformat()},
         )
         return record
+
+    @activity.defn(name="mark_failed")
+    async def mark_failed(self, invoice_id: str, error: str) -> None:
+        """Writes FAILED to `invoices.status` once the workflow gives up (I4: nothing silently
+        dropped), so the API and the review queue stop showing it as in flight. A terminal
+        status is never overwritten: a SENT invoice whose archive failed stays SENT, since the
+        ASP already has it. Idempotent; a run that failed before the invoice row existed
+        updates nothing and is still audited."""
+        async with self._deps.session_factory() as session:
+            await session.execute(
+                update(InvoiceRow)
+                .where(
+                    InvoiceRow.id == invoice_id,
+                    InvoiceRow.status.not_in(_NEVER_MARKED_FAILED),
+                )
+                .values(status=DbInvoiceStatus.FAILED)
+            )
+        await self._audit("failed", invoice_id, {"error": error[:_FAILED_ERROR_CHARS]})

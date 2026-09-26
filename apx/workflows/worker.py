@@ -59,6 +59,7 @@ def build_worker(client: Client, deps: InvoiceActivityDeps, task_queue: str = TA
             activities.build_einvoice,
             activities.send_to_asp,
             activities.archive,
+            activities.mark_failed,
         ],
     )
 

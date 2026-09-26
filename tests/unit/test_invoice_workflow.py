@@ -152,6 +152,7 @@ class FakeInvoiceActivities:
     review_note_fails: bool = False
     received_refs: dict[str, ParsedDocumentRef] = field(default_factory=dict)
     extract_error: Exception | None = None
+    failures: list[tuple[str, str]] = field(default_factory=list)
 
     @activity.defn(name="scan")
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport:
@@ -233,6 +234,11 @@ class FakeInvoiceActivities:
         self.received_keys["archive"] = key
         return _archive_record(key)
 
+    @activity.defn(name="mark_failed")
+    async def mark_failed(self, invoice_id: str, error: str) -> None:
+        self.calls.append("mark_failed")
+        self.failures.append((invoice_id, error))
+
 
 def _activities(fake: FakeInvoiceActivities) -> Sequence[Callable[..., object]]:
     return [
@@ -248,6 +254,7 @@ def _activities(fake: FakeInvoiceActivities) -> Sequence[Callable[..., object]]:
         fake.build_einvoice,
         fake.send_to_asp,
         fake.archive,
+        fake.mark_failed,
     ]
 
 
@@ -475,6 +482,11 @@ async def test_deterministic_errors_are_not_retried(
 
     assert fake.calls.count("extract") == attempts
     assert "trust_gate" not in fake.calls
+    # The API reads `invoices.status`, so the failure is written there too, exactly once.
+    assert fake.calls[-1] == "mark_failed"
+    assert [invoice_id for invoice_id, _ in fake.failures] == [INVOICE_ID]
+    # The typed cause, not the bare "Activity task failed" of the ActivityError around it.
+    assert f"{type(error).__name__}: {error}" in fake.failures[0][1]
 
 
 @pytest.mark.asyncio

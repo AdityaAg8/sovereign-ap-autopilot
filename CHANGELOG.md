@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Temporal's dev server kept its store in memory, so `make down` or a reboot dropped every in-flight workflow, and because ingest dedupes by sha256 those documents were never processed again. The store is now a SQLite file on the `temporal-data` volume.
+- A failed workflow now writes FAILED to `invoices.status` (new `mark_failed` activity, patched in as `p0-failed-status`) and audits the typed root cause. Before, only the workflow's in-memory status changed, so an invoice whose post-review build failed schematron showed as `approved` indefinitely. Terminal statuses (sent, archived, blocked) are never overwritten.
 - Worker crash-loop: `apx/extract/identity.py` imports PyYAML, which was only a dev dependency, so the `--no-dev` app image died on import and processed nothing. PyYAML is now a runtime dependency; a new unit test fails if any `apx/` import is missing from the runtime dependency closure.
 - The inbox watcher ingests files already waiting when it starts (files dropped while the worker was down were never picked up); ingest dedupes by sha256.
 - Host-run GPU evals (bake-off, cal rows, Extractor A/B evals) could not reach the parse service: `gateway` now proxies it on loopback `127.0.0.1:8010` for those targets only (ADR-0001 amendment 2); the runtime path is unchanged.

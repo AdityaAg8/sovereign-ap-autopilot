@@ -1,7 +1,9 @@
 """End-to-end pipeline check (PRD §10 M5.6): drops a fixed set of factory invoices (plus attack
 PDFs) into the running stack's inbox, approves the ones routed to review through the API the
 way a reviewer would, waits for each to settle, and writes `reports/e2e_pipeline.md` with every
-invoice's route, final status, timing and extracted-vs-truth check. Needs `make up` and
+invoice's route, final status, timing and extracted-vs-truth check (header fields, seller address
+and line count; an approval of values that differ from truth is noted, as the API has no
+correction that reaches the e-invoice for them). Needs `make up` and
 `make seed` first; talks to the API through the gateway only. Every API call is retried with
 backoff on timeouts, transport errors and 5xx (the API is shared with a GPU-bound worker under
 load); a call that still fails after the retries ends the run with that error. An expired access
@@ -15,6 +17,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import statistics
 import sys
@@ -185,7 +188,8 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
             if response.status_code == 404:
                 continue
             response.raise_for_status()
-            summary = response.json()["summary"]
+            detail = response.json()
+            summary = detail["summary"]
             doc.status, doc.route = summary["status"], summary["route"]
             if doc.route and doc.routed_at is None:
                 doc.routed_at = time.time()
@@ -194,6 +198,13 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
                 doc.settled_at = time.time()
                 continue
             if doc.status == "awaiting_review" and not doc.approved:
+                if doc.truth is not None and (
+                    wrong := truth_mismatches(field_values(detail), doc.truth)
+                ):
+                    # A real reviewer would fix these first, but no API correction reaches the
+                    # e-invoice for them (a fix-field row is recorded for learning only; the
+                    # approval carries just kind, currency and line VAT): approved as extracted.
+                    doc.notes.append("approved uncorrectable: " + ", ".join(wrong))
                 decided = call(
                     lambda url=url: client.post(f"{url}/decisions", json={"action": "approve"}),
                     f"approve {doc.sha[:12]}",
@@ -210,34 +221,60 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
     print()
 
 
+_LINE_FIELD = re.compile(r"^line_items\[(\d+)\]\.")
+_TRUTH_KEYS = {  # extracted field name -> truth context key
+    "invoice_number": "invoice_number",
+    "supplier_trn": "supplier_trn",
+    "supplier_address": "supplier_address_en",
+    "total": "total",
+}
+
+
+def field_values(detail: dict[str, Any]) -> dict[str, str]:
+    """The latest value of each field in an `/invoices/{id}` detail (rows arrive in id order)."""
+    return {f["name"]: (f["value"] or "").strip() for f in detail.get("fields", [])}
+
+
+def truth_mismatches(values: dict[str, str], truth: dict[str, Any]) -> list[str]:
+    """Extracted values that differ from the truth file: the header fields a reviewer reads
+    (the seller address included: the e-invoice needs its emirate) and the number of lines
+    (line field rows are named `line_items[N].*`, 1-based)."""
+    context = truth["context"]
+    wrong = [
+        name
+        for name, key in _TRUTH_KEYS.items()
+        if not _same(name, values.get(name, ""), str(context[key]))
+    ]
+    indices = {int(m.group(1)) for name in values if (m := _LINE_FIELD.match(name))}
+    if len(indices) != len(context["lines"]):
+        wrong.append(f"lines ({len(indices)} of {len(context['lines'])})")
+    return wrong
+
+
 def check_fields(client: httpx.Client, doc: Doc) -> str:
     if doc.truth is None:
         return "n/a"
     response = call(lambda: client.get(f"/invoices/{doc.sha}"), f"fields {doc.sha[:12]}")
     if response.status_code != 200:
         return "no record"
-    values = {f["name"]: (f["value"] or "").strip() for f in response.json().get("fields", [])}
-    context = doc.truth["context"]
-    wrong = [
-        name
-        for name in ("invoice_number", "supplier_trn", "total")
-        if not _same(name, values.get(name, ""), str(context[name]))
-    ]
+    wrong = truth_mismatches(field_values(response.json()), doc.truth)
     return "ok" if not wrong else "mismatch: " + ", ".join(wrong)
 
 
 def _same(name: str, got: str, expected: str) -> bool:
-    if name != "total":
-        return got == expected
-    try:
-        return Decimal(got.replace(",", "").replace(" ", "")) == Decimal(expected)
-    except InvalidOperation:
-        return False
+    if name == "total":
+        try:
+            return Decimal(got.replace(",", "").replace(" ", "")) == Decimal(expected)
+        except InvalidOperation:
+            return False
+    return " ".join(got.split()) == " ".join(expected.split())
 
 
 def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
     rows = []
     for doc in docs:
+        if doc.approved and doc.status == "approved":
+            doc.notes.append("approved but no e-invoice: the post-review build failed (audit log)")
         seconds = (doc.routed_at - doc.dropped_at) if doc.routed_at else None
         rows.append(
             f"| `{doc.sha[:12]}` | {doc.kind} | {doc.route or '—'} | {doc.status} | "

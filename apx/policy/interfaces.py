@@ -31,7 +31,7 @@ from apx.common.types import (
 from apx.fraud.interfaces import FraudReport
 from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import TrustDecision
-from apx.validate.interfaces import ValidationReport
+from apx.validate.interfaces import ValidationReport, ViolationCode
 
 ProposalKind = Literal["edit_field", "route", "request_info", "approve_payment", "change_bank"]
 ProposalOrigin = Literal["agent", "chat", "mcp"]
@@ -154,6 +154,15 @@ class RoutedPayee(Frozen):
     """SHA-256 (hex) of `Payee.iban` in electronic format, UTF-8."""
 
 
+class ValidationFinding(Frozen):
+    """An error-severity violation behind a VALIDATION reason: the validator's code and field
+    path, both system text (never document text or amounts). Persisted with the routing
+    decision so the API can refuse an approval no correction can fix (ADR-0012 amendment 4)."""
+
+    code: ViolationCode
+    field: str | None
+
+
 class PolicyReason(Frozen):
     rule: PolicyRule
     route: Route
@@ -163,6 +172,9 @@ class PolicyReason(Frozen):
     """Set on a P1 reason when `select_payee` refused (ADR-0014)."""
     payee_match: PayeeMatch | None = None
     """Set on a P1 reason raised for a non-trivial payee selection (ADR-0014)."""
+    violations: tuple[ValidationFinding, ...] = ()
+    """Set on a VALIDATION reason: its error-severity violations (ADR-0012 amendment 4). The
+    default keeps route results recorded before it deserializable on workflow replay."""
 
 
 class RoutingInput(Frozen):
@@ -478,6 +490,10 @@ def reasons_payload(reasons: tuple[PolicyReason, ...]) -> list[JsonValue]:
             item["payee_refusal"] = r.payee_refusal.value
         if r.payee_match is not None:
             item["payee_match"] = r.payee_match.value
+        if r.violations:
+            item["violations"] = [
+                {"code": finding.code.value, "field": finding.field} for finding in r.violations
+            ]
         payload.append(item)
     return payload
 

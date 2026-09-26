@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
 
@@ -83,7 +83,13 @@ from apx.policy.writer import (
     load_vendor,
     proposal_model,
 )
-from apx.workflows.corrections import ReviewCorrections, corrections_from_fields
+from apx.validate.interfaces import ViolationCode
+from apx.workflows.corrections import (
+    SUPPLIER_ADDRESS_FIELD,
+    ReviewCorrections,
+    TotalsMismatchError,
+    corrections_from_fields,
+)
 from apx.workflows.interfaces import InvoiceStatus
 
 _TERMINAL_STATUSES = frozenset(
@@ -137,20 +143,47 @@ def corrections_for_rows(rows: Sequence[FieldRow]) -> ReviewCorrections:
     """`corrections_from_fields` over an invoice's field rows in id order: the latest value of
     each field with a reviewer's row winning, plus the latest model-sourced values, which are
     what the workflow's `Invoice` was built from (a human row never reaches it). Those are the
-    normalized values only, as `GroundedInvoiceBuilder` reads supplier TRN and currency."""
+    normalized values, as `GroundedInvoiceBuilder` reads supplier TRN and currency, except the
+    supplier address, which it reads raw (so an unedited address is never a "correction")."""
     latest: dict[str, str | None] = {}
     extracted: dict[str, str | None] = {}
     human: set[str] = set()
     for row in rows:
         is_human = row.source is FieldSource.HUMAN
+        raw_read = row.name == SUPPLIER_ADDRESS_FIELD
         if not is_human:
-            extracted[row.name] = row.normalized_value
+            extracted[row.name] = row.value if raw_read else row.normalized_value
         if row.name in human and not is_human:
             continue
-        latest[row.name] = row.normalized_value or row.value
+        latest[row.name] = row.value if raw_read else (row.normalized_value or row.value)
         if is_human:
             human.add(row.name)
     return corrections_from_fields(latest, extracted=extracted)
+
+
+def refuse_totals_mismatch(route_reasons: Sequence[Mapping[str, object]] | None) -> None:
+    """ADR-0012 amendment 4: raises `TotalsMismatchError` (422) while the invoice's newest
+    `policy_route` decision (`routing_record`) lists an error-severity `totals_mismatch`. No
+    review correction carries amounts and the PINT AE build refuses them, so the reviewer
+    rejects. A decision routed before the amendment carries no findings; `apply_review`
+    refuses the approval then (defence in depth)."""
+    fields: list[str] = []
+    for reason in route_reasons or ():
+        findings = reason.get("violations")
+        if not isinstance(findings, list):
+            continue
+        for finding in findings:
+            if (
+                isinstance(finding, Mapping)
+                and finding.get("code") == ViolationCode.TOTALS_MISMATCH.value
+            ):
+                fields.append(str(finding.get("field") or "totals"))
+    if fields:
+        raise TotalsMismatchError(
+            "cannot approve: validation found amounts that do not add up "
+            f"({', '.join(fields)}); no correction can change them and the PINT AE e-invoice "
+            "would be refused, so reject the invoice"
+        )
 
 
 class DbInvoiceService:
@@ -454,8 +487,18 @@ class DbInvoiceService:
         carries to the workflow, read from the invoice's field rows (a reviewer's fix-field row
         wins over the model's). Raises `MissingCorrectionsError` (422) while any is missing, so
         an approval can never reach the e-invoice step with an unresolved value. Its subclasses
-        `SupplierTrnMissingError` and `CurrencyRelabelError` refuse what no review can fix."""
+        `TotalsMismatchError` (read from the newest routing decision), `SupplierTrnMissingError`
+        and `CurrencyRelabelError` refuse what no review can fix."""
         async with get_session() as session:
+            route_reasons = await session.scalar(
+                select(Decision.reasons)
+                .where(
+                    Decision.invoice_id == invoice_id,
+                    Decision.action == DecisionAction.POLICY_ROUTE,
+                )
+                .order_by(Decision.created_at.desc(), Decision.id.desc())
+                .limit(1)
+            )
             rows = (
                 (
                     await session.execute(
@@ -467,6 +510,7 @@ class DbInvoiceService:
                 .scalars()
                 .all()
             )
+        refuse_totals_mismatch(route_reasons)
         return corrections_for_rows(rows)
 
     async def _approving_proposal_invoice(self, proposal_id: str) -> InvoiceId | None:
