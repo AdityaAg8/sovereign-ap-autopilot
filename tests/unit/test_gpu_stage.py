@@ -244,7 +244,15 @@ async def test_parse_page_calls_run_inside_the_gate(monkeypatch: pytest.MonkeyPa
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(scheduler.active)
         return httpx.Response(
-            200, json={"width_px": 10, "height_px": 10, "words": [], "lines": [], "tables": []}
+            200,
+            json={
+                "width_px": 10,
+                "height_px": 10,
+                "words": [],
+                "lines": [],
+                "tables": [],
+                "truncated": False,
+            },
         )
 
     real = httpx.AsyncClient

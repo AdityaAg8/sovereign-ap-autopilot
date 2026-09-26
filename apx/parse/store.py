@@ -33,11 +33,17 @@ def _page_file(position: int) -> str:
 def canonical_manifest(document: ParsedDocument) -> bytes:
     """The stored form of `document` minus its page images, which are referenced by sha256.
     Canonical (sorted keys, sorted languages) so the same parse hashes identically in every
-    process regardless of set iteration order; its sha256 is the ref's `content_sha256`."""
+    process regardless of set iteration order; its sha256 is the ref's `content_sha256`. A page's
+    `truncated` key is written only when True, so every parse without a truncated page hashes
+    exactly as it did before the flag existed (stored refs stay valid and re-parses match them)."""
     stripped = document.model_copy(
         update={"pages": tuple(p.model_copy(update={"image_png": b""}) for p in document.pages)}
     )
     body: dict[str, JsonValue] = stripped.model_dump(mode="json")
+    pages = body["pages"]
+    for page in pages if isinstance(pages, list) else ():
+        if isinstance(page, dict) and page.get("truncated") is False:
+            del page["truncated"]
     languages: list[JsonValue] = [language.value for language in sorted(document.languages)]
     body["languages"] = languages
     manifest: dict[str, JsonValue] = {

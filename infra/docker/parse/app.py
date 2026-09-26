@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
-from typing import Annotated, Any, Final, Protocol
+from typing import Annotated, Any, Final, NamedTuple, Protocol
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
@@ -42,11 +42,18 @@ _UPSCALE_THRESHOLD_PX: Final[int] = 1500
 _MAX_PIXELS: Final[int] = 2048 * 28 * 28
 _MIN_PIXELS_FALLBACK: Final[int] = 56 * 56
 MAX_NEW_TOKENS_ENV: Final[str] = "PARSE_MAX_NEW_TOKENS"
-DEFAULT_MAX_NEW_TOKENS: Final[int] = 1024
-"""Decode budget per page. The checkpoint's `config.json` ships `use_cache: false`, which made
-decoding crawl at ~1 token/s (reports/parse.md); generation now passes `use_cache=True`, and the
-budget is sized from the live measurement in ADR-0013. A page that needs more is cut off (a
-partial transcription; Extractor A still sees the page image), never padded or invented."""
+DEFAULT_MAX_NEW_TOKENS: Final[int] = 3072
+"""Decode budget per page (ADR-0013 amendment 1). A dense invoice table page needs ~1500-2100
+tokens (8 LOC tokens per text zone); the old 1024 cut every such page after ~65 zones. The
+checkpoint's `config.json` ships `use_cache: false`, which made decoding crawl at ~1 token/s
+(reports/parse.md), so generation passes `use_cache=True`. A page that still needs more is cut
+off and reported as `truncated`, never padded or invented."""
+REPETITION_PENALTY: Final[float] = 1.05
+"""ADR-0013 amendment 1: without it the model fell into loops ("jìjìjì...") that spent the whole
+budget; 1.05 let dense table pages finish in the live probe. A loop it cannot break is detected
+(`_looped`) and the page reported as `truncated`."""
+_LOOP_RE: Final[re.Pattern[str]] = re.compile(r"(.{1,16}?)\1{15,}", re.DOTALL)
+"""A short cycle repeated 16+ times in a row: a decoding loop, not text on an invoice."""
 _JOIN_S: Final[float] = 20.0
 
 # One recognized text zone is emitted as `<text><|LOC_a|><|LOC_b|><|LOC_c|><|LOC_d|><|LOC_e|>
@@ -61,14 +68,21 @@ _LOC_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"<\|LOC_(\d+)\|>")
 _LOC_RUN_RE: Final[re.Pattern[str]] = re.compile(r"(?:<\|LOC_\d+\|>){8}")
 
 
+class Spotting(NamedTuple):
+    """One page's raw `Spotting:` output and whether decoding stopped at the token budget."""
+
+    text: str
+    hit_limit: bool
+
+
 class Engine(Protocol):
     """What the HTTP layer needs from the model process (tests inject a fake)."""
 
     @property
     def loaded(self) -> bool: ...
 
-    def spot(self, png: bytes) -> tuple[str, float]:
-        """Raw `Spotting:` output and peak GPU GB for one page; RuntimeError on failure."""
+    def spot(self, png: bytes) -> tuple[Spotting, float]:
+        """`Spotting:` output and peak GPU GB for one page; RuntimeError on failure."""
         ...
 
     def unload(self) -> None: ...
@@ -106,7 +120,7 @@ class ChildProcessEngine:
         self._proc, self._conn = proc, parent
         return parent
 
-    def spot(self, png: bytes) -> tuple[str, float]:
+    def spot(self, png: bytes) -> tuple[Spotting, float]:
         with self._lock:
             conn = self._conn if self.loaded and self._conn is not None else self._start()
             try:
@@ -117,7 +131,8 @@ class ChildProcessEngine:
                 raise RuntimeError(f"model process died: {exc!r}") from exc
             if kind != "ok":
                 raise RuntimeError(str(payload))
-            return str(payload), float(peak)
+            text, hit_limit = payload
+            return Spotting(str(text), bool(hit_limit)), float(peak)
 
     def _stop(self) -> None:
         proc, conn = self._proc, self._conn
@@ -168,8 +183,8 @@ def _engine_main(conn: Connection) -> None:  # pragma: no cover - runs in the GP
         try:
             image = Image.open(io.BytesIO(png)).convert("RGB")
             with _vram_peak() as peak_gb:
-                text = _run_spotting(processor, model, image, max_new_tokens)
-            conn.send(("ok", text, peak_gb()))
+                spotting = _run_spotting(processor, model, image, max_new_tokens)
+            conn.send(("ok", tuple(spotting), peak_gb()))
         except Exception as exc:  # one bad page must not kill the process
             conn.send(("error", repr(exc), 0.0))
 
@@ -216,6 +231,9 @@ class ParseResponse(BaseModel):
     lines: tuple[WireLine, ...]
     tables: tuple[WireTable, ...] = ()
     peak_vram_gb: float
+    truncated: bool
+    """Transcription stopped early (decode budget reached or a repetition loop), so text on the
+    page may be missing from `words` (ADR-0013 amendment 1)."""
 
 
 @app.get("/health")
@@ -242,10 +260,10 @@ async def parse_image(image: Annotated[UploadFile, File()]) -> ParseResponse:
     buffer = io.BytesIO()
     pil_image.save(buffer, format="PNG")
     try:
-        raw_text, peak_gb = await asyncio.to_thread(get_engine().spot, buffer.getvalue())
+        spotting, peak_gb = await asyncio.to_thread(get_engine().spot, buffer.getvalue())
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    zones = _parse_spotting_output(raw_text)
+    zones = _parse_spotting_output(spotting.text)
 
     words: list[WireWord] = []
     lines: list[WireLine] = []
@@ -265,6 +283,7 @@ async def parse_image(image: Annotated[UploadFile, File()]) -> ParseResponse:
         lines=tuple(lines),
         tables=(),
         peak_vram_gb=peak_gb,
+        truncated=spotting.hit_limit or _looped(spotting.text),
     )
 
 
@@ -282,7 +301,7 @@ def _vram_peak() -> Iterator[Callable[[], float]]:  # pragma: no cover - GPU chi
 
 def _run_spotting(
     processor: Any, model: Any, image: Image.Image, max_new_tokens: int
-) -> str:  # pragma: no cover - GPU child only
+) -> Spotting:  # pragma: no cover - GPU child only
     import torch
 
     orig_w, orig_h = image.size
@@ -311,10 +330,31 @@ def _run_spotting(
     with torch.no_grad():
         # `use_cache=True` overrides the checkpoint's `use_cache: false` (see
         # DEFAULT_MAX_NEW_TOKENS): without the KV cache every token re-runs the whole prefix.
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, use_cache=True)
-    generated = outputs[0][inputs["input_ids"].shape[-1] : -1]
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            use_cache=True,
+            repetition_penalty=REPETITION_PENALTY,
+        )
+    generated = outputs[0][inputs["input_ids"].shape[-1] :]
+    configured = model.generation_config.eos_token_id
+    eos_ids = {
+        processor.tokenizer.eos_token_id,
+        *(configured if isinstance(configured, list) else [configured]),
+    }
+    finished = len(generated) > 0 and int(generated[-1]) in eos_ids
+    if finished:
+        generated = generated[:-1]
     text: str = processor.decode(generated, skip_special_tokens=False)
-    return text
+    # Not finished means generation ran into the budget: the page's transcription is cut.
+    return Spotting(text, hit_limit=not finished and len(generated) >= max_new_tokens)
+
+
+def _looped(raw: str) -> bool:
+    """Whether the spotting output (LOC tokens removed) contains a decoding loop: a cycle of 1-16
+    characters with a letter or digit in it, repeated 16+ times in a row."""
+    text = _LOC_TOKEN_RE.sub("", raw)
+    return any(any(ch.isalnum() for ch in m.group(1)) for m in _LOOP_RE.finditer(text))
 
 
 def _parse_spotting_output(raw: str) -> list[tuple[str, tuple[float, float, float, float]]]:

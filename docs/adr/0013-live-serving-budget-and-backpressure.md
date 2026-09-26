@@ -214,3 +214,92 @@ partway through a load.
 - **Worker reservation:** the `worker` Compose service reserves the NVIDIA devices with
   `capabilities: [utility]`, which gives it `nvidia-smi` and NVML but no compute. The runtime
   mounts `nvidia-smi` at `/usr/bin`, which stays on the apx image's `PATH`.
+
+## Amendment 1 (2026-09-26): one Extractor A slot, and no silent OCR truncation (M5.6 e2e)
+
+Two invoices from the M5.6 e2e run lost line items before any reviewer saw them. Both were
+replayed from their cached parses on the live stack (llama.cpp build 11096, PaddleOCR-VL-1.6).
+
+**Evidence.**
+
+| Invoice | What was replayed | Result |
+|---|---|---|
+| `1b5ce207483b` (AR-first, born-digital, 29 lines) | Extractor A alone, 3 runs | 29/29 lines kept, IBAN read, 1783 output tokens, identical every run |
+| same | A, two requests decoding at once, 3 rounds (same document twice) | 0/29 lines kept: every `quantity` is `""`, so `_line` drops each line; IBAN `null` on one of the two slots |
+| same | A, paired with another invoice (`fbf2cc1d12b3`) | 0/29 lines kept (quantities `""`) |
+| same | Extractor B, alone and paired | 29/29 both ways (2789 vs 2790 tokens) |
+| `13e9e6552e94` (4-page scan, 39 lines) | parse service, page 1, budget 1024 | 1023 tokens, 2 zones: a loop ("jìjìjì…") after "TAX INVOICE" |
+| same | page 2, budget 1024 | 1019 tokens, 65 zones, stops after line 14 (lines 15-22 lost) |
+| same | page 3, budget 1024 | 1023 tokens, 71 zones, stops mid-line 34 at "48" |
+| same | pages 2 and 3, budget 3072, `repetition_penalty=1.05` | complete: 126 zones (2050 tokens) and 105 zones (1515 tokens), 31 s and 23 s |
+| same | page 1, budget 3072, `repetition_penalty=1.05` | still loops to the budget (3071 tokens, 2 zones) |
+
+The parse text passed nothing to Extractor A for lines 15-22 and 34-39, and A is shown only the
+first and last page images, so those lines were lost, and A filled the half-read line 34 with
+line 11's price. For `1b5ce207483b` the empty IBAN is what P1 later refused as
+`invoice_iban_missing`. The vendor master was right: VEND-0016 has two admin-verified accounts,
+one of them the printed IBAN, so P1 needs the invoice's IBAN to choose. The extraction eval ran A
+at `--concurrency 2` and scores no line quantities, so neither loss showed there: 5 of its 182
+documents lost the IBAN, all Arabic-first.
+
+**Decision.**
+
+1. **Extractor A serves one request at a time.** `infra/llama-swap.yaml` runs extractor-a with
+   `--ctx-size 12288 --parallel 1`, and `WORKER_EXTRACTOR_A_SLOTS` defaults to 1. The slot keeps
+   the 12288 tokens it had (prompt max 7226 + completion max 2712), so `PromptSettings` does not
+   change. Halving the total context halves A's KV cache, so the A stage's 7.2 GB need and the
+   9.5 GB stage budget can only get smaller; the needs table keeps 7.2 until re-measured. B stays
+   at `--parallel 2`: its output did not change under concurrency. `WORKER_LLM_ACTIVITY_SLOTS`
+   stays 6 (6 A calls in turn, or 3 rounds of B's 2, per stage switch).
+2. **The parse service decodes up to 3072 tokens per page with `repetition_penalty=1.05`**
+   (replaces decision 5's 1024). A page that uses the whole budget, or whose output holds a loop
+   (a 1-16 character cycle with a letter or digit, repeated 16+ times), is returned with
+   `truncated: true`. The field is required on the wire, so a service that does not send it is a
+   `ParseError`, never "complete".
+3. **A truncated page is visible and routes to review.** `Page.truncated` (default False, so old
+   stored parses load) carries the flag into `ParsedDocument`. The stored manifest writes the key
+   only when it is True, so a complete parse hashes exactly as before and every existing
+   `ParsedDocumentRef` stays valid. `activity:parse` audits `truncated_pages` (a count).
+   `trust_gate` applies `apx.trust.gate.refuse_truncated_parse`: no field is accepted, and
+   `refusal` reads `parse_truncated: OCR cut short on page(s) <n> of <pages>`, followed by any
+   refusal the gate already made. The invoice therefore routes to REVIEW on the existing
+   `trust_gate` rule; no threshold or calibration changes.
+
+**Consequences.**
+
+- Good: A's output no longer depends on what else is being decoded, and a partial OCR page can
+  no longer be auto-accepted or pass unnoticed.
+- Bad: A's throughput halves (each A call waits for the previous one). A dense scanned page now
+  takes about 23-31 s instead of 15 s, and a looping page about 47 s (inside the 120 s client
+  timeout). The ops chat and exception agent, which are aliases of A, queue behind extraction.
+- `SERVICE_PARSER_VERSION` is unchanged: a born-digital parse is byte-identical, and a stored
+  scan parse still loads. A re-parse of a scan whose stored entry was wiped now differs from its
+  ref and fails typed (`ParsedArtifactIntegrityError`), as any change to the OCR output would.
+
+**Proof.** `tests/unit/test_parse_service_app.py` (budget and penalty, truncation at the budget,
+loop detection, ordinary text is no loop), `tests/unit/test_parse_client.py` (flag carried, a
+response without it is malformed), `tests/unit/test_parsed_store.py` (complete parses hash as
+before, old manifests load, a truncated page round-trips), `tests/unit/test_parse_activities.py`
+(audit count, refusal routes to review), `tests/unit/test_trust_truncated_parse.py`.
+
+**Live verification (2026-09-26, parse, api and worker images rebuilt, llama-swap restarted).**
+
+- `13e9e6552e94` pages through `POST /parse`: page 1 `truncated: true` (2 lines, loop, 60 s);
+  page 2 complete, 126 lines ending with line 22 (30 s); page 3 complete, 105 lines ending with
+  line 39's `34,907.40` (22 s); page 4 complete (3 s).
+- `1b5ce207483b` through Extractor A at `--parallel 1`: alone, 29/29 lines and the IBAN, 1783
+  tokens. Two requests submitted at once (from the rebuilt worker, `WORKER_EXTRACTOR_A_SLOTS=1`):
+  the second waited 67 s for the slot, and both returned 29/29 lines, the IBAN and 1783 tokens.
+- Whole card with A loaded alone after the change: 8344 MiB used against about 1250 MiB idle, so
+  about 7.1 GB for A, inside the 7.2 GB need.
+- All 119 parses stored before the change load unchanged, none truncated.
+
+**Follow-ups (Phase 1).**
+
+- Show Extractor A every page image up to its prompt budget, or at least the pages the OCR cut
+  short. The 7226-token prompt max above assumed 2 images, so this needs a re-measure.
+- Score line items in the extraction eval (line count, quantity, unit price, net amount per
+  line). Today it scores only line VAT categories, so a line-level loss cannot move the field
+  error rate.
+- Page 1 of `13e9e6552e94` still loops even with the penalty. It is flagged and routed to review,
+  but its text is lost; try a lower-resolution retry of a looping page.

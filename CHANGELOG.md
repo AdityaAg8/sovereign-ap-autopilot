@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Temporal's dev server kept its store in memory, so `make down` or a reboot dropped every in-flight workflow, and because ingest dedupes by sha256 those documents were never processed again. The store is now a SQLite file on the `temporal-data` volume.
+- Extractor A lost line items and the IBAN when llama-server ran two of its requests at once (an Arabic-first invoice came back with 0 of 29 lines); it now serves one request at a time (ADR-0013 amendment 1).
+- OCR cut every page off at 1024 decode tokens without saying so, dropping the middle pages' lines on long scans. The limit is 3072 with a repetition penalty, and a page that still hits it is flagged `truncated`, audited, and sends the invoice to review.
+- Reviewers could approve invoices that were bound to fail PINT AE at build. A supplier address with no recognisable emirate (English, Arabic or official variant) is now a validation error the reviewer can correct, and approval is refused while totals that no correction can fix still mismatch (ADR-0012 amendment 4).
 - A failed workflow now writes FAILED to `invoices.status` (new `mark_failed` activity, patched in as `p0-failed-status`) and audits the typed root cause. Before, only the workflow's in-memory status changed, so an invoice whose post-review build failed schematron showed as `approved` indefinitely. Terminal statuses (sent, archived, blocked) are never overwritten.
 - Worker crash-loop: `apx/extract/identity.py` imports PyYAML, which was only a dev dependency, so the `--no-dev` app image died on import and processed nothing. PyYAML is now a runtime dependency; a new unit test fails if any `apx/` import is missing from the runtime dependency closure.
 - The inbox watcher ingests files already waiting when it starts (files dropped while the worker was down were never picked up); ingest dedupes by sha256.

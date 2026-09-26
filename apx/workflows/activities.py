@@ -64,6 +64,7 @@ from apx.policy.interfaces import (
     select_payee,
 )
 from apx.scan.interfaces import Scanner, ScanReport
+from apx.trust.gate import refuse_truncated_parse
 from apx.trust.interfaces import FeatureBuilder, TrustDecision, TrustGate
 from apx.validate.interfaces import ValidationReport, Validator, ViolationCode
 from apx.workflows.corrections import (
@@ -222,13 +223,18 @@ class DefaultInvoiceActivities:
     async def parse(self, inp: InvoiceWorkflowInput) -> ParsedDocumentRef:
         """Parses and stores the document, returning only its ref: page PNGs are raw bytes and
         a multi-page parse exceeds Temporal's payload limit. Retry-safe: the store is
-        content-addressed and `put` is idempotent."""
+        content-addressed and `put` is idempotent. Pages the OCR service cut short are counted
+        in the audit (ADR-0013 amendment 1); `trust_gate` then routes the invoice to review."""
         document = await self._parse(inp.document_sha256)
         ref = self._deps.parsed.put(document)
         await self._audit(
             "parse",
             inp.invoice_id,
-            {"pages": ref.page_count, "content_sha256": ref.content_sha256},
+            {
+                "pages": ref.page_count,
+                "content_sha256": ref.content_sha256,
+                "truncated_pages": len(document.truncated_pages),
+            },
         )
         return ref
 
@@ -250,7 +256,11 @@ class DefaultInvoiceActivities:
     ) -> TrustDecision:
         document = await self._load_parsed(parsed)
         features = self._deps.feature_builder.features(result, document)
-        decision = self._deps.trust_gate.decide(features)
+        decision = refuse_truncated_parse(
+            self._deps.trust_gate.decide(features),
+            document.truncated_pages,
+            len(document.pages),
+        )
         await self._audit(
             "trust_gate",
             document.document_sha256,

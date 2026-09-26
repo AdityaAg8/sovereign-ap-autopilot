@@ -48,6 +48,10 @@ class Page(Frozen):
     tables: tuple[Table, ...]
     image_png: bytes
     """Rendered page image used by VLM extractors and page similarity."""
+    truncated: bool = False
+    """The OCR service stopped before transcribing the whole page (decode limit or a repetition
+    loop, ADR-0013 amendment 1), so `words` may miss text that is on the page. Always False for a
+    born-digital page; False by default so parses stored before the flag existed still load."""
 
 
 class ParsedDocument(Frozen):
@@ -57,6 +61,11 @@ class ParsedDocument(Frozen):
     """Line ids in reading order (RTL-aware for Arabic)."""
     languages: frozenset[Language]
     parser_version: str
+
+    @property
+    def truncated_pages(self) -> tuple[int, ...]:
+        """Indexes of the pages whose OCR transcription was cut short (`Page.truncated`)."""
+        return tuple(page.index for page in self.pages if page.truncated)
 
 
 class ParsedDocumentRef(Frozen):

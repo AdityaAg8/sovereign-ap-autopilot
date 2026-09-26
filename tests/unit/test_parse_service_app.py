@@ -74,17 +74,20 @@ def test_empty_input_yields_no_zones() -> None:
 class _FakeEngine:
     """Stands in for the GPU child process (ADR-0013: lazy load, /unload frees the GPU)."""
 
-    def __init__(self, raw: str = _REAL_SAMPLE, fail: str | None = None) -> None:
+    def __init__(
+        self, raw: str = _REAL_SAMPLE, fail: str | None = None, hit_limit: bool = False
+    ) -> None:
         self.loaded = False
         self.unloads = 0
         self._raw = raw
         self._fail = fail
+        self._hit_limit = hit_limit
 
-    def spot(self, png: bytes) -> tuple[str, float]:
+    def spot(self, png: bytes) -> tuple[object, float]:
         if self._fail is not None:
             raise RuntimeError(self._fail)
         self.loaded = True
-        return self._raw, 3.1
+        return parse_service_app.Spotting(self._raw, self._hit_limit), 3.1
 
     def unload(self) -> None:
         self.unloads += 1
@@ -115,6 +118,7 @@ def test_health_is_up_before_the_model_loads_and_unload_frees_it() -> None:
     response = client.post("/parse", files={"image": ("p.png", _png(), "image/png")})
     assert response.status_code == 200
     assert [w["text"] for w in response.json()["words"]] == ["INV-2026-", "344344", "2026-08-23"]
+    assert response.json()["truncated"] is False
     assert client.get("/health").json()["loaded"] is True
     assert client.post("/unload").json() == {"loaded": False}
     assert engine.unloads == 1
@@ -131,3 +135,41 @@ def test_undecodable_image_is_a_422() -> None:
     client = _http(_FakeEngine())
     response = client.post("/parse", files={"image": ("p.png", b"not an image", "image/png")})
     assert response.status_code == 422
+
+
+def _parse(engine: _FakeEngine) -> dict[str, object]:
+    response = _http(engine).post("/parse", files={"image": ("p.png", _png(), "image/png")})
+    assert response.status_code == 200
+    body: dict[str, object] = response.json()
+    return body
+
+
+_LOC8 = "<|LOC_1|><|LOC_2|><|LOC_3|><|LOC_4|><|LOC_5|><|LOC_6|><|LOC_7|><|LOC_8|>"
+
+
+def test_a_page_cut_at_the_decode_budget_is_reported_truncated() -> None:
+    """ADR-0013 amendment 1: the 1024-token budget silently cut dense scanned pages after ~65
+    zones; hitting the budget is now said, with the zones that did decode still returned."""
+    body = _parse(_FakeEngine(hit_limit=True))
+    assert body["truncated"] is True
+    words = body["words"]
+    assert isinstance(words, list)
+    assert [w["text"] for w in words] == ["INV-2026-", "344344", "2026-08-23"]
+
+
+def test_a_repetition_loop_is_reported_truncated_even_before_the_budget() -> None:
+    """The live 13e9e6552e94 page 1 output after "TAX INVOICE": a two-character loop."""
+    looped = _REAL_SAMPLE + "TAX INVOICE" + _LOC8 + "\n" + "jì" * 40
+    assert parse_service_app._looped(looped)
+    assert _parse(_FakeEngine(raw=looped))["truncated"] is True
+
+
+def test_ordinary_invoice_text_is_not_a_loop() -> None:
+    rows = ("1,000,000.00", "Subtotal " + "." * 40, "AE150762653845355778794")
+    text = _REAL_SAMPLE + "".join(row + _LOC8 + "\n" for row in rows)
+    assert not parse_service_app._looped(text)
+
+
+def test_decoding_settings_match_adr_0013_amendment_1() -> None:
+    assert parse_service_app.DEFAULT_MAX_NEW_TOKENS == 3072
+    assert parse_service_app.REPETITION_PENALTY == 1.05

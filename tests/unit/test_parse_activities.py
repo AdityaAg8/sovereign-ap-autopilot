@@ -108,9 +108,11 @@ class _Records:
 class _Audit:
     def __init__(self) -> None:
         self.actions: list[str] = []
+        self.payloads: dict[str, dict[str, Any]] = {}
 
     async def append(self, event: AuditEvent) -> AuditEntry:
         self.actions.append(event.action)
+        self.payloads[event.action] = dict(event.payload)
         return AuditEntry.model_validate(
             {
                 **event.model_dump(),
@@ -230,3 +232,35 @@ async def test_corrupt_entry_is_not_repaired_by_reparsing(
         await h.activities.fraud(fx.invoice(), ref)
     assert h.parser.calls == 1
     assert "activity:parse_cache_miss" not in h.audit.actions
+
+
+async def test_a_complete_parse_audits_no_truncated_page_and_leaves_the_gate_alone(
+    tmp_path: Path, document: ParsedDocument
+) -> None:
+    h = _Harness(tmp_path, document)
+    ref = await h.activities.parse(fx.workflow_input())
+
+    decision = await h.activities.trust_gate(fx.extraction_result(), ref)
+
+    assert h.audit.payloads["activity:parse"]["truncated_pages"] == 0
+    assert decision == fx.trust_decision()
+
+
+async def test_a_truncated_page_is_audited_and_routes_to_review(
+    tmp_path: Path, document: ParsedDocument
+) -> None:
+    """ADR-0013 amendment 1 (13e9e6552e94: the OCR budget cut pages 2 and 3 and 13 of 39 lines
+    were lost): a parse with a page the OCR service cut short is counted in `activity:parse`, and
+    the trust gate accepts no field, so the invoice routes to review."""
+    pages = list(document.pages)
+    pages[1] = pages[1].model_copy(update={"truncated": True})
+    h = _Harness(tmp_path, document.model_copy(update={"pages": tuple(pages)}))
+    ref = await h.activities.parse(fx.workflow_input())
+
+    decision = await h.activities.trust_gate(fx.extraction_result(), ref)
+
+    assert h.audit.payloads["activity:parse"]["truncated_pages"] == 1
+    assert not decision.all_accepted
+    assert not any(f.accepted for f in decision.fields)
+    assert decision.refusal == f"parse_truncated: OCR cut short on page(s) 2 of {fx.PAGES}"
+    assert h.audit.payloads["activity:trust_gate"]["refusal"] == decision.refusal

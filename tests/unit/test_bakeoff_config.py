@@ -62,7 +62,9 @@ def test_mtp_arm_drafts_with_its_own_head_and_challengers_run_one_slot() -> None
     models = _config()["models"]
     assert isinstance(models, dict)
     assert "--spec-type draft-mtp" in models["bakeoff-q35-9b-mtp"]["cmd"]
-    assert served_parallel(CONFIG, BASELINE.alias) == 2
+    # ADR-0013 amendment 1: the served extractor-a is one slot too (concurrent decoding on it
+    # degraded its output), so every arm now runs one request at a time.
+    assert served_parallel(CONFIG, BASELINE.alias) == 1
     for arm in ARMS[1:]:
         assert served_parallel(CONFIG, arm.alias) == 1
 

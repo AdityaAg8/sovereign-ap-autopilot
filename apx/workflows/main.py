@@ -108,9 +108,10 @@ class WorkerSettings(BaseSettings):
     llm_task_queue: str = LLM_TASK_QUEUE
     llm_activity_slots: int = Field(default=6, ge=1)
     """Concurrent extract/review_note activities (ADR-0013): the batch each GPU stage serves
-    before the next swap, i.e. 3 rounds of Extractor A's 2 slots per A<->B swap."""
-    extractor_a_slots: int = Field(default=2, ge=1)
-    """Must equal `--parallel` of extractor-a in infra/llama-swap.yaml."""
+    before the next swap, i.e. 6 calls through Extractor A's single slot (3 rounds of B's 2)."""
+    extractor_a_slots: int = Field(default=1, ge=1)
+    """Must equal `--parallel` of extractor-a in infra/llama-swap.yaml: 1 (ADR-0013 amendment 1;
+    concurrent decoding on that server degraded A's output)."""
     extractor_b_slots: int = Field(default=2, ge=1)
     """Must equal `--parallel` of extractor-b in infra/llama-swap.yaml."""
     gpu_stage_max_hold_s: float = Field(default=300.0, gt=0)

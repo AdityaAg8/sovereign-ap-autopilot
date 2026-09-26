@@ -59,6 +59,9 @@ class _WireParseResponse(Frozen):
     tables: tuple[_WireTable, ...] = ()
     peak_vram_gb: float | None = Field(default=None, ge=0.0)
     """The service's per-page GPU peak (infra/docker/parse `ParseResponse`); telemetry only."""
+    truncated: bool
+    """The service stopped transcribing this page early (decode limit or repetition loop). No
+    default: a service that does not say is a contract mismatch (`ParseError`), never "complete"."""
 
 
 logger = structlog.get_logger(__name__)
@@ -135,6 +138,10 @@ class ParseServiceClient:
                 f"{document_sha256}: {exc}"
             ) from exc
 
+        if wire.truncated:
+            logger.warning(
+                "parse_page_truncated", document_sha256=document_sha256, page_index=page_index
+            )
         return _to_page(document_sha256, page_index, wire)
 
 
@@ -201,6 +208,7 @@ def _to_page(document_sha256: Sha256Hex, page_index: int, wire: _WireParseRespon
         lines=tuple(lines),
         tables=tables,
         image_png=b"",  # set by the caller, which already holds the encoded page image
+        truncated=wire.truncated,
     )
 
 

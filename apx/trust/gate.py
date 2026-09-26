@@ -1,13 +1,14 @@
 """Runtime trust gate (M7.5, PRD §6.1): loads the active calibrator artifact from data/trust/ and
 auto-accepts a field only when its calibrated P(correct) >= λ̂ at the runtime alpha. It refuses,
 and routes the invoice to REVIEW, when the artifact is missing, corrupt, invalidated (ADR-0015) or
-fitted on other A/B/arbiter builds than the ones served. It never authorises payment (P1-P5 do).
+fitted on other A/B/arbiter builds than the ones served, and (`refuse_truncated_parse`) when the
+OCR transcription of a page was cut short. It never authorises payment (P1-P5 do).
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -182,3 +183,29 @@ class ArtifactTrustGate:
             all_accepted=False,
             refusal=refusal,
         )
+
+
+PARSE_TRUNCATED = "parse_truncated"
+"""Refusal reason (ADR-0013 amendment 1): the OCR service cut at least one page short."""
+
+
+def refuse_truncated_parse(
+    decision: TrustDecision, truncated_pages: Sequence[int], page_count: int
+) -> TrustDecision:
+    """`decision` unchanged when no page was truncated. Otherwise no field is auto-accepted and
+    `refusal` names the pages (0-based indexes shown 1-based), so the invoice routes to REVIEW:
+    values read from a partial transcription are never trusted on calibration alone. A refusal
+    the gate already made is kept after this one."""
+    if not truncated_pages:
+        return decision
+    shown = ", ".join(str(index + 1) for index in truncated_pages)
+    refusal = f"{PARSE_TRUNCATED}: OCR cut short on page(s) {shown} of {page_count}"
+    if decision.refusal is not None:
+        refusal = f"{refusal}; {decision.refusal}"
+    return decision.model_copy(
+        update={
+            "fields": tuple(f.model_copy(update={"accepted": False}) for f in decision.fields),
+            "all_accepted": False,
+            "refusal": refusal,
+        }
+    )
