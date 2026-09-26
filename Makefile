@@ -90,8 +90,14 @@ typecheck:
 	@echo "==> web typecheck"
 	cd $(WEB_DIR) && pnpm typecheck
 
+# Windows hosts run the suite in a Linux container (scripts/pytest_linux.sh): Smart App Control
+# blocks the unsigned Playwright driver/Chromium the factory render tests launch.
 test:
+ifeq ($(OS),Windows_NT)
+	bash scripts/pytest_linux.sh
+else
 	uv run python -m pytest
+endif
 
 factory:
 	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py, PRD §10 M2.3)"

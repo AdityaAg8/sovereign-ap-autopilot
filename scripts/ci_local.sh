@@ -44,7 +44,10 @@ step python "uv sync --locked --all-groups" uv sync --locked --all-groups
 step python "ruff check" uv run ruff check .
 step python "ruff format --check" uv run ruff format --check .
 step python "mypy --strict" uv run python -m mypy
-step python "pytest (unit)" uv run python -m pytest -p no:cacheprovider
+# On Windows the unit suite runs in a Linux container like CI's runner (Smart App Control blocks
+# the Playwright driver/Chromium on the host); elsewhere it runs directly.
+if [ "${OS:-}" = "Windows_NT" ]; then PYTEST=(bash scripts/pytest_linux.sh); else PYTEST=(uv run python -m pytest); fi
+step python "pytest (unit)" "${PYTEST[@]}" -p no:cacheprovider
 step python "fetch PINT AE bundles" uv run python -m evals.pint_ae.fetch
 step python "pytest -m artifacts" uv run python -m pytest -m artifacts -p no:cacheprovider --no-cov
 step web "pnpm install --frozen-lockfile" bash -c "cd web && pnpm install --frozen-lockfile --ignore-workspace"

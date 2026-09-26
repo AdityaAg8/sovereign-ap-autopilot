@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Temporal's dev server kept its store in memory, so `make down` or a reboot dropped every in-flight workflow, and because ingest dedupes by sha256 those documents were never processed again. The store is now a SQLite file on the `temporal-data` volume.
+- The inbox watcher never saw files dropped on the host: `data/` is a bind mount, and Docker Desktop raises no inotify events for host writes, so ingestion only happened when a worker restart swept the inbox. The worker now polls (`WATCHFILES_FORCE_POLLING`).
+- `make test` and `make ci-local` pass on Windows again: the unit suite runs in a Linux container (`scripts/pytest_linux.sh`), because Smart App Control blocks the unsigned Playwright driver and Chromium on the host.
 - Extractor A lost line items and the IBAN when llama-server ran two of its requests at once (an Arabic-first invoice came back with 0 of 29 lines); it now serves one request at a time (ADR-0013 amendment 1).
 - OCR cut every page off at 1024 decode tokens without saying so, dropping the middle pages' lines on long scans. The limit is 3072 with a repetition penalty, and a page that still hits it is flagged `truncated`, audited, and sends the invoice to review.
 - Reviewers could approve invoices that were bound to fail PINT AE at build. A supplier address with no recognisable emirate (English, Arabic or official variant) is now a validation error the reviewer can correct, and approval is refused while totals that no correction can fix still mismatch (ADR-0012 amendment 4).

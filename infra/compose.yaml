@@ -351,6 +351,9 @@ services:
       WORKER_LLAMA_SWAP_CONFIG: /repo/infra/llama-swap.yaml
       WORKER_MODELS_LOCK: /repo/infra/models.lock.json
       WORKER_MODELS_ROOT: /repo/models
+      # The inbox is a host bind mount; on Docker Desktop (Windows/macOS) a file dropped on the
+      # host raises no inotify event in the container, so the watcher (watchfiles) polls.
+      WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ../data:/app/data
       # Directory mount, not single files: promote-b rewrites llama-swap.yaml atomically, and a

@@ -35,7 +35,7 @@ Every workflow in this repo is a `make` target (run from the repo root, in Git B
 | `make lint` | ruff check + format check, ESLint |
 | `make fmt` | ruff format + fixes, Prettier |
 | `make typecheck` | `mypy --strict`, `tsc` |
-| `make test` | pytest unit suite (integration, GPU and trainer tests are opt-in markers); green on Windows and Linux |
+| `make test` | pytest unit suite (integration, GPU and trainer tests are opt-in markers). On Windows it runs in a Linux container (`scripts/pytest_linux.sh`, needs Docker), since Smart App Control blocks the Playwright browser the render tests launch |
 | `make test-integration` | Tests marked `integration` against the running stack (`make up` first) |
 | `make test-gpu` | Tests marked `gpu` or `integration` (live stack with models) |
 | `make test-artifacts` | PINT AE schematron tests (bundles from `uv run python -m evals.pint_ae.fetch`) |
