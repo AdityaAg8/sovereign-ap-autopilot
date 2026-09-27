@@ -3,7 +3,8 @@ turns an AUTO route into REVIEW when a reviewer sent the invoice to review befor
 `confirm_review` checks that a `review` signal is backed by the database before the workflow acts
 on it (an approval row whose digest matches the current invoice, or a recorded rejection). A raw
 Temporal signal with no such record never leads to payment: it is audited and the workflow keeps
-waiting (REVIEW.md C-03, H-01, H-02)."""
+waiting (REVIEW.md C-03, H-01, H-02). A recorded approval that went stale fails the invoice
+instead (`StaleApprovalError`, N-13)."""
 
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from temporalio import activity
 
 from apx.audit.chain import append_in_transaction
 from apx.audit.interfaces import AuditEvent, AuditLog
-from apx.common.errors import PayeeRefusedError
+from apx.common.errors import ApxError, PayeeRefusedError
 from apx.common.types import Route
 from apx.db.enums import DbInvoiceStatus, DecisionAction
 from apx.db.models import Approval as ApprovalRow
@@ -26,6 +27,21 @@ from apx.db.models import Invoice as InvoiceRow
 from apx.policy.writer import approval_digest, invoice_for_digest, load_vendor
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+
+class StaleApprovalError(ApxError):
+    """A reviewer's approval is recorded (APPROVED, an approvals row with a digest) but the
+    invoice or its vendor payee moved since, so the digest no longer matches (or the payee is
+    now refused). Deterministic for the same rows: non-retryable, and the workflow ends the
+    invoice FAILED with this reason instead of waiting for a decision the API cannot take
+    again (an APPROVED invoice can be neither rejected nor re-approved; REVIEW.md N-13)."""
+
+
+class _Stale:
+    """`_refusal`'s verdict for an approval the API did record but that no longer holds."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
 
 
 class ReviewGuardActivities:
@@ -68,19 +84,28 @@ class ReviewGuardActivities:
             )
             if held is None:
                 return route
-            # Only the status `routed` just wrote for AUTO; anything else (a retry after the
-            # reviewer already approved) is left alone.
-            await session.execute(
+            # Only the APPROVED that `routed` just wrote for AUTO, which no human approved:
+            # APPROVED with an approvals row is a reviewer's approval (this is a retry after the
+            # first attempt committed and the reviewer then approved) and is never reopened, nor
+            # is any other status (AWAITING_REVIEW from that first attempt, BLOCKED after a
+            # rejection, FAILED). Audited only when this attempt moved the row (N-09).
+            human_approval = (
+                select(ApprovalRow.id).where(ApprovalRow.invoice_id == invoice_id).exists()
+            )
+            reopened = await session.scalar(
                 update(InvoiceRow)
                 .where(
                     InvoiceRow.id == invoice_id,
                     InvoiceRow.status == DbInvoiceStatus.APPROVED,
+                    ~human_approval,
                 )
                 .values(status=DbInvoiceStatus.AWAITING_REVIEW)
+                .returning(InvoiceRow.id)
             )
-            await self._record(
-                session, "review.hold_honoured", invoice_id, {"policy_route": route.value}
-            )
+            if reopened is not None:
+                await self._record(
+                    session, "review.hold_honoured", invoice_id, {"policy_route": route.value}
+                )
         return Route.REVIEW
 
     @activity.defn(name="confirm_review")
@@ -89,21 +114,33 @@ class ReviewGuardActivities:
         was never rejected, and its newest `approvals` row carries the `approval_digest` of the
         invoice and vendor payee as they are now; for a rejection, a REJECT decision exists (the
         status is then made BLOCKED if the API's write has not landed). Otherwise the signal is
-        audited as `review.signal_unbacked` and False returned, and the workflow keeps waiting."""
+        audited as `review.signal_unbacked` and False returned, and the workflow keeps waiting.
+        An approval the API recorded (with a digest) that no longer matches the invoice or payee
+        is audited as `review.approval_stale` and raises `StaleApprovalError` (N-13)."""
         async with self._session_factory() as session:
             refusal = await self._refusal(session, invoice_id, approved=approved)
-            if refusal is not None:
+            if isinstance(refusal, _Stale):
+                await self._record(
+                    session, "review.approval_stale", invoice_id, {"reason": refusal.reason}
+                )
+            elif refusal is not None:
                 await self._record(
                     session,
                     "review.signal_unbacked",
                     invoice_id,
                     {"approved": approved, "reason": refusal},
                 )
+        # Raised after the session committed the audit entry (an exception inside would roll it
+        # back); the workflow's failure path then writes FAILED with this reason.
+        if isinstance(refusal, _Stale):
+            raise StaleApprovalError(
+                f"invoice {invoice_id}: the recorded approval no longer holds: {refusal.reason}"
+            )
         return refusal is None
 
     async def _refusal(
         self, session: AsyncSession, invoice_id: str, *, approved: bool
-    ) -> str | None:
+    ) -> str | _Stale | None:
         row = await session.get(InvoiceRow, invoice_id, with_for_update=True)
         if row is None:
             return "no invoice row"
@@ -132,12 +169,15 @@ class ReviewGuardActivities:
         )
         if approval is None:
             return "no approval row"
+        if approval.invoice_digest is None:
+            # Written before migration 0012: never trusted, but not proof of a moved invoice.
+            return "approval row has no digest"
         try:
             current = approval_digest(
                 invoice_for_digest(row), await load_vendor(session, row.vendor_id)
             )
         except PayeeRefusedError as exc:
-            return f"payee refused: {exc.refusal.value}"
+            return _Stale(f"payee refused: {exc.refusal.value}")
         if approval.invoice_digest != current:
-            return "approval digest does not match the current invoice"
+            return _Stale("approval digest does not match the current invoice or payee")
         return None

@@ -11,7 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-GENERATED = ("API_JWT_SECRET", "POSTGRES_PASSWORD", "AGENT_RO_PASSWORD")
+GENERATED = ("API_JWT_SECRET", "POSTGRES_PASSWORD", "AGENT_RO_PASSWORD", "PARSE_SERVICE_TOKEN")
 """Secrets `infra/compose.yaml` refuses to start without (`${VAR:?...}`). Generated values are
 URL-safe base64, so they also embed verbatim in a database URL."""
 

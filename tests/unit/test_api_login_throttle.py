@@ -1,11 +1,14 @@
-"""Login hardening (REVIEW L-02): the per-(IP, email) token bucket throttles repeated attempts with
-a 429 and `Retry-After`, refills over time, keeps its memory bounded, and an unknown email still
-costs one full argon2 verify, so response timing does not reveal which emails are registered.
+"""Login hardening (REVIEW L-02, N-04): the per-email bucket and the coarse per-IP bucket throttle
+failed attempts with a 429 and `Retry-After`, refill over time and keep memory bounded, over-long
+usernames are refused with 422, and an unknown email still costs one full argon2 verify.
 The database is replaced by a stub session; the limiter and the route are the real ones.
 """
 
 from __future__ import annotations
 
+import gc
+import tracemalloc
+import uuid
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
@@ -16,7 +19,7 @@ from apx.api import security
 from apx.api import settings as settings_module
 from apx.api.app import create_app
 from apx.api.deps import get_db_session
-from apx.api.ratelimit import LoginRateLimiter, retry_after_header
+from apx.api.ratelimit import MAX_EMAIL_LENGTH, LoginRateLimiter, retry_after_header
 
 
 class _Clock:
@@ -55,19 +58,96 @@ def test_tokens_refill_over_time() -> None:
     assert limiter.acquire("ip", "a@x.test") == 0.0
 
 
-def test_buckets_are_per_ip_and_per_email_and_email_is_case_insensitive() -> None:
+def test_the_account_bucket_is_per_email_across_ips_and_case_insensitive() -> None:
+    # REVIEW N-04: behind the gateway every client has the same IP, so the account bucket is
+    # keyed on the normalised email alone; another address does not buy fresh attempts.
     limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock())
     assert limiter.acquire("ip1", "a@x.test") == 0.0
     assert limiter.acquire("ip1", " A@X.test ") > 0  # same account, other spelling
+    assert limiter.acquire("ip2", "a@x.test") > 0  # same account, other address
     assert limiter.acquire("ip1", "b@x.test") == 0.0
-    assert limiter.acquire("ip2", "a@x.test") == 0.0
+
+
+def test_the_ip_bucket_is_coarse_and_caps_a_spray_over_many_emails() -> None:
+    clock = _Clock()
+    limiter = LoginRateLimiter(burst=2, refill_per_minute=6, clock=clock, ip_factor=10)
+    # 20 attempts (10 x burst) across distinct emails pass; the 21st hits the IP cap.
+    assert all(limiter.acquire("gw", f"u{i}@x.test") == 0.0 for i in range(20))
+    wait = limiter.acquire("gw", "fresh@x.test")
+    assert wait == pytest.approx(1.0)  # 60/min at the IP level -> 1 s
+    # A different address is unaffected.
+    assert limiter.acquire("other", "fresh@x.test") == 0.0
+
+
+def test_a_throttled_attempt_spends_nothing_from_the_other_bucket() -> None:
+    limiter = LoginRateLimiter(burst=1, refill_per_minute=6, clock=_Clock(), ip_factor=1)
+    assert limiter.acquire("gw", "a@x.test") == 0.0  # IP bucket now empty
+    assert limiter.acquire("gw", "b@x.test") > 0  # refused by the IP bucket...
+    assert limiter.acquire("gw2", "b@x.test") == 0.0  # ...without spending b's token
+
+
+def test_a_successful_login_is_refunded_so_only_failures_count() -> None:
+    limiter = LoginRateLimiter(burst=2, refill_per_minute=1, clock=_Clock())
+    for _ in range(10):
+        assert limiter.acquire("gw", "a@x.test") == 0.0
+        limiter.refund("gw", "a@x.test")
+    assert limiter.acquire("gw", "a@x.test") == 0.0
+    assert limiter.acquire("gw", "a@x.test") == 0.0
+    assert limiter.acquire("gw", "a@x.test") > 0
+
+
+def test_a_refund_never_overfills_a_bucket() -> None:
+    limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock())
+    limiter.refund("gw", "a@x.test")  # unknown key: a no-op
+    assert limiter.acquire("gw", "a@x.test") == 0.0
+    limiter.refund("gw", "a@x.test")
+    limiter.refund("gw", "a@x.test")
+    assert limiter.acquire("gw", "a@x.test") == 0.0
+    assert limiter.acquire("gw", "a@x.test") > 0
+
+
+def test_the_lockout_ends_one_refill_interval_after_the_attack_stops() -> None:
+    clock = _Clock()
+    limiter = LoginRateLimiter(burst=5, refill_per_minute=5, clock=clock)
+    for _ in range(50):  # an attacker hammering the victim's account
+        limiter.acquire("gw", "victim@x.test")
+        clock.now += 1.0
+    assert limiter.acquire("gw", "victim@x.test") > 0
+    clock.now += 12.0  # one token at 5/min
+    assert limiter.acquire("gw", "victim@x.test") == 0.0
 
 
 def test_memory_is_bounded_by_max_keys() -> None:
-    limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock(), max_keys=100)
+    limiter = LoginRateLimiter(
+        burst=1, refill_per_minute=1, clock=_Clock(), max_keys=100, max_ip_keys=10
+    )
     for i in range(1000):
-        limiter.acquire("ip", f"user{i}@x.test")
+        limiter.acquire(f"ip{i}", f"user{i}@x.test")
     assert len(limiter) == 100
+    assert limiter.ip_bucket_count == 10
+
+
+def test_keys_are_fixed_size_digests_whatever_the_username() -> None:
+    limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock())
+    limiter.acquire("gw", "x" * 1_000_000)
+    assert all(isinstance(k, bytes) and len(k) == 32 for k in limiter.stored_keys())
+
+
+def test_memory_stays_bounded_under_a_spray_of_maximal_usernames() -> None:
+    # REVIEW N-04 measured ~1 MB per bucket with 1 MB usernames. Now each bucket holds a
+    # 32-byte digest: 2,000 buckets from 320-char emails stay far under 1 MB in total.
+    limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock(), max_keys=2_000)
+    tracemalloc.start()
+    try:
+        before, _ = tracemalloc.get_traced_memory()
+        for i in range(10_000):
+            limiter.acquire("gw", f"{i:0>308}@example.test")
+        gc.collect()
+        after, _ = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert len(limiter) == 2_000
+    assert after - before < 1_000_000
 
 
 def test_invalid_configuration_is_refused() -> None:
@@ -147,3 +227,70 @@ def test_the_limiter_is_one_per_app(client: TestClient) -> None:
     limiter = app.state.login_limiter  # type: ignore[attr-defined]
     assert isinstance(limiter, LoginRateLimiter)
     assert len(limiter) == 1
+
+
+def test_an_over_long_username_is_422_before_the_limiter_or_argon2(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verified: list[str] = []
+
+    def spy(password_hash: str, _password: str) -> bool:
+        verified.append(password_hash)
+        return False
+
+    monkeypatch.setattr(security, "verify_password", spy)
+    email = "a" * (MAX_EMAIL_LENGTH - len("@x.test") + 1) + "@x.test"
+    assert len(email) == MAX_EMAIL_LENGTH + 1
+    response = client.post("/auth/login", data={"username": email, "password": "guess"})
+    assert response.status_code == 422
+    assert verified == []
+    assert getattr(client.app.state, "login_limiter", None) is None  # type: ignore[attr-defined]
+    # Exactly the RFC 5321 maximum is still an ordinary (failed) login.
+    assert _login(client, email[1:]) == 401
+
+
+class _User:
+    def __init__(self, password: str) -> None:
+        self.id = uuid.uuid4()
+        self.email = "approver@x.test"
+        self.is_active = True
+        self.password_hash = security.hash_password(password)
+
+
+class _Rows:
+    def scalars(self) -> _Rows:
+        return self
+
+    def all(self) -> list[str]:
+        return []
+
+
+class _OneUserSession:
+    def __init__(self, user: _User) -> None:
+        self._user = user
+
+    async def scalar(self, _stmt: Any) -> _User:
+        return self._user
+
+    async def execute(self, _stmt: Any) -> _Rows:
+        return _Rows()
+
+
+def test_successful_logins_do_not_drain_the_account_bucket(client: TestClient) -> None:
+    user = _User("right")
+    app = client.app
+
+    async def _session() -> AsyncIterator[_OneUserSession]:
+        yield _OneUserSession(user)
+
+    app.dependency_overrides[get_db_session] = _session  # type: ignore[attr-defined]
+    ok = {"username": user.email, "password": "right"}
+    # Burst is 3: ten successful sign-ins in a row are never throttled.
+    assert [client.post("/auth/login", data=ok).status_code for _ in range(10)] == [200] * 10
+    bad = {"username": user.email, "password": "wrong"}
+    assert [client.post("/auth/login", data=bad).status_code for _ in range(4)] == [
+        401,
+        401,
+        401,
+        429,
+    ]

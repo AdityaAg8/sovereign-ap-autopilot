@@ -18,11 +18,14 @@ from PIL import Image
 
 from apx.common.errors import ParseError
 from apx.common.raster import (
+    MAX_DECODED_BYTES,
+    MAX_EMBEDDED_PIXELS_PER_PAGE,
     MAX_IMAGE_PIXELS,
     MAX_PAGE_SIDE_POINTS,
     MAX_RENDER_DPI,
     MAX_RENDER_PIXELS,
     RasterTooLargeError,
+    check_image_bytes,
     check_page_size,
     check_pdf_bytes,
     render_pixels,
@@ -35,12 +38,29 @@ MAX_BYTES = 20 * 1024 * 1024
 SHA = "a" * 64
 
 
-def tiny_pdf(width_pt: float, height_pt: float, image_px: tuple[int, int] | None = None) -> bytes:
+@pytest.fixture(autouse=True)
+def _pillow_pinned_like_the_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pins Pillow's process-global bomb guard to the apx cap, as the worker does at startup
+    (`apx.workflows.main`), so these tests see that setting and not whatever another module
+    imported earlier left behind (the page-embed service app sets its own, stricter value)."""
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", MAX_IMAGE_PIXELS)
+
+
+def tiny_pdf(
+    width_pt: float,
+    height_pt: float,
+    image_px: tuple[int, int] | None = None,
+    *,
+    image_count: int = 1,
+) -> bytes:
     """A valid one-page PDF with a correct xref table. With `image_px`, the page paints one
-    grayscale image XObject declaring that many pixels (its data stream is empty: only the
-    declared dimensions matter to the caps, which never decode)."""
-    content = b"q 10 0 0 10 0 0 cm /Im1 Do Q" if image_px else b""
-    resources = b" /Resources << /XObject << /Im1 5 0 R >> >>" if image_px else b""
+    grayscale image XObject declaring that many pixels, `image_count` times under distinct
+    names (its data stream is empty: only the declared dimensions matter to the caps, which
+    never decode)."""
+    names = [b"/Im%d" % n for n in range(1, image_count + 1)]
+    content = b"q 10 0 0 10 0 0 cm %s Q" % b" ".join(n + b" Do" for n in names) if image_px else b""
+    xobjects = b" ".join(n + b" 5 0 R" for n in names)
+    resources = b" /Resources << /XObject << %s >> >>" % xobjects if image_px else b""
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -144,6 +164,89 @@ def test_an_embedded_image_within_the_cap_is_accepted() -> None:
 # ------------------------------------------------------------------------------------------
 # Images: header dimensions, before any decode
 # ------------------------------------------------------------------------------------------
+
+
+def jpeg_header(width: int, height: int) -> bytes:
+    """A real 8 x 8 baseline JPEG whose SOF0 frame header is patched to declare `width` x
+    `height`: PIL's lazy open reports the patched size, and nothing large is ever encoded."""
+    data = bytearray(real_jpeg())
+    sof = data.index(b"\xff\xc0")
+    data[sof + 5 : sof + 9] = struct.pack(">HH", height, width)
+    return bytes(data)
+
+
+# ------------------------------------------------------------------------------------------
+# REVIEW N-05: legitimate large scans and phone photos pass; the budget still holds
+# ------------------------------------------------------------------------------------------
+
+
+def test_the_pixel_caps_derive_from_a_400_mb_decoded_budget() -> None:
+    assert MAX_DECODED_BYTES == 400_000_000
+    assert MAX_IMAGE_PIXELS * 4 <= MAX_DECODED_BYTES
+    assert MAX_EMBEDDED_PIXELS_PER_PAGE * 4 <= MAX_DECODED_BYTES
+
+
+@pytest.mark.parametrize(
+    ("label", "page_pt", "image_px"),
+    [
+        ("A3 at 600 dpi", (842, 1191), (7016, 9921)),
+        ("US Legal at 600 dpi", (612, 1008), (5100, 8400)),
+        ("A4 at 600 dpi", (595, 842), (4961, 7016)),
+    ],
+)
+def test_a_600_dpi_scan_pdf_is_accepted(
+    label: str, page_pt: tuple[int, int], image_px: tuple[int, int]
+) -> None:
+    pdf = tiny_pdf(*page_pt, image_px=image_px)
+    assert validate(pdf, max_bytes=MAX_BYTES, max_pages=30) == "application/pdf", label
+
+
+@pytest.mark.parametrize(
+    ("label", "size"),
+    [
+        ("48 MP phone photo", (8064, 6048)),
+        ("50 MP phone photo", (8160, 6144)),
+        ("64 MP phone photo", (9248, 6936)),
+        ("A3 600 dpi scan", (7016, 9921)),
+    ],
+)
+def test_large_phone_photos_and_scans_are_accepted(label: str, size: tuple[int, int]) -> None:
+    assert validate(jpeg_header(*size), max_bytes=MAX_BYTES, max_pages=30) == "image/jpeg", label
+    assert validate(png_header(*size), max_bytes=MAX_BYTES, max_pages=30) == "image/png", label
+
+
+def test_a_108_mp_photo_is_over_the_budget_and_rejected() -> None:
+    with pytest.raises(RasterTooLargeError, match="px"):
+        validate(jpeg_header(12000, 9000), max_bytes=MAX_BYTES, max_pages=30)
+
+
+def test_an_image_exactly_at_the_cap_is_accepted_and_one_pixel_row_over_is_not() -> None:
+    width = 10_000
+    at_cap = MAX_IMAGE_PIXELS // width
+    assert check_image_bytes(png_header(width, at_cap)) == (width, at_cap)
+    with pytest.raises(RasterTooLargeError):
+        check_image_bytes(png_header(width, at_cap + 1))
+
+
+def test_a_page_whose_images_together_exceed_the_budget_is_rejected() -> None:
+    # Two 60 MP images: each under the per-image cap, together over the per-page budget.
+    pdf = tiny_pdf(595, 842, image_px=(7746, 7746), image_count=2)
+    with pytest.raises(RasterTooLargeError, match="total"):
+        validate(pdf, max_bytes=MAX_BYTES, max_pages=30)
+
+
+def test_pillow_bomb_guard_is_consistent_with_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The worker pins Image.MAX_IMAGE_PIXELS to the cap: an image at the cap must not trip
+    # Pillow's DecompressionBombError (which fires at twice the setting), one far over must be
+    # refused by us with a typed error either way.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", MAX_IMAGE_PIXELS)
+    assert check_image_bytes(jpeg_header(10_000, MAX_IMAGE_PIXELS // 10_000))
+    with pytest.raises(RasterTooLargeError):
+        check_image_bytes(jpeg_header(20_000, 20_000))
+    # The API process keeps Pillow's default (~89 MP; the error fires at ~179 MP): an at-cap
+    # upload still validates there, and its only warning is the one check_image_bytes silences.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 89_478_485)
+    assert check_image_bytes(jpeg_header(10_000, MAX_IMAGE_PIXELS // 10_000))
 
 
 def test_a_png_header_declaring_a_huge_image_is_rejected_without_decoding() -> None:

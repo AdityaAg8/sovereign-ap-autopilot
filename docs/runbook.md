@@ -153,8 +153,11 @@ COMPOSE_PROFILES=devports make up    # adds 127.0.0.1:5432 (Postgres) and 127.0.
 
 The Temporal UI behind `devports` is read-only: nginx passes GET and HEAD only, so signal,
 reset, terminate, cancel and start return 403, and the UI hides those buttons. Host tools that
-open Postgres directly need this profile, for example `make eval-attacks` and a host-run
-`python -m apx.agent.mcp_server` (set `AGENT_RO_PASSWORD` or `AGENT_DATABASE_URL` for it).
+open Postgres directly need this profile, for example a host-run `python -m apx.agent.mcp_server`
+(set `AGENT_RO_PASSWORD` or `AGENT_DATABASE_URL` for it). `make eval-attacks` handles it itself:
+it starts the `devports` service (`docker compose --profile devports up -d --wait devports`),
+runs the suite, and stops the service again unless it was already running, so Postgres is
+published only for the length of the run and a plain `make up` stack is enough.
 
 **Web UI headers.** `web/next.config.ts` sends a CSP (scripts, workers and fetches limited to the
 app origin plus the API origin, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`,

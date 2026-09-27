@@ -1,7 +1,7 @@
 """`POST /auth/login`: verifies an email/password pair against `users`/`user_roles` and issues a
 short-lived HS256 JWT carrying the user's roles (PRD §10 M5.3, docs/security.md B8). Attempts are
-throttled per (client IP, email) and an unknown email costs a full argon2 verify, so neither
-guessing nor timing reveals which accounts exist (REVIEW L-02)."""
+throttled per email plus a coarse per-client-IP cap, and an unknown email costs a full argon2
+verify, so neither guessing nor timing reveals which accounts exist (REVIEW L-02, N-04)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from apx.api.deps import DbSession, SettingsDep
 from apx.api.interfaces import TokenResponse
-from apx.api.ratelimit import LoginRateLimiter, retry_after_header
+from apx.api.ratelimit import MAX_EMAIL_LENGTH, LoginRateLimiter, retry_after_header
 from apx.api.security import create_access_token, verify_login
 from apx.api.settings import ApiSettings
 from apx.common.types import Role, UserId
@@ -43,8 +43,15 @@ async def login(
     session: DbSession,
     settings: SettingsDep,
 ) -> TokenResponse:
+    # Bound the username before it reaches the limiter or argon2 (REVIEW N-04).
+    if len(form.username) > MAX_EMAIL_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"email is longer than {MAX_EMAIL_LENGTH} characters",
+        )
     client_ip = request.client.host if request.client is not None else "unknown"
-    wait_s = login_limiter(request, settings).acquire(client_ip, form.username)
+    limiter = login_limiter(request, settings)
+    wait_s = limiter.acquire(client_ip, form.username)
     if wait_s > 0:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -61,6 +68,7 @@ async def login(
             detail="incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    limiter.refund(client_ip, form.username)  # only failed attempts count against the buckets
 
     role_stmt = (
         select(RoleDef.name)

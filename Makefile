@@ -169,7 +169,7 @@ test-artifacts:
 
 # Host-run GPU evals reach the parse service through gateway's loopback-only 127.0.0.1:8010
 # (ADR-0001 amendment 2); the runtime default `http://parse:8000` resolves only on `app`.
-HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010)
+HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_SERVICE_TOKEN=$$(sed -n 's/^PARSE_SERVICE_TOKEN=//p' .env)
 
 ## --- GPU queue: one parse per document, then the GPU evals back to back -----------------
 # `parse-cache` fills data/cache/parse/<parser identity>/ (evals.parse_cache) with the UAE split
@@ -391,7 +391,15 @@ eval-attacks:
 	@echo "==> M6.6: the 312-case attack suite through the running stack (make up + make seed first)"
 	@echo "    review-routed cases approved via the API; payment state read from Postgres"
 	@echo "    ~4.2 h for 312 cases + 24 clean baseline (16 in flight); resumable -> reports/attacks_e2e.md"
-	uv run $(if $(wildcard .env),--env-file .env,) python scripts/attacks_e2e.py $(ATTACKS_ARGS)
+	@echo "    Postgres is read on 127.0.0.1:5432 through the devports service: started here for the run,"
+	@echo "    stopped afterwards unless it was already up (docs/runbook.md, REVIEW N-10)"
+	@was_up="$$(cd infra && $(COMPOSE) --profile devports ps -q --status running devports)"; \
+	(cd infra && $(COMPOSE) --profile devports up -d --wait devports); \
+	status=0; \
+	uv run $(if $(wildcard .env),--env-file .env,) python scripts/attacks_e2e.py $(ATTACKS_ARGS) \
+		|| status=$$?; \
+	if [ -z "$$was_up" ]; then (cd infra && $(COMPOSE) --profile devports stop devports); fi; \
+	exit $$status
 
 e2e-pipeline:
 	@echo "==> 20 documents through the running stack (make up + make seed first) -> reports/e2e_pipeline.md"

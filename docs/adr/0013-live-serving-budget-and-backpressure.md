@@ -303,3 +303,74 @@ before, old manifests load, a truncated page round-trips), `tests/unit/test_pars
   error rate.
 - Page 1 of `13e9e6552e94` still loops even with the penalty. It is flagged and routed to review,
   but its text is lost; try a lower-resolution retry of a looping page.
+
+## Amendment 2 (2026-09-27): loop guard and strip re-read for scanned pages (M3.1/M3.3)
+
+**Problem.** Amendment 1 made a looping page visible (`truncated: true`) but did not recover its
+text. A probe of the 20-document scan set (16 Arabic-first, 4 English; 32 pages) found that
+PaddleOCR-VL-1.6 loops on every Arabic-first document, inside one zone's text and usually within
+the first 20 zones: `ذ.م.م.م…`, `3000000…`, `jìjì…`, `0x80x8…`, or a 14-token phrase repeated after
+an IBAN. The loop then spends the whole 3072-token budget, so `0ea815e2` kept 1 of about 33 zones,
+and the IBAN and totals never reached Extractor A. English pages finished. `repetition_penalty`
+1.15 and a higher resolution did not stop it. A logit-level breaker (ban the token that continues
+the cycle) raised IBAN recall from 7 to 8 of 20 and totals from 8 to 13, but the model re-entered
+loops.
+
+**Measured on the probe outputs (re-tokenized with the model's own tokenizer).** Among the 16
+pages that finished, every zone is at most 60 tokens long, and no cycle containing a letter or
+digit repeats over more than 10 tokens. Every one of the 16 looping pages matches the rule below
+after 37 to 967 generated tokens, against 3072 before. No page that finished matches it.
+
+**Decision.** In `infra/docker/parse/app.py`:
+
+1. **The first pass is unchanged.** The page is decoded as before, with only a stopping
+   criterion added (no logits processor). A page that ends on EOS is returned untouched. Its
+   scores are never modified, so its output is the same token for token.
+2. **Loop guard (token level, per zone).** A zone is the tokens after the last LOC token. It is
+   looping when its last `max(24, 3 × p)` tokens repeat a cycle of `p ≤ 32` tokens whose text has a
+   letter or digit, or when it is longer than 256 tokens. In the first pass the guard stops
+   decoding at once, which saves 2100 to 3000 tokens (about 45 to 60 s) on a looping page.
+3. **Strip re-read.** A page stopped by the guard or by the budget is read again as 4 horizontal
+   strips of the original image. Adjacent strips overlap by 6% of the page height (101 px on a
+   1683 px page, about 4 text lines). Each strip is a normal `Spotting:` call with its own
+   1024-token budget. In a strip, the guard closes a looping zone: only LOC tokens are allowed
+   until the zone's 8-token box is written, and then decoding moves on to the next zone. A strip
+   stops after more than 4 loops. The loop's run is cut out of the text, together with the word
+   it started in, and the zone keeps any clean text before it.
+4. **Merge.** Strip boxes are mapped back to page coordinates. A zone is kept only from the strip
+   whose core holds its vertical centre. The cores split the page at the middle of each overlap,
+   so a line lies wholly inside the strip that keeps it, and a copy cut at a strip edge is
+   dropped. A second reading of the same line (IoU ≥ 0.5, and one text contains the other) keeps
+   the longer text. The merged zones are written back in the model's `Spotting:` form, so the
+   HTTP layer and `_looped` handle them like any other page.
+5. **`truncated`.** After a strip re-read, the page is truncated unless every strip ended on EOS
+   inside its budget and the deadline. If the strips did not finish and recovered fewer zones
+   than the first pass, the first pass is returned, with `truncated: true`. A closed loop does not
+   by itself make the page truncated: its tail was not text on the page.
+6. **Latency bound.** All strips must finish within 90 s of the page's start
+   (`PAGE_DEADLINE_S`). Each strip gets `max_time` set to the time left. The strip pass is skipped
+   when less than 10 s is left. Worst case: a page that uses the full 3072-token budget without
+   looping (53 to 82 s in the probe) returns after the first pass. Any other page returns within
+   about 90 s warm, or about 102 s on a cold page including the ~12 s model load. Both are under
+   the 120 s client timeout (`apx.parse.config`).
+7. `SERVICE_PARSER_VERSION` moves to `paddleocr-vl-1.6+pdfplumber/3`. Scan parses change, and
+   stored parses keep loading because each ref carries its own version. `evals.parse_cache`
+   already keys on the parser sources.
+
+**Proof (CPU).** `tests/unit/test_parse_loop_guard.py` covers:
+
+- the thresholds, including the live `jìjì` token stream, caught within 60 tokens;
+- a live page that finished never trips the guard, and assembling its tokens gives exactly
+  `decode(ids)`;
+- the loop is cut out together with the word it started in;
+- closing a loop in a strip, then stopping after too many loops;
+- the bands cover the page, and their cores tile it (with a property test that a line is read
+  whole);
+- page coordinates, the edge-cut drop and dedupe;
+- the encode/decode round trip;
+- the policy: a finished page gets no strip pass and is returned byte-identical, all strips
+  finished means complete, an unfinished strip means truncated, and the deadline before and
+  during strips, with the first pass kept when the strips read less.
+
+**Live verification.** Pending: the GPU run on the 20-document set, measuring IBAN, total and zone
+recovery against baseline, and the 4 English documents byte-identical.

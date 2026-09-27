@@ -194,6 +194,8 @@ services:
     restart: unless-stopped
     environment:
       PADDLE_GPU_MEM_FRACTION: ${PADDLE_GPU_MEM_FRACTION:-0.35}
+      # /parse and /unload require this bearer token (REVIEW N-06).
+      PARSE_SERVICE_TOKEN: ${PARSE_SERVICE_TOKEN:?PARSE_SERVICE_TOKEN is not set -- run `make env`}
     volumes:
       # Same read-only model mount pattern as llama-swap; only the one checkpoint this
       # service needs, not the whole models/ tree.
@@ -301,6 +303,7 @@ services:
       # apx.agent.sql builds the agent's URL from it (with POSTGRES_HOST/POSTGRES_DB).
       AGENT_RO_PASSWORD: ${AGENT_RO_PASSWORD:?AGENT_RO_PASSWORD is not set -- run `make env`}
       API_JWT_SECRET: ${API_JWT_SECRET:?API_JWT_SECRET is not set -- run `make env`}
+      PARSE_SERVICE_TOKEN: ${PARSE_SERVICE_TOKEN:?PARSE_SERVICE_TOKEN is not set -- run `make env`}
       # One approval limit (AED) for the API's authorization and the worker's review routing
       # (apx.policy.approval_limit); both services read it from this shared block.
       APPROVAL_LIMIT: ${APPROVAL_LIMIT:-10000.00}

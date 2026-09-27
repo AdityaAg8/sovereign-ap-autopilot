@@ -1,7 +1,8 @@
 """Raster size caps shared by upload validation (`apx.ingest.validate`) and every renderer
 (`apx.scan.render`, `apx.parse.parser`): a PDF page's size in points, its pixel count at the
 render DPI, its embedded images' pixel dimensions and a PNG/JPEG's header dimensions are all
-bounded, so a few hundred crafted bytes can never decode to gigabytes (REVIEW H-03, PRD §11.4).
+bounded, so a few hundred crafted bytes can never decode to gigabytes (REVIEW H-03, PRD §11.4),
+while real A3/Legal 600-dpi scans and 64 MP phone photos still fit (REVIEW N-05).
 """
 
 from __future__ import annotations
@@ -29,12 +30,21 @@ the PDF format itself allows 14400 pt (200 in), which is what a bomb uses."""
 MAX_RENDER_PIXELS: Final[int] = 40_000_000
 """Most pixels one rendered page may have (A1 at 200 dpi is ~31 MP; 40 MP of RGBA is 160 MB)."""
 
-MAX_IMAGE_PIXELS: Final[int] = 40_000_000
-"""Most pixels one PNG/JPEG upload, or one image embedded in a PDF page, may declare."""
+MAX_DECODED_BYTES: Final[int] = 400_000_000
+"""Decoded-memory budget for one image, or for all images embedded in one PDF page: 400 MB,
+counted at 4 bytes per pixel (RGBA, the widest mode any apx decoder produces). This is what the
+pixel caps below are derived from (REVIEW N-05: cap what is allocated, not a native resolution
+that legitimate scans exceed)."""
 
-MAX_EMBEDDED_PIXELS_PER_PAGE: Final[int] = 100_000_000
+MAX_IMAGE_PIXELS: Final[int] = MAX_DECODED_BYTES // 4
+"""Most pixels one PNG/JPEG upload, or one image embedded in a PDF page, may declare: 100 MP.
+Fits A3 at 600 dpi (7016 x 9921, ~70 MP), US Legal at 600 dpi (5100 x 8400, ~43 MP) and 48-64 MP
+phone photos (9248 x 6936 is ~64 MP). The worker sets `PIL.Image.MAX_IMAGE_PIXELS` to this value,
+so Pillow's own bomb error (at twice it) can never fire before this cap does."""
+
+MAX_EMBEDDED_PIXELS_PER_PAGE: Final[int] = MAX_DECODED_BYTES // 4
 """Most pixels all images embedded in one PDF page may declare together (pdfium decodes each
-one it paints)."""
+one it paints), so a page's images share the same 400 MB decoded budget as a single image."""
 
 
 class RasterTooLargeError(IngestError):

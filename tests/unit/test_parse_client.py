@@ -234,3 +234,50 @@ async def test_a_response_without_the_truncated_flag_is_malformed(
     client = _client_with_handler(monkeypatch, lambda _r: httpx.Response(200, json=payload))
     with pytest.raises(ParseError, match="malformed"):
         await client.parse_page_image(document_sha256=_SHA, page_index=0, png_bytes=b"x")
+
+
+def _ok_payload() -> dict[str, object]:
+    return {
+        "width_px": 1,
+        "height_px": 1,
+        "words": [],
+        "lines": [],
+        "tables": [],
+        "truncated": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_every_call_carries_the_configured_service_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REVIEW N-06: the parse service refuses /parse and /unload without its bearer token."""
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, request.headers.get("authorization")))
+        return httpx.Response(200, json=_ok_payload() if request.url.path == "/parse" else {})
+
+    transport = httpx.MockTransport(handler)
+    real_async_client = httpx.AsyncClient
+
+    def factory(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = transport
+        return real_async_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    monkeypatch.setenv("PARSE_SERVICE_TOKEN", "s3cret-token")
+    client = ParseServiceClient(ParseClientConfig(base_url="http://parse-test"))
+    await client.parse_page_image(document_sha256=_SHA, page_index=0, png_bytes=b"x")
+    await client.unload()
+    assert seen == [("/parse", "Bearer s3cret-token"), ("/unload", "Bearer s3cret-token")]
+
+
+def test_the_service_token_is_never_shown_in_the_config_repr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PARSE_SERVICE_TOKEN", "s3cret-token")
+    config = ParseClientConfig()
+    assert "s3cret-token" not in repr(config)
+    assert config.service_token is not None
+    assert config.service_token.get_secret_value() == "s3cret-token"

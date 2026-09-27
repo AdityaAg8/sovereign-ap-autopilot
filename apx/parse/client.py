@@ -4,7 +4,8 @@ born-digital page never reaches this client (apx.parse.digital handles it host-s
 errors only, no silent fallback: any transport, timeout or malformed-response failure raises
 `ParseError` so the caller decides what to do (PRD §3 apx/parse, §8). An optional `gate` wraps
 every page call (the worker passes its GPU stage hold, ADR-0013), and `unload()` asks the service
-to free its GPU memory before another stage needs the card."""
+to free its GPU memory before another stage needs the card. Every call carries the service's
+bearer token when one is configured (REVIEW N-06)."""
 
 from __future__ import annotations
 
@@ -76,6 +77,10 @@ class ParseServiceClient:
         self._config = config or ParseClientConfig()
         self._gate: Gate = gate or nullcontext
 
+    def _headers(self) -> dict[str, str]:
+        token = self._config.service_token
+        return {} if token is None else {"Authorization": f"Bearer {token.get_secret_value()}"}
+
     async def unload(self) -> None:
         """Free the service's GPU memory (it reloads on the next page). A service that is not
         running at all (connection refused, name not resolved) holds no GPU memory, so that is
@@ -84,7 +89,9 @@ class ParseServiceClient:
             self._config.request_timeout_s, connect=self._config.connect_timeout_s
         )
         try:
-            async with httpx.AsyncClient(base_url=self._config.base_url, timeout=timeout) as http:
+            async with httpx.AsyncClient(
+                base_url=self._config.base_url, timeout=timeout, headers=self._headers()
+            ) as http:
                 response = await http.post("/unload")
                 response.raise_for_status()
         except httpx.ConnectError as exc:
@@ -109,7 +116,9 @@ class ParseServiceClient:
             self._config.request_timeout_s, connect=self._config.connect_timeout_s
         )
         try:
-            async with httpx.AsyncClient(base_url=self._config.base_url, timeout=timeout) as http:
+            async with httpx.AsyncClient(
+                base_url=self._config.base_url, timeout=timeout, headers=self._headers()
+            ) as http:
                 response = await http.post(
                     "/parse",
                     files={"image": (f"page{page_index}.png", png_bytes, "image/png")},

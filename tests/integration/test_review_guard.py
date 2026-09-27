@@ -2,8 +2,10 @@
 transition through the API (reject only while awaiting review, send-to-review only before routing,
 both 409 otherwise), the workflow's `review_hold` and `confirm_review` activities over the real
 rows (a signal with no digest-matched approval is never backed), proposal acceptance that either
-acts or is refused, and the role an approval is recorded under. Reuses `test_api_authz.py`'s
-helpers on its own container name and port."""
+acts or is refused, and the role an approval is recorded under. M11.3: a stale recorded approval
+raises `StaleApprovalError` (N-13), a retried hold never reopens an approval (N-09), a repeated
+reject re-sends its signal (N-02), and decisions, edits and accepted proposals commit with their
+audit entry (N-07). Reuses `test_api_authz.py`'s helpers on its own container name and port."""
 
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import apx.db.session as db_session
-from apx.api.interfaces import DecisionRequest
+from apx.api.interfaces import DecisionRequest, FieldEdit
 from apx.api.service import DbInvoiceService
 from apx.api.settings import get_settings
 from apx.audit.chain import PgAuditLog
@@ -35,7 +37,7 @@ from apx.db.models import Field as FieldRow
 from apx.db.session import get_session
 from apx.ingest.settings import get_ingest_settings
 from apx.policy.writer import SqlPaymentStateWriter
-from apx.workflows.review_guard import ReviewGuardActivities
+from apx.workflows.review_guard import ReviewGuardActivities, StaleApprovalError
 from tests.integration.test_api_authz import (
     APPROVAL_LIMIT,
     PG_DB,
@@ -200,18 +202,22 @@ async def _transitions_scenario() -> None:
         assert await _status(review) is DbInvoiceStatus.BLOCKED
         assert await _decisions(review) == [DecisionAction.REJECT]
         assert signaller.sent == [(review, False)]
-        # H-01: the rejection is terminal: a second reject, a reopen and an approval all refuse.
-        assert await decide(review, "reject") == 409
+        # H-01: the rejection is terminal: a reopen and an approval refuse. N-02: repeating the
+        # reject records nothing new and only re-sends its signal.
+        assert await decide(review, "reject") == 204
+        assert signaller.sent == [(review, False), (review, False)]
         assert await decide(review, "send_to_review") == 409
         assert await decide(review, "approve") == 403
         assert await _decisions(review) == [DecisionAction.REJECT]
+        assert await _status(review) is DbInvoiceStatus.BLOCKED
+        assert (await _audit_actions(f"invoice:{review}")).count("decision.reject") == 2
 
         # In flight: reject is refused (C-01); send_to_review is a durable hold only.
         assert await decide(in_flight, "reject") == 409
         assert await decide(in_flight, "send_to_review") == 204
         assert await _status(in_flight) is DbInvoiceStatus.FRAUD_CHECKED
         assert await _decisions(in_flight) == [DecisionAction.SEND_TO_REVIEW]
-        assert signaller.sent == [(review, False)]
+        assert signaller.sent == [(review, False), (review, False)]
     await db_session.get_engine().dispose()
 
 
@@ -252,12 +258,15 @@ async def _confirm_scenario() -> None:
     # A rejected invoice is never confirmed as approved.
     assert await guard.confirm_review(rejected, True) is False
 
-    # The approval row's digest must still match: a changed total after approval is refused.
+    # The approval row's digest must still match. N-13: a recorded approval whose invoice moved
+    # is not merely unbacked (nobody could re-approve it): it raises, audited with its reason.
     async with get_session() as session:
         await session.execute(
             update(Invoice).where(Invoice.id == approved).values(total=Decimal("99999.00"))
         )
-    assert await guard.confirm_review(approved, True) is False
+    with pytest.raises(StaleApprovalError, match="digest does not match"):
+        await guard.confirm_review(approved, True)
+    assert "review.approval_stale" in await _audit_actions(f"invoice:{approved}")
     async with get_session() as session:
         await session.execute(update(Invoice).where(Invoice.id == approved).values(total=_HUNDRED))
     assert await guard.confirm_review(approved, True) is True
@@ -308,6 +317,20 @@ async def _hold_scenario() -> None:
     assert await _status(free) is DbInvoiceStatus.APPROVED
     # A hold never softens BLOCK.
     assert await guard.review_hold(held, Route.BLOCK) is Route.BLOCK
+
+    # N-09: a retried hold (its first attempt committed) after the reviewer approved never
+    # reopens the approval, and the hold is audited once.
+    transport = ASGITransport(app=_app(_RecordingSignaller()))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "appr", "pw")
+        response = await client.post(
+            f"/invoices/{held}/decisions", json={"action": "approve"}, headers=_auth(token)
+        )
+        assert response.status_code == 204, response.text
+    assert await _status(held) is DbInvoiceStatus.APPROVED
+    assert await guard.review_hold(held, Route.AUTO) is Route.REVIEW
+    assert await _status(held) is DbInvoiceStatus.APPROVED
+    assert (await _audit_actions(f"invoice:{held}")).count("review.hold_honoured") == 1
     await db_session.get_engine().dispose()
 
 
@@ -441,3 +464,62 @@ async def _audit_rollback_scenario() -> None:
 
 def test_a_failed_audit_append_rolls_back_the_payment_state_write(api_schema: str) -> None:
     asyncio.run(_audit_rollback_scenario())
+
+
+async def _decision_audit_rollback_scenario() -> None:
+    rejected = _invoice_id("rg-audit-rollback-reject")
+    await _seed({rejected: (Route.REVIEW, DbInvoiceStatus.AWAITING_REVIEW, _HUNDRED)})
+    async with get_session() as session:
+        session.add(
+            Proposal(
+                id="p-audit-edit",
+                invoice_id=rejected,
+                kind=ProposalKind.EDIT_FIELD,
+                payload={"field": "po_number", "value": "PO-9"},
+                created_by="agent",
+                status=ProposalStatus.PENDING,
+            )
+        )
+    signaller = _RecordingSignaller()
+    service = DbInvoiceService(signaller=signaller)
+    service._audit = _FailingAudit()
+    reviewer = User(id=UserId("rev"), display_name="rev", roles=frozenset({Role.REVIEWER}))
+    invoice_id = InvoiceId(rejected)
+
+    # N-07: each change and its audit entry commit together or not at all.
+    with pytest.raises(AuditChainError):
+        await service.decide(invoice_id, DecisionRequest(action="reject"), reviewer)
+    assert await _status(rejected) is DbInvoiceStatus.AWAITING_REVIEW
+    assert await _decisions(rejected) == []
+    assert signaller.sent == []
+
+    with pytest.raises(AuditChainError):
+        await service.edit_field(
+            invoice_id, FieldEdit(field="po_number", value="PO-1", reason="typo"), reviewer
+        )
+    with pytest.raises(AuditChainError):
+        await service.accept_proposal("p-audit-edit", reviewer)
+    async with get_session() as session:
+        human_fields = (
+            await session.scalars(
+                select(FieldRow.id).where(
+                    FieldRow.invoice_id == rejected, FieldRow.source == FieldSource.HUMAN
+                )
+            )
+        ).all()
+        proposal = await session.get(Proposal, "p-audit-edit")
+    assert human_fields == []
+    assert proposal is not None and proposal.status == ProposalStatus.PENDING
+    assert await _decisions(rejected) == []
+    # Only the policy guard's own authorization entry (a separate log) exists: no decision,
+    # edit or acceptance entry was written for a change that did not commit.
+    assert await _audit_actions(f"invoice:{rejected}") == ["authorize:execute_proposal"]
+    assert await _audit_actions(f"invoice:{rejected}:field:po_number") == []
+    assert await _audit_actions("proposal:p-audit-edit") == []
+    await db_session.get_engine().dispose()
+
+
+def test_decisions_edits_and_accepted_proposals_commit_with_their_audit_entry(
+    api_schema: str,
+) -> None:
+    asyncio.run(_decision_audit_rollback_scenario())

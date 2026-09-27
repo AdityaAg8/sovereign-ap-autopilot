@@ -12,6 +12,7 @@ import { FieldList, type FieldListHandle } from "@/components/invoice/field-list
 import { AuditTrail } from "@/components/invoice/audit-trail";
 import { FlagsPanel } from "@/components/invoice/flags-panel";
 import { ReviewActionBar, type ApproveError } from "@/components/invoice/review-action-bar";
+import { Button } from "@/components/ui/button";
 import { RouteBadge, StatusBadge } from "@/components/inbox/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,7 +22,36 @@ import { parseUnresolvedFields } from "@/lib/invoice-fields";
 import { useAuth } from "@/lib/auth/auth-context";
 import { formatAed } from "@/lib/format";
 import { useSetPageHeader } from "@/lib/shell/page-header-context";
-import type { FieldEdit, InvoiceDetail } from "@/lib/api/types";
+import type { FieldEdit, InvoiceDetail, InvoiceStatus } from "@/lib/api/types";
+
+type Decision = "approve" | "reject";
+
+// A decision the API recorded but whose workflow signal failed (503). Kept per invoice in
+// tab-scoped sessionStorage so a reload still offers "Resend" (REVIEW.md N-02); the API re-sends
+// idempotently. Storage can be unavailable (private mode, blocked site data): then the offer only
+// lasts until the page is left, which is no worse than before.
+const UNDELIVERED_KEY = "apx.undelivered-decision:";
+// The status a recorded decision leaves the invoice in; any other status means the workflow
+// already moved it on, so there is nothing left to resend.
+const RECORDED_STATUS: Record<Decision, InvoiceStatus> = { approve: "approved", reject: "blocked" };
+
+function readUndelivered(invoiceId: string): Decision | null {
+  try {
+    const raw = window.sessionStorage.getItem(UNDELIVERED_KEY + invoiceId);
+    return raw === "approve" || raw === "reject" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeUndelivered(invoiceId: string, action: Decision | null) {
+  try {
+    if (action) window.sessionStorage.setItem(UNDELIVERED_KEY + invoiceId, action);
+    else window.sessionStorage.removeItem(UNDELIVERED_KEY + invoiceId);
+  } catch {
+    // Unavailable storage: the in-memory state below still offers the resend on this page.
+  }
+}
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -31,6 +61,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [activeField, setActiveField] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [approveError, setApproveError] = useState<ApproveError | null>(null);
+  // Read lazily: it only renders once the invoice has loaded, never in the server-rendered skeleton.
+  const [undelivered, setUndelivered] = useState<Decision | null>(() => readUndelivered(id));
   const fieldListRef = useRef<FieldListHandle>(null);
   // `?tab=audit&event=<id>` (assistant citations) opens the Audit tab on that event. A new link
   // to this same page switches tabs again: the param is compared during render (React's
@@ -70,6 +102,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     setShownId(id);
     setInvoice(null);
     setApproveError(null);
+    setUndelivered(readUndelivered(id));
   }
 
   // The new id's load takes a newer token, which is what invalidates the old id's in-flight one.
@@ -99,15 +132,35 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     load();
   }
 
-  async function handleDecision(action: "approve" | "reject") {
+  function rememberUndelivered(action: Decision | null) {
+    writeUndelivered(id, action);
+    setUndelivered(action);
+  }
+
+  async function handleDecision(action: Decision, resend = false) {
     if (!invoice) return;
     setPending(true);
     setApproveError(null);
     try {
       await getApiClient().decide(id, { action });
-      toast.success(action === "approve" ? "Invoice approved" : "Invoice rejected");
+      rememberUndelivered(null);
+      toast.success(
+        resend
+          ? "Decision delivered"
+          : action === "approve"
+            ? "Invoice approved"
+            : "Invoice rejected",
+      );
       router.push("/review");
     } catch (error) {
+      if (error instanceof ApiError && error.status === 503) {
+        // The decision is recorded; only the workflow signal failed. The API re-sends it when
+        // the same decision is repeated, so offer exactly that, surviving a reload.
+        rememberUndelivered(action);
+        toast.error("Decision recorded, but the workflow was not notified. Resend it from here.");
+        load();
+        return;
+      }
       if (action === "approve" && error instanceof ApiError && error.status === 422) {
         // ADR-0012: the server names the classified fields still unresolved. Say so inline
         // (the action bar's live region) and put focus on the first one it names.
@@ -124,6 +177,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       if (error instanceof ApiError && error.status === 409) {
         // Another reviewer or the workflow moved the invoice on: show where it is now.
         toast.error("This invoice is no longer awaiting review.");
+        rememberUndelivered(null);
         load();
         return;
       }
@@ -183,6 +237,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   // invoice still in flight would never reach it, and a settled one cannot be reopened (the API
   // answers 409 for both).
   const decisionsClosed = invoice.summary.status !== "awaiting_review";
+  // A decision this tab recorded whose signal failed, while the invoice still sits where that
+  // decision left it: the workflow may still be waiting, so offer to resend it.
+  const resendable =
+    undelivered !== null && invoice.summary.status === RECORDED_STATUS[undelivered]
+      ? undelivered
+      : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -237,6 +297,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <AuditTrail invoiceId={id} focusId={focusEvent} />
             </TabsContent>
           </Tabs>
+          {resendable ? (
+            <div
+              role="status"
+              className="border-border flex items-center gap-3 border-t px-4 py-3 text-sm"
+            >
+              <p className="min-w-0 flex-1">
+                Your {resendable === "approve" ? "approval" : "rejection"} is recorded, but the
+                workflow has not received it yet.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => void handleDecision(resendable, true)}
+              >
+                Resend decision
+              </Button>
+            </div>
+          ) : null}
           <ReviewActionBar
             disabled={decisionsClosed}
             approveBlockedReason={approveBlockedReason}

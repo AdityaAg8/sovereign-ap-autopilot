@@ -16,8 +16,10 @@ import apx.common.raster
 import apx.einvoice.schematron
 import apx.ingest.errors
 import apx.workflows.corrections
+import apx.workflows.review_guard
 from apx.workflows import workflow as workflow_module
 from apx.workflows.activities import DefaultInvoiceActivities
+from apx.workflows.review_guard import ReviewGuardActivities
 from apx.workflows.workflow import (
     NON_RETRYABLE_ERRORS,
     OUTAGE_ATTEMPTS,
@@ -33,6 +35,7 @@ _ERROR_MODULES = (
     apx.einvoice.schematron,
     apx.asp_mock.errors,
     apx.workflows.corrections,
+    apx.workflows.review_guard,
 )
 
 
@@ -54,7 +57,8 @@ def test_every_non_retryable_name_is_a_real_apx_error() -> None:
 def test_only_registered_activities_are_listed() -> None:
     registered = {
         d.name
-        for member in vars(DefaultInvoiceActivities).values()
+        for cls in (DefaultInvoiceActivities, ReviewGuardActivities)
+        for member in vars(cls).values()
         if callable(member) and (d := activity._Definition.from_callable(member)) is not None
     }
     assert set(NON_RETRYABLE_ERRORS) <= registered
@@ -63,6 +67,17 @@ def test_only_registered_activities_are_listed() -> None:
 def test_parse_never_retries_an_oversized_raster() -> None:
     """A page too large to render is the same page on every attempt (H-03): fail once."""
     assert "RasterTooLargeError" in NON_RETRYABLE_ERRORS["parse"]
+
+
+def test_no_rendering_activity_retries_an_oversized_raster() -> None:
+    """Scan and fraud render pages too (N-11): the same oversized page fails every attempt."""
+    for name in ("scan", "fraud"):
+        assert "RasterTooLargeError" in NON_RETRYABLE_ERRORS[name], name
+
+
+def test_a_stale_recorded_approval_fails_at_once() -> None:
+    """N-13: the approval digest no longer matching is deterministic for the same rows."""
+    assert "StaleApprovalError" in NON_RETRYABLE_ERRORS["confirm_review"]
 
 
 def test_parse_consumers_never_retry_an_integrity_error() -> None:

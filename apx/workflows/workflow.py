@@ -3,7 +3,8 @@ auto-completing or waiting for a human review signal based on `apx.policy`'s rou
 Deterministic by construction: activities (in `apx.workflows.activities`) do every I/O call,
 external side effect and wall-clock read; this file only sequences them and holds in-memory
 state for the `status` query (PRD §3, §6.4, §10 M5.2). A `review` signal is acted on only once
-`confirm_review` finds it backed by the database (REVIEW.md C-03); an unbacked one is ignored."""
+`confirm_review` finds it backed by the database (REVIEW.md C-03); an unbacked one is ignored, and
+one that arrives before the review wait is buffered for it (REVIEW.md N-01)."""
 
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ with workflow.unsafe.imports_passed_through():
     )
 
 NON_RETRYABLE_ERRORS: Final[Mapping[str, tuple[str, ...]]] = {
-    "scan": ("DocumentNotFoundError",),
+    "scan": ("DocumentNotFoundError", "RasterTooLargeError"),
     "parse": ("DocumentNotFoundError", "GpuProbeError", "RasterTooLargeError"),
     "extract": (
         "DocumentNotFoundError",
@@ -49,7 +50,13 @@ NON_RETRYABLE_ERRORS: Final[Mapping[str, tuple[str, ...]]] = {
         "GpuProbeError",
     ),
     "trust_gate": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "TrustGateError"),
-    "fraud": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "FraudError"),
+    "fraud": (
+        "DocumentNotFoundError",
+        "ParsedArtifactIntegrityError",
+        "FraudError",
+        "RasterTooLargeError",
+    ),
+    "confirm_review": ("StaleApprovalError",),
     "apply_review": ("EInvoiceError", "MissingCorrectionsError"),
     "build_einvoice": (
         "EInvoiceError",
@@ -149,6 +156,23 @@ invoice alone; new executions also pass the payee pinned at routing (`RoutingDec
 REVIEW_GUARD_PATCH = "m11-review-guard"
 """`workflow.patched` id: histories recorded before M11.2 replay without `review_hold` after
 routing and without `confirm_review` after the review signal (REVIEW.md C-03, H-02)."""
+REVIEW_BUFFER_PATCH = "m11-review-signal-buffer"
+"""`workflow.patched` id: histories recorded before M11.3 replay a `review` signal that arrived
+before the review wait as dropped; new executions buffer it for the wait (REVIEW.md N-01)."""
+_BEFORE_REVIEW_WAIT: Final = frozenset(
+    {
+        InvoiceStatus.RECEIVED,
+        InvoiceStatus.SCANNED,
+        InvoiceStatus.PARSED,
+        InvoiceStatus.EXTRACTED,
+        InvoiceStatus.GATED,
+        InvoiceStatus.VALIDATED,
+        InvoiceStatus.FRAUD_CHECKED,
+    }
+)
+"""In-memory statuses before the workflow reaches (or skips) the review wait. The `route`
+activity has already written AWAITING_REVIEW to the database while this still says
+FRAUD_CHECKED, so the API can accept and signal a decision in that window."""
 
 
 class ReviewDecision(Frozen):
@@ -375,7 +399,10 @@ class InvoiceWorkflow:
         authority (anyone who can reach Temporal can send one), so before the workflow builds or
         sends anything, `confirm_review` must find the approval row with a digest matching the
         current invoice (or the recorded rejection). An unbacked signal is audited there and
-        dropped, and the invoice stays awaiting review for a real decision."""
+        dropped, and the invoice stays awaiting review for a real decision. An approval the API
+        did record but whose digest or payee has since moved raises `StaleApprovalError`
+        (non-retryable), so the run ends FAILED with that reason instead of waiting forever for
+        a decision nobody can send again (N-13)."""
         guarded = workflow.patched(REVIEW_GUARD_PATCH)
         while True:
             await workflow.wait_condition(lambda: self._review is not None)
@@ -397,10 +424,20 @@ class InvoiceWorkflow:
 
     @workflow.signal
     def review(self, decision: ReviewDecision) -> None:
-        """Delivered once a human reviewer decides a REVIEW-routed invoice (M5.3). Ignored
-        outside the review wait or once a decision was already recorded, so a duplicate or
-        stray signal cannot flip an already-decided invoice."""
-        if self._status is InvoiceStatus.AWAITING_REVIEW and self._review is None:
+        """Delivered once a human reviewer decides a REVIEW-routed invoice (M5.3). Kept while
+        the workflow waits for review, or buffered for that wait when it arrives earlier: the
+        `route` activity commits AWAITING_REVIEW before this workflow's own status says so, and
+        the API may already have approved and signalled (N-01). Buffering is safe because
+        `confirm_review` still refuses anything the database does not back; if the route turns
+        out AUTO or BLOCK the buffered decision is never read. Ignored once a decision is held
+        or after the review point, so a duplicate or stray signal cannot flip a decided invoice."""
+        if self._review is not None:
+            return
+        if self._status is InvoiceStatus.AWAITING_REVIEW:
+            self._review = decision
+        elif self._status in _BEFORE_REVIEW_WAIT and workflow.patched(REVIEW_BUFFER_PATCH):
+            # Patched only on this branch: histories where the signal met the wait replay with
+            # no marker, and pre-M11.3 histories replay an early signal as dropped.
             self._review = decision
 
     @workflow.query

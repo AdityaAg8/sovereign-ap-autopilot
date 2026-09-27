@@ -4,8 +4,9 @@ B5), field edits (audit event + label row), decisions and proposal execution (P1
 payment-affecting action goes `PolicyGuard` -> `SqlPaymentStateWriter`, then signals the
 invoice's workflow), a document-serving lookup and a polling-based SSE status stream (PRD §10
 M5.3). Review decisions follow the invoice state machine: reject only while awaiting review,
-send-to-review only before routing (a durable hold the workflow honours), else 409. Also
-`DbVendorService`, the vendor list/detail read model for the M5.4 vendor view.
+send-to-review only before routing (a durable hold the workflow honours), else 409; a rejection
+whose signal failed is re-sent by repeating it (REVIEW.md N-02). Also `DbVendorService`, the
+vendor list/detail read model for the M5.4 vendor view.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from apx.api.queries import (
 )
 from apx.api.settings import ApiSettings, get_settings
 from apx.api.signals import ReviewSignaller, UnconfiguredReviewSignaller
-from apx.audit.chain import PgAuditLog
+from apx.audit.chain import PgAuditLog, append_in_transaction
 from apx.audit.interfaces import AuditEvent
 from apx.common.errors import (
     InvoiceStateConflictError,
@@ -242,9 +243,9 @@ def refuse_totals_mismatch(route_reasons: Sequence[Mapping[str, object]] | None)
 
 class DbInvoiceService:
     """`apx.api.interfaces.InvoiceService` backed by Postgres. Every method opens its own
-    `AsyncSession` (matching `apx.audit.chain.PgAuditLog`'s convention) and every state change
-    is followed by a separate, independently-committed audit append -- the audit log is never
-    silently skipped just because the entity write also succeeded."""
+    `AsyncSession` (matching `apx.audit.chain.PgAuditLog`'s convention), and every state change
+    appends its audit event inside the same transaction (`append_in_transaction`, REVIEW.md
+    M-02/N-07): the change and its entry commit together or not at all."""
 
     def __init__(
         self, settings: ApiSettings | None = None, *, signaller: ReviewSignaller | None = None
@@ -404,7 +405,7 @@ class DbInvoiceService:
         box, reviewer, timestamp and the model/revision that produced the original)."""
         async with get_session() as session:
             previous = await self._write_field_edit(session, invoice_id, edit, user)
-        await self._audit_field_edit(invoice_id, edit, user, previous)
+            await self._audit_field_edit(session, invoice_id, edit, user, previous)
 
     async def _write_field_edit(
         self, session: AsyncSession, invoice_id: InvoiceId, edit: FieldEdit, user: User
@@ -452,9 +453,17 @@ class DbInvoiceService:
         return previous
 
     async def _audit_field_edit(
-        self, invoice_id: InvoiceId, edit: FieldEdit, user: User, previous: FieldRow | None
+        self,
+        session: AsyncSession,
+        invoice_id: InvoiceId,
+        edit: FieldEdit,
+        user: User,
+        previous: FieldRow | None,
     ) -> None:
-        await self._audit.append(
+        """Audits the edit in `session`'s transaction, the one that writes its rows (N-07)."""
+        await append_in_transaction(
+            self._audit,
+            session,
             AuditEvent(
                 actor=str(user.id),
                 action="field_edit",
@@ -466,7 +475,7 @@ class DbInvoiceService:
                     "model_revision": previous.model_revision if previous else None,
                     "reason": edit.reason,
                 },
-            )
+            ),
         )
 
     async def _action_request(
@@ -526,10 +535,13 @@ class DbInvoiceService:
             proposal=proposal,
         )
 
-    async def _approve(self, invoice_id: InvoiceId, user: User) -> ReviewCorrections:
+    async def _approve(
+        self, invoice_id: InvoiceId, request: DecisionRequest, user: User
+    ) -> ReviewCorrections:
         """I3: `PolicyGuard.require` issues a digest-bound grant, and `SqlPaymentStateWriter`
         -- the only mutator of payment state (ADR-0008) -- re-checks it, enforces the
-        AWAITING_REVIEW precondition under a row lock and is idempotent on replay."""
+        AWAITING_REVIEW precondition under a row lock and is idempotent on replay. The
+        `decisions` row and the `decision.approve` audit entry then commit together."""
         async with get_session() as session:
             invoice = await session.get(Invoice, invoice_id)
             if invoice is None:
@@ -545,8 +557,8 @@ class DbInvoiceService:
         # value is a 422 and never reaches the payment state or the workflow.
         corrections = await self._review_corrections(invoice_id)
         await self._writer.record_approval(invoice_id, grant)
-        if not already_approved:
-            async with get_session() as session:
+        async with get_session() as session:
+            if not already_approved:
                 session.add(
                     Decision(
                         invoice_id=invoice_id,
@@ -555,6 +567,9 @@ class DbInvoiceService:
                         route=route,
                     )
                 )
+            await append_in_transaction(
+                self._audit, session, _decision_event(invoice_id, request, user, corrections)
+            )
         return corrections
 
     async def _review_corrections(self, invoice_id: InvoiceId) -> ReviewCorrections:
@@ -600,7 +615,7 @@ class DbInvoiceService:
         signal: bool | None = None
         corrections: ReviewCorrections | None = None
         if request.action == "approve":
-            corrections = await self._approve(invoice_id, user)
+            corrections = await self._approve(invoice_id, request, user)
             signal = True
         elif request.action == "execute_proposal":
             if not request.proposal_id:
@@ -608,7 +623,9 @@ class DbInvoiceService:
             target = await self._approving_proposal_invoice(request.proposal_id)
             if target is not None:
                 corrections = await self._review_corrections(target)
-            kind, _ = await self._execute_proposal(request.proposal_id, user)
+            kind, _ = await self._execute_proposal(
+                request.proposal_id, user, _decision_event(invoice_id, request, user, corrections)
+            )
             signal = True if kind is ProposalKind.APPROVE_PAYMENT else None
         else:
             if Capability.ROUTE_EXCEPTION not in capabilities_for(user.roles):
@@ -620,7 +637,14 @@ class DbInvoiceService:
                 invoice = await session.get(Invoice, invoice_id, with_for_update=True)
                 if invoice is None:
                     raise NotFoundError(f"invoice {invoice_id} not found")
-                if request.action == "reject":
+                resend = request.action == "reject" and await _rejection_to_resend(session, invoice)
+                if resend:
+                    # N-02: the rejection is already recorded (BLOCKED plus a REJECT decision)
+                    # but its signal may have failed (503). Repeating it records nothing new
+                    # and re-sends the signal, the recovery `WorkflowSignalError` documents;
+                    # the workflow ignores a duplicate once it holds the decision.
+                    signal = False
+                elif request.action == "reject":
                     if invoice.status is not DbInvoiceStatus.AWAITING_REVIEW:
                         # C-01: the workflow only hears a rejection while it waits for review,
                         # so accepting one earlier would be lost and the invoice paid anyway.
@@ -655,21 +679,12 @@ class DbInvoiceService:
                             action=DecisionAction.SEND_TO_REVIEW,
                         )
                     )
+                await append_in_transaction(
+                    self._audit,
+                    session,
+                    _decision_event(invoice_id, request, user, None, resend=resend),
+                )
 
-        await self._audit.append(
-            AuditEvent(
-                actor=str(user.id),
-                action=f"decision.{request.action}",
-                entity=f"invoice:{invoice_id}",
-                payload={
-                    "comment": request.comment,
-                    "proposal_id": request.proposal_id,
-                    "corrections": (
-                        None if corrections is None else corrections.model_dump(mode="json")
-                    ),
-                },
-            )
-        )
         # Last, after the decision is durable and audited: a failed signal surfaces as a typed
         # 503, and a retry of the same decision is an idempotent no-op plus a re-signal.
         if signal is not None:
@@ -678,14 +693,15 @@ class DbInvoiceService:
             )
 
     async def _execute_proposal(
-        self, proposal_id: str, user: User
+        self, proposal_id: str, user: User, event: AuditEvent
     ) -> tuple[ProposalKind, InvoiceId | None]:
         """P5/K4: authorizes EXECUTE_PROPOSAL (plus the kind's capability) through
         `PolicyGuard`. Payment-affecting kinds (approve_payment, change_bank) are applied only
         by `SqlPaymentStateWriter.execute_proposal`; an `edit_field` proposal is applied through
         the same path as a direct field edit, in the transaction that marks it executed. `route`
         and `request_info` have no executable effect here and are refused (M-06), so nothing is
-        ever marked executed without having happened."""
+        ever marked executed without having happened. `event` (the caller's audit entry for the
+        execution) commits with the `decisions` row, and an edit's rows with their own entry."""
         async with get_session() as session:
             row = await session.get(ProposalRow, proposal_id)
             if row is None:
@@ -732,25 +748,22 @@ class DbInvoiceService:
             )
 
         grant = await self._guard.require(action_request)
+        if edit is not None and invoice_id is None:
+            raise ProposalNotExecutableError(f"edit_field proposal {proposal_id} names no invoice")
         if edit is None:
+            # The writer commits the payment-state change with its own `payment_state:*` entry.
             await self._writer.execute_proposal(proposal_id, grant)
-        else:
-            if invoice_id is None:
-                raise ProposalNotExecutableError(
-                    f"edit_field proposal {proposal_id} names no invoice"
-                )
-            async with get_session() as session:
+        async with get_session() as session:
+            if edit is not None and invoice_id is not None:
                 locked = await session.get(ProposalRow, proposal_id, with_for_update=True)
                 if locked is None or locked.status != ProposalStatus.PENDING:
                     raise PolicyDeniedError(f"proposal {proposal_id} is not pending")
                 previous = await self._write_field_edit(session, invoice_id, edit, user)
                 locked.status = ProposalStatus.EXECUTED
-            await self._audit_field_edit(invoice_id, edit, user, previous)
-
-        # `decisions` rows are per invoice; a vendor-level proposal (change_bank) has none and is
-        # recorded by the writer's `payment_state:*` audit events instead.
-        if invoice_id is not None:
-            async with get_session() as session:
+                await self._audit_field_edit(session, invoice_id, edit, user, previous)
+            # `decisions` rows are per invoice; a vendor-level proposal (change_bank) has none
+            # and is recorded by the writer's `payment_state:*` audit events as well.
+            if invoice_id is not None:
                 session.add(
                     Decision(
                         invoice_id=invoice_id,
@@ -759,6 +772,7 @@ class DbInvoiceService:
                         proposal_id=proposal_id,
                     )
                 )
+            await append_in_transaction(self._audit, session, event)
         return kind, invoice_id
 
     async def accept_proposal(self, proposal_id: str, user: User) -> ProposalAcceptResponse:
@@ -766,20 +780,25 @@ class DbInvoiceService:
         holds `EXECUTE_PROPOSAL` plus the capability its kind requires."""
         target = await self._approving_proposal_invoice(proposal_id)
         corrections = await self._review_corrections(target) if target is not None else None
-        kind, invoice_id = await self._execute_proposal(proposal_id, user)
-
-        await self._audit.append(
+        async with get_session() as session:
+            pending = await session.get(ProposalRow, proposal_id)
+        # The kind the entry names; `_execute_proposal` re-reads the row and refuses (before
+        # anything commits) one that is missing, not pending or not executable.
+        pending_kind = ProposalKind(pending.kind).value if pending is not None else None
+        kind, invoice_id = await self._execute_proposal(
+            proposal_id,
+            user,
             AuditEvent(
                 actor=str(user.id),
                 action="proposal.accept",
                 entity=f"proposal:{proposal_id}",
                 payload={
-                    "kind": kind.value,
+                    "kind": pending_kind,
                     "corrections": (
                         None if corrections is None else corrections.model_dump(mode="json")
                     ),
                 },
-            )
+            ),
         )
         if kind is ProposalKind.APPROVE_PAYMENT and invoice_id is not None:
             await self._signaller.signal_review(invoice_id, approved=True, corrections=corrections)
@@ -843,6 +862,43 @@ class DbInvoiceService:
             if invoice.status in _TERMINAL_STATUSES:
                 return
             await asyncio.sleep(_POLL_INTERVAL_S)
+
+
+async def _rejection_to_resend(session: AsyncSession, invoice: Invoice) -> bool:
+    """True when `invoice` is BLOCKED by a recorded REJECT decision (H-01 writes both in one
+    transaction), so a repeated reject re-sends the signal instead of answering 409 (N-02)."""
+    if invoice.status is not DbInvoiceStatus.BLOCKED:
+        return False
+    rejected = await session.scalar(
+        select(Decision.id)
+        .where(Decision.invoice_id == invoice.id, Decision.action == DecisionAction.REJECT)
+        .limit(1)
+    )
+    return rejected is not None
+
+
+def _decision_event(
+    invoice_id: InvoiceId,
+    request: DecisionRequest,
+    user: User,
+    corrections: ReviewCorrections | None,
+    *,
+    resend: bool = False,
+) -> AuditEvent:
+    """The `decision.<action>` audit entry, appended in the decision's own transaction."""
+    payload: dict[str, JsonValue] = {
+        "comment": request.comment,
+        "proposal_id": request.proposal_id,
+        "corrections": None if corrections is None else corrections.model_dump(mode="json"),
+    }
+    if resend:
+        payload["resent"] = True
+    return AuditEvent(
+        actor=str(user.id),
+        action=f"decision.{request.action}",
+        entity=f"invoice:{invoice_id}",
+        payload=payload,
+    )
 
 
 def _proposed_edit(row: ProposalRow) -> FieldEdit:

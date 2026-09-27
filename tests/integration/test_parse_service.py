@@ -202,13 +202,11 @@ def _run_scan_sample() -> dict[str, float | int] | None:
             "exec",
             "-T",
             "parse",
-            "curl",
-            "-s",
-            "-X",
-            "POST",
-            "-F",
-            f"image=@{remote}",
-            "http://localhost:8000/parse",
+            "sh",
+            "-c",
+            # The service token lives in the container's env (REVIEW N-06); expanded in there.
+            'curl -s -X POST -H "Authorization: Bearer $PARSE_SERVICE_TOKEN" '
+            f"-F image=@{remote} http://localhost:8000/parse",
             timeout=900,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
