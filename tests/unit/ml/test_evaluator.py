@@ -1,7 +1,8 @@
 """Tests for the Extractor B dev evaluator (ADR-0011 §2) with a deterministic fake generator
 (the model is faked, the M1.3 scorer is real): micro field F1 in points, normalised matches,
-invalid JSON failing every field, the dev-loss mean, batched generation (longest prompt
-first, outputs keyed to sample_ids, env batch size, OOM backoff, progress lines) and the persisted
+invalid JSON failing every field, the dev-loss mean, batched generation (longest target
+first and minimal decode steps, outputs keyed to sample_ids, env batch size, three-quarter OOM
+backoff that carries over to later evals, progress lines) and the persisted
 per-row dev outputs (schema, report round trip, atomic rerun, typed write failure)."""
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from ml.extractor_b.evaluator import (
     DEFAULT_EVAL_BATCH,
@@ -22,6 +25,7 @@ from ml.extractor_b.evaluator import (
     FinishReason,
     GenerateBatch,
     HfDevEvaluator,
+    backoff_batch,
     dev_outputs_path,
     eval_batch_size,
     generation_order,
@@ -121,9 +125,11 @@ class _FakeOom(Exception):
 
 
 def _varied_rows(make_row: RowFactory, n: int) -> list[TrainingSample]:
-    """Rows whose prompt lengths are not in sample_id order, so sorting is observable."""
+    """Rows whose prompt and target lengths are not in sample_id order (and tie on targets), so
+    sorting and its tie-break are observable."""
     return [
-        make_row(f"r{i:02d}", role="dev", tokens=((i * 7) % 5 * 100 + 100, 50)) for i in range(n)
+        make_row(f"r{i:02d}", role="dev", tokens=((i * 7) % 5 * 100 + 100, (i * 3) % 4 * 100 + 100))
+        for i in range(n)
     ]
 
 
@@ -157,8 +163,9 @@ def test_batched_outputs_keyed_to_sample_ids(
     flat = [sid for batch in fake.batches for sid in batch]
     assert flat == [r.sample_id for r in generation_order(rows)]
     assert flat != sorted(flat)  # the generation order really differs from sample_id order
-    lengths = {r.sample_id: r.n_prompt_tokens for r in rows}
+    lengths = {r.sample_id: (r.n_target_tokens, r.n_prompt_tokens) for r in rows}
     assert [lengths[s] for s in flat] == sorted(lengths.values(), reverse=True)
+    assert len({lengths[s][0] for s in flat}) < len(flat)  # target ties broken by prompt length
     assert [len(b) for b in fake.batches] == [3, 3, 1]
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith("dev eval step=229 3/7 rows, ") and out[0].endswith(", batch=3")
@@ -210,7 +217,7 @@ def test_bad_batch_env_is_an_error(raw: str) -> None:
     assert eval_batch_size({EVAL_BATCH_ENV: " "}) == DEFAULT_EVAL_BATCH
 
 
-def test_oom_halves_batch_and_retries(
+def test_oom_shrinks_batch_and_retries(
     make_row: RowFactory, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     rows = _varied_rows(make_row, 9)
@@ -218,13 +225,48 @@ def test_oom_halves_batch_and_retries(
     ev = HfDevEvaluator(rows, tmp_path, generate_batch=fake, batch_size=8, oom_errors=(_FakeOom,))
     result = ev.generative(None, None, 458)
     assert result.dev_f1 == pytest.approx(100.0)
-    # 8 fails, 4 fails, then 2 for the rest of the eval (never grows back).
-    assert fake.attempts == [8, 4, 2, 2, 2, 2, 1]
+    # 8, 6, 4 and 3 fail, then 2 for the rest of the eval (never grows back).
+    assert fake.attempts == [8, 6, 4, 3, 2, 2, 2, 2, 1]
     assert [sid for b in fake.batches for sid in b] == [r.sample_id for r in generation_order(rows)]
     out = capsys.readouterr().out
-    assert "dev eval step=458 OOM at batch=8; retrying with batch=4" in out
-    assert "dev eval step=458 OOM at batch=4; retrying with batch=2" in out
+    assert "dev eval step=458 OOM at batch=8; retrying with batch=6" in out
+    assert "dev eval step=458 OOM at batch=3; retrying with batch=2" in out
     assert "dev eval step=458 9/9 rows, " in out
+    # The next eval of the same process starts at the size that worked: no repeated OOMs.
+    fake.attempts.clear()
+    assert ev.generative(None, None, 459).dev_f1 == pytest.approx(100.0)
+    assert fake.attempts == [2, 2, 2, 2, 1] and ev.batch_size == 2
+
+
+def test_backoff_batch_sequence() -> None:
+    sizes = [8]
+    while sizes[-1] > 1:
+        sizes.append(backoff_batch(sizes[-1]))
+    assert sizes == [8, 6, 4, 3, 2, 1]
+    with pytest.raises(TrainingError):
+        backoff_batch(1)
+
+
+def _decode_steps(targets: Sequence[int], batch: int) -> int:
+    """Decode steps of a batched eval: each contiguous batch runs to its longest output."""
+    return sum(max(targets[i : i + batch]) for i in range(0, len(targets), batch))
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])  # rows only overwrite pages
+@given(
+    targets=st.lists(st.integers(min_value=1, max_value=4096), min_size=1, max_size=40),
+    batch=st.integers(min_value=1, max_value=9),
+    data=st.data(),
+)
+def test_target_order_minimises_decode_steps(
+    make_row: RowFactory, targets: list[int], batch: int, data: st.DataObject
+) -> None:
+    """Target-sorted batches never decode more steps than any other order of the same rows."""
+    rows = [make_row(f"t{i:02d}", role="dev", tokens=(100, t)) for i, t in enumerate(targets)]
+    ordered = [r.n_target_tokens for r in generation_order(rows)]
+    other = data.draw(st.permutations(targets))
+    assert sorted(ordered) == sorted(targets)  # same multiset of rows
+    assert _decode_steps(ordered, batch) <= _decode_steps(other, batch)
 
 
 def test_oom_at_batch_one_is_reraised(make_row: RowFactory, tmp_path: Path) -> None:

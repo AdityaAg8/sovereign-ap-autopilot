@@ -1,7 +1,7 @@
 """Batched dev eval (M7.1-perf) through the real Extractor B processor (`models/Qwen/Qwen3.5-4B`,
 offline) with only the model faked: prompts are left-padded and each unpadded row equals its
 single-row prompt, generate is greedy with the KV cache and a pad id, outputs map back to the right
-sample_id, the padding side is restored, a real `torch.cuda.OutOfMemoryError` halves the batch,
+sample_id, the padding side is restored, a real `torch.cuda.OutOfMemoryError` shrinks the batch,
 and the persisted dev outputs carry the real tokenizer's eos-based finish reason and token count.
 `trainer` marker (CPU only)."""
 
@@ -136,7 +136,9 @@ def test_batched_generation_keys_outputs_and_restores_padding(
         assert p["generated_tokens"] == len(processor.tokenizer.encode(target)) + 1
 
 
-def test_real_cuda_oom_halves_the_batch(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_real_cuda_oom_shrinks_the_batch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     processor = _processor()
     rows = _rows(tmp_path)
     model = _FakeModel(processor, rows, tmp_path, max_rows=1)

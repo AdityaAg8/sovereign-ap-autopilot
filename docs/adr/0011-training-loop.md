@@ -374,3 +374,91 @@ container nvidia-smi may not list other containers' processes.
   The lock takes a `FileLocker` seam (`FcntlLocker` on Linux; none on Windows, so nothing is
   reclaimed there); the tests run the same races on both platforms through
   `tests/unit/ml/_file_lockers.py` (real flock on Linux, a byte-range lock on Windows) (2026-09-25).
+
+## Amendment 5 (2026-09-27): faster generative dev evals, same selection (M10.2 prep)
+
+**Context: where M7.1 time went.** Run `b-20260923T2025-eb0aea7d` (510 steps, 4074 train /
+178 dev rows) took ~36 h wall-clock, but the train log did not survive (it lived in a deleted
+worktree) and `trainer_state.json` has no timestamps, so the split below is reconstructed from
+the PROGRESS notes and checkpoint `created_at` stamps:
+
+| Phase | Evidence | Time |
+|---|---|---|
+| 510 optimizer steps (16 samples of ~4.1k tokens median each) | ~40 s/step measured at the step-57 resume | ~5.7 h |
+| 4 generative dev evals, batch 4, `max_new_tokens` 4096 | step 255 2h55m, step 383 2h47m, step 510 ~2h50m (ckpt 383 at 00:53Z to ckpt 510 at 05:07Z = 127 steps + 3 dev-loss evals + eval 510) | ~11.3 h |
+| 10 dev-loss evals (178 teacher-forced forwards each) | not logged separately | est. < 0.5 h |
+| Pauses, restarts, model reloads (`resume_count` 3) | the remainder | ~18 h |
+
+Generative evals were ~65% of the compute. A batched greedy `generate` decodes until its
+longest row stops, so an eval costs about Σ over batches of the longest output in the batch.
+Grouped by prompt length (the old order), batch 4 needs 93.2k decode steps on this dev set;
+the step-128 eval (2048-token cap, 82.2k steps) took 2h10m and the 4096 evals (93.2k) took
+2h47-2h55m, which puts the cost at roughly 0.1 s per decode step at batch 4. Dev prompts are
+nearly uniform (p25-p100 3107-3137 tokens), while targets range from 278 to 2923 tokens, so
+batches mixed short and long outputs and most rows idled behind the longest one.
+
+**Decision.**
+1. *Longest target first* (`evaluator.generation_order`): dev rows are generated in order of
+   descending gold `n_target_tokens`, then prompt length, then `sample_id`. For contiguous
+   batches of a fixed size, this order minimises the sum of batch maxima (a hypothesis test
+   checks it against random permutations). Decode steps on the M7.1 dev set, against the
+   93.2k of the old order at batch 4: batch 4 69.0k (−26%), batch 6 46.4k (−50%), batch 8
+   35.3k (−62%); prompt order itself would need 66.2k at 6 and 51.6k at 8. The gold length only schedules
+   rows; it never reaches the prompt, the model or the scorer.
+2. *Finer OOM backoff* (`evaluator.backoff_batch`): 8 → 6 → 4 → 3 → 2 → 1 instead of halving,
+   so a batch of 6 is tried before falling back to 4. The size that worked carries over to the
+   next eval in the same process, so each later eval does not repeat the failed attempts.
+   `EXTRACTOR_B_EVAL_BATCH` (default 8) still sets the starting size.
+3. *Measured, not reconstructed* (`loop.PhaseClock`): the callback logs `step_seconds`,
+   `dev_loss_eval_seconds` and `generative_eval_seconds` to MLflow, so the next budget comes
+   from the run itself.
+
+**Why selection is unchanged.** Same dev rows (all 178, no subset), same greedy thinking-off
+decoding with the serving `max_new_tokens` 4096, same scorer, same 4 eval steps, same
+`select_best` rule and tie epsilon. `TrainConfig` is unchanged, so `config_sha256` and the
+fingerprint are too. What changes is which rows share a batch. With left padding, a row's
+greedy output can differ in the last bits from its output in another batch. That was already
+true, because the OOM backoff changes batch composition mid-eval (#51). It is the same class of
+noise as the backoff, and it is far below the 0.1-point tie epsilon on aggregate F1 unless a
+row flips. *Check* (trainer image, GPU, once the GPU is free): re-run the dev eval of
+`checkpoint-000383` with the new order. It must reproduce dev_f1 97.17 ± 0.1 and valid_json
+0.955 ± 1/178. If it does not, this amendment is reverted before the M10.2 run.
+
+**Considered and rejected.**
+- *Subset screening* (intermediate evals on a stratified ~60-row subset, full dev only for
+  competitive checkpoints and the final step). Selection on full dev needs a full eval of
+  every checkpoint within noise of the best. In M7.1 the three 4096-token evals landed within
+  0.18 points of each other (96.99 / 97.17 / 97.17), so all of them would have been extended to
+  full dev, and the saving would have been zero. A deferred variant (screen everything and
+  re-evaluate candidates at the end by reloading their adapters) costs more when late
+  checkpoints tie, which is the normal cosine-schedule outcome. It also needs retention pins
+  and an adapter-swap path that cannot be tested without the GPU. The only saving would come
+  from clearly dominated checkpoints, and with 4 evals there are at most one or two of those.
+- *Stop at JSON completion.* B is served through a JSON-schema grammar that ends generation
+  when the top-level object closes. Stopping the eval there would mirror serving, but it
+  changes the metric: rows that continue after a complete object are invalid today and would
+  become valid. That is a selection-metric change and needs its own decision, backed by the
+  ~4.5% invalid dev rows in `dev_outputs/`. It is not a speed tweak. EOS already stops a row.
+- *Length-grouped sampling or bucketing for training.* Micro-batch 1 has no padding to save,
+  and reordering samples changes the optimisation trajectory, so it is not equivalent.
+- *More dataloader workers, pinned memory, a pre-tokenised pixel cache.* Pages are already
+  resized once at data prep. Per-sample CPU work (JPEG read, processor, tokenise, mask) is
+  estimated at a few hundred ms, and 2 persistent prefetching workers hide it behind a ~2.5 s
+  GPU micro-step. A cached `pixel_values` tensor is ~30-45 MB per row in fp32 (100+ GB for
+  the train set). Revisit only if `step_seconds` shows data stalls.
+- *Turning off gradient checkpointing, `torch.compile`, a static KV cache, Liger kernels.*
+  6k-token activations without checkpointing do not fit the 9.0 GB cap. Unsloth already fuses
+  the loss and its kernels. Compile and static cache on Qwen3.5's hybrid DeltaNet layers under
+  4-bit have not been measured safe, and no GPU is free to measure them now.
+
+**Expected effect on the M10.2 retrain** (same data size; scans add rows, so steps scale with
+`n_train`): steps ~5.7 h and dev-loss evals < 0.5 h stay the same. Generative evals go from
+~11.3 h to ~8.4 h if batch 6 OOMs and the run falls back to 4 (−26%), or to ~6.2 h if batch 6
+fits (−50% steps, assuming ~10% more latency per step at 6). That saves ~3-5 h of compute:
+~17.5 h → ~12.5-14.5 h. Pauses are the rest of the M7.1 wall-clock and are an operations matter.
+
+**Proof (gate).** CPU: `tests/unit/ml/test_evaluator.py` (target-first order and tie-break,
+same row multiset, no permutation decodes fewer steps (hypothesis), 8→6→4→3→2→1 backoff
+carried to the next eval) and `tests/unit/ml/test_loop.py` (`PhaseClock`). GPU (local, trainer
+image): the `checkpoint-000383` re-eval check above, and `make test-trainer`
+(`test_batched_eval_real_processor.py`, `test_private_api_pins.py`).

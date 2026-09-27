@@ -1,6 +1,7 @@
 """Tests for the torch-free Extractor B loop control (ADR-0011 §3-5): run resolution and resume
 checks, the SIGTERM pause flag, the save/eval plan, NaN/skip handling with `spikes.jsonl`,
-divergence stops, best tracking and a hypothesis save/resume round trip of the loop state."""
+divergence stops, best tracking, a hypothesis save/resume round trip of the loop state and the
+`PhaseClock` step/eval timing split."""
 
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from ml.extractor_b.loop import (
     LOOP_STATE_JSON,
     LoopController,
     PauseFlag,
+    PhaseClock,
     ProbeResult,
     assert_offline_env,
     choose_rung,
@@ -340,3 +342,23 @@ def test_mlflow_params_resume_with_a_different_identity_is_refused() -> None:
     logged = {"fingerprint": make_fingerprint().model_dump_json()}
     with pytest.raises(TrainingError, match="different run fingerprint"):
         mlflow_run_params(make_fingerprint(config_sha256="0" * 64), "b-run", logged)
+
+
+def test_phase_clock_splits_step_and_eval_time() -> None:
+    ticks = iter([10.0, 50.0, 60.0, 190.0, 200.0, 240.0, 250.0, 265.0])
+    clock = PhaseClock(now=lambda: next(ticks))
+    assert clock.step_seconds() == {}  # before the first mark (train begin) nothing is timed
+    clock.mark()  # 10
+    timings = clock.step_seconds()  # 50
+    with clock.timed("generative_eval_seconds", timings):  # 60 -> 190
+        pass
+    assert timings == {"step_seconds": 40.0, "generative_eval_seconds": 130.0}
+    clock.mark()  # 200: the eval is not counted in the next step
+    assert clock.step_seconds() == {"step_seconds": 40.0}  # 240
+    failed: dict[str, float] = {}
+    with (
+        pytest.raises(ValueError, match="eval failed"),
+        clock.timed("dev_loss_eval_seconds", failed),  # 250 -> 265
+    ):
+        raise ValueError("eval failed")
+    assert failed == {"dev_loss_eval_seconds": 15.0}
