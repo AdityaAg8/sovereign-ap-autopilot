@@ -389,13 +389,16 @@ e2e-pipeline:
 	@echo "==> 20 documents through the running stack (make up + make seed first) -> reports/e2e_pipeline.md"
 	uv run python scripts/e2e_pipeline.py
 
+# Overridable: `make demo DEMO_ARGS="--timeout 900"` (per-scenario deadline, seconds).
+DEMO_ARGS ?=
+
 demo: up seed
 	@echo "==> web app against the live API on http://localhost:3000 (log: logs/web.log)"
 	@mkdir -p logs
 	cd $(WEB_DIR) && NEXT_PUBLIC_API_MODE=http pnpm build >../logs/web-build.log 2>&1
 	cd $(WEB_DIR) && (nohup pnpm start -p 3000 >../logs/web.log 2>&1 &)
-	@echo "==> staging the demo scenarios (docs/demo.md walks through them)"
-	uv run python scripts/demo.py
+	@echo "==> five scenarios, each asserted against the API (docs/demo.md walks through them)"
+	uv run python scripts/demo.py $(DEMO_ARGS)
 
 # Same jobs as .github/workflows/ci.yml on a clean clone of REF (default HEAD); for when Actions
 # can't run. Report: logs/ci-local/<ref>.md.
