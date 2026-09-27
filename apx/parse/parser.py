@@ -24,7 +24,7 @@ from apx.parse.digital import (
 from apx.parse.interfaces import Page, ParsedDocument
 
 _PDF_MAGIC: Final[bytes] = b"%PDF"
-SERVICE_PARSER_VERSION: Final[str] = "paddleocr-vl-1.6+pdfplumber/1"
+SERVICE_PARSER_VERSION: Final[str] = "paddleocr-vl-1.6+pdfplumber/2"
 
 
 class PaddleOcrDocumentParser:
