@@ -21,7 +21,12 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from apx.asp_mock.interfaces import ArchiveRecord, AspReceipt
-from apx.common.errors import ModelServingError, ParsedArtifactIntegrityError
+from apx.common.errors import (
+    FailureNotRecordedError,
+    ModelOutputError,
+    ModelServingError,
+    ParsedArtifactIntegrityError,
+)
 from apx.common.invoice import Invoice, Party
 from apx.common.types import IdempotencyKey, InvoiceId, Language, Money, Route, make_idempotency_key
 from apx.einvoice.interfaces import DocumentTypeCode, EInvoiceDocument
@@ -155,6 +160,9 @@ class FakeInvoiceActivities:
     extract_error: Exception | None = None
     failures: list[tuple[str, str]] = field(default_factory=list)
     mark_failed_error: Exception | None = None
+    build_invoice_error: Exception | None = None
+    mark_failed_unrecorded: int = 0
+    """`mark_failed` raises `FailureNotRecordedError` this many times before it lands."""
 
     @activity.defn(name="scan")
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport:
@@ -185,6 +193,8 @@ class FakeInvoiceActivities:
     @activity.defn(name="build_invoice")
     async def build_invoice(self, result: ExtractionResult, inp: InvoiceWorkflowInput) -> Invoice:
         self.calls.append("build_invoice")
+        if self.build_invoice_error is not None:
+            raise self.build_invoice_error
         return _invoice()
 
     @activity.defn(name="validate")
@@ -241,6 +251,9 @@ class FakeInvoiceActivities:
         self.calls.append("mark_failed")
         if self.mark_failed_error is not None:
             raise self.mark_failed_error
+        if self.mark_failed_unrecorded > 0:
+            self.mark_failed_unrecorded -= 1
+            raise FailureNotRecordedError("ingest has not committed the document row yet")
         self.failures.append((invoice_id, error))
 
 
@@ -550,3 +563,44 @@ async def test_a_failing_mark_failed_never_masks_the_original_failure(
     assert "ParsedArtifactIntegrityError" in repr(raised.value.cause.cause)
     assert fake.calls.count("mark_failed") == 1
     assert fake.failures == []
+
+
+@pytest.mark.asyncio
+async def test_a_failure_before_the_invoice_row_exists_is_still_recorded(
+    temporal_env: WorkflowEnvironment,
+) -> None:
+    """The live M5.6 case: `build_invoice` refused an extraction without totals, so no invoice
+    row was ever written. `mark_failed` still runs with the document's id (its sha256) and the
+    typed cause; the concrete activity records it on `ingested_documents`."""
+    error = ModelOutputError("subtotal, vat_total, total missing")
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.AUTO, reasons=()), build_invoice_error=error
+    )
+
+    with pytest.raises(WorkflowFailureError):
+        await _run_workflow(temporal_env, fake)
+
+    assert fake.calls.count("build_invoice") == 5  # transient: default retries, then give up
+    assert "validate" not in fake.calls
+    assert fake.calls[-1] == "mark_failed"
+    assert [invoice_id for invoice_id, _ in fake.failures] == [INVOICE_ID]
+    assert f"ModelOutputError: {error}" in fake.failures[0][1]
+
+
+@pytest.mark.asyncio
+async def test_mark_failed_is_retried_until_the_document_row_is_there(
+    temporal_env: WorkflowEnvironment,
+) -> None:
+    """`FailureNotRecordedError` (neither row committed yet) is retryable, so the failure record
+    lands on a later attempt instead of being dropped."""
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.AUTO, reasons=()),
+        extract_error=ParsedArtifactIntegrityError("stored parse does not match its ref"),
+        mark_failed_unrecorded=2,
+    )
+
+    with pytest.raises(WorkflowFailureError):
+        await _run_workflow(temporal_env, fake)
+
+    assert fake.calls.count("mark_failed") == 3
+    assert [invoice_id for invoice_id, _ in fake.failures] == [INVOICE_ID]

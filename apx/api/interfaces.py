@@ -64,6 +64,9 @@ class InvoiceDetail(Frozen):
     reasons: tuple[str, ...]
     proposals: tuple[Proposal, ...]
     flags: tuple[FlagView, ...] = ()
+    error: str | None = None
+    """Why the workflow failed, when it failed before its invoice row existed (status FAILED,
+    no fields); None otherwise."""
 
 
 class InvoicePage(Frozen):

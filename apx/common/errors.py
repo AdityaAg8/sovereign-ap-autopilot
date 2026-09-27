@@ -26,6 +26,12 @@ class IngestError(ApxError):
     """Document could not be accepted (unsupported type, unreadable, too large)."""
 
 
+class FailureNotRecordedError(ApxError):
+    """`mark_failed` found neither the invoice row nor the `ingested_documents` row to record a
+    workflow failure on. Retryable: the ingest transaction that starts the workflow commits the
+    document row just after the start, so a very fast failure can arrive first."""
+
+
 class ScanError(ApxError):
     """Hidden-content scan could not complete; the document is never treated as clean."""
 

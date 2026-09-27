@@ -33,11 +33,13 @@ from temporalio.testing import WorkflowEnvironment
 
 from apx.asp_mock.interfaces import ArchiveRecord, AspReceipt, AspSubmission
 from apx.audit.interfaces import AuditEntry, AuditEvent
+from apx.common.errors import FailureNotRecordedError
 from apx.common.invoice import Invoice, InvoiceKind, InvoiceLine, Party, VatCategory
 from apx.common.master import BankDetailChange, Vendor
 from apx.common.types import IdempotencyKey, InvoiceId, Language, Money, Route, VendorId
 from apx.db.enums import DbInvoiceStatus
 from apx.db.models import IdempotencyRecord
+from apx.db.models import IngestedDocument as IngestedDocumentRow
 from apx.db.models import Invoice as InvoiceRow
 from apx.einvoice.interfaces import DocumentTypeCode, EInvoiceDocument, SchematronResult
 from apx.extract.interfaces import ExtractionResult, ExtractorId, ExtractorOutput, FieldName
@@ -561,5 +563,84 @@ async def test_mark_failed_writes_failed_but_never_overwrites_a_terminal_status(
         assert row is not None
         assert row.status is after
     assert [(e.action, e.payload) for e in audit.events] == [
-        ("activity:failed", {"error": "SchematronFailedError: ibr-147-ae"})
+        (
+            "activity:failed",
+            {"error": "SchematronFailedError: ibr-147-ae", "recorded_on": "invoice"},
+        )
     ]
+
+
+def _failure_activities(
+    session_factory: SessionFactory, audit: FakeAuditLog
+) -> DefaultInvoiceActivities:
+    """`DefaultInvoiceActivities` with only what `mark_failed` touches wired."""
+    unused = cast(Any, None)
+    return DefaultInvoiceActivities(
+        InvoiceActivityDeps(
+            documents=unused,
+            scanner=unused,
+            parser=unused,
+            parsed=unused,
+            extraction=unused,
+            invoices=unused,
+            feature_builder=unused,
+            trust_gate=unused,
+            validator=unused,
+            fraud_engine=unused,
+            vendors=unused,
+            policy_engine=unused,
+            ubl_builder=unused,
+            schematron=unused,
+            asp_client=unused,
+            archive=unused,
+            audit=audit,
+            records=SqlInvoiceRecords(session_factory),
+            session_factory=session_factory,
+            idempotency=SqlIdempotencyStore(),
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_mark_failed_before_the_invoice_row_records_the_failure_on_the_document(
+    session_factory: SessionFactory,
+) -> None:
+    # The live M5.6 case: `build_invoice` failed, so only the ingest row exists.
+    sha = hashlib.sha256(b"failed-before-invoice").hexdigest()
+    async with session_factory() as session:
+        session.add(
+            IngestedDocumentRow(
+                sha256=sha,
+                filename="attack.pdf",
+                media_type="application/pdf",
+                size_bytes=10,
+                source="watch",
+                workflow_id=sha,
+            )
+        )
+    audit = FakeAuditLog()
+    activities = _failure_activities(session_factory, audit)
+
+    await activities.mark_failed(sha, "ModelOutputError: subtotal missing")
+    await activities.mark_failed(sha, "a later retry's text")  # idempotent: the first is kept
+
+    async with session_factory() as session:
+        document = await session.get(IngestedDocumentRow, sha)
+        assert document is not None
+        assert document.failed_at is not None
+        assert document.failure == "ModelOutputError: subtotal missing"
+        assert await session.get(InvoiceRow, sha) is None  # no invoice is invented
+    assert [e.payload["recorded_on"] for e in audit.events] == ["document", "document"]
+
+
+@pytest.mark.asyncio
+async def test_mark_failed_with_neither_row_raises_instead_of_dropping_the_failure(
+    session_factory: SessionFactory,
+) -> None:
+    audit = FakeAuditLog()
+    activities = _failure_activities(session_factory, audit)
+    unknown = hashlib.sha256(b"never-ingested").hexdigest()
+
+    with pytest.raises(FailureNotRecordedError):
+        await activities.mark_failed(unknown, "ScanError: boom")
+    assert audit.events == []  # audited once a retry records it, not before

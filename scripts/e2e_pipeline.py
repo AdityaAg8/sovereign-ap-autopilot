@@ -194,7 +194,7 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
             doc.status, doc.route = summary["status"], summary["route"]
             if doc.route and doc.routed_at is None:
                 doc.routed_at = time.time()
-            if doc.kind == "attack" and doc.route is not None:
+            if doc.kind == "attack" and doc.route is not None and doc.status != "failed":
                 # Never approved: an attack only has to be kept out of auto-payment.
                 doc.settled_at = time.time()
                 continue
@@ -218,6 +218,10 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
                     doc.notes.append("approved uncorrectable: " + ", ".join(wrong))
             if doc.status in SETTLED:
                 doc.settled_at = time.time()
+                if doc.status == "failed" and detail.get("error"):
+                    # Failed before its invoice row existed: the API reports the document's
+                    # recorded failure instead of a 404 (`mark_failed`, migration 0011).
+                    doc.notes.append(f"failed: {str(detail['error'])[:160]}")
         done = sum(d.settled_at is not None for d in by_sha.values())
         print(f"\r{done}/{len(docs)} settled", end="", flush=True)
         time.sleep(3)
@@ -281,7 +285,10 @@ def check_fields(client: httpx.Client, doc: Doc) -> str:
     response = call(lambda: client.get(f"/invoices/{doc.sha}"), f"fields {doc.sha[:12]}")
     if response.status_code != 200:
         return "no record"
-    wrong = truth_mismatches(field_values(response.json()), doc.truth)
+    detail = response.json()
+    if not detail.get("fields"):
+        return "no record"  # failed before its invoice (and its fields) were stored
+    wrong = truth_mismatches(field_values(detail), doc.truth)
     return "ok" if not wrong else "mismatch: " + ", ".join(wrong)
 
 
@@ -292,6 +299,18 @@ def _same(name: str, got: str, expected: str) -> bool:
         except InvalidOperation:
             return False
     return " ".join(got.split()) == " ".join(expected.split())
+
+
+def attack_held(doc: Doc) -> bool:
+    """Whether an attack PDF was kept out of payment: blocked, or routed to block/review and
+    never archived, or failed before any routing decision (no invoice was built, so nothing
+    could be paid; the summary counts these separately, since no defence decided them). An
+    AUTO-routed attack that later failed is not held: the defences let it through."""
+    if doc.status == "blocked":
+        return True
+    if doc.route in ("block", "review"):
+        return doc.status != "archived"
+    return doc.status == "failed" and doc.route is None
 
 
 def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
@@ -311,11 +330,9 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
     routed = [d.routed_at - d.dropped_at for d in docs if d.routed_at]
     factory = [d for d in docs if d.kind != "attack"]
     archived = sum(d.status == "archived" for d in factory)
-    attacks_stopped = sum(
-        (d.route in ("block", "review") and d.status != "archived") or d.status == "blocked"
-        for d in docs
-        if d.kind == "attack"
-    )
+    attacks = [d for d in docs if d.kind == "attack"]
+    attacks_stopped = sum(attack_held(d) for d in attacks)
+    failed_unrouted = sum(d.status == "failed" and d.route is None for d in attacks)
     lines = [
         "# End-to-end pipeline run (M5.6)",
         "",
@@ -324,7 +341,12 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
         "",
         f"- Factory invoices archived (UBL built, schematron passed, sent, archived): "
         f"**{archived}/{len(factory)}**",
-        f"- Attack PDFs kept out of payment: **{attacks_stopped}/{len(docs) - len(factory)}**",
+        f"- Attack PDFs kept out of payment: **{attacks_stopped}/{len(attacks)}**"
+        + (
+            f" ({failed_unrouted} of them only because the workflow failed before routing)"
+            if failed_unrouted
+            else ""
+        ),
         f"- Seconds from drop to routing decision: median "
         f"{statistics.median(routed):.0f}, max {max(routed):.0f}"
         if routed
@@ -404,8 +426,8 @@ def main() -> int:
         else:
 
             def known(sha: str) -> bool:
-                # The ingest store, not the API: a document whose earlier workflow failed before
-                # its invoice row existed is a 404 there, yet ingest dedupes it and starts nothing.
+                # The ingest store, not the API: a document whose workflow is still running
+                # before its invoice row exists is a 404 there, yet ingest dedupes it.
                 return (args.data / "documents" / sha).exists()
 
             docs = select(args.data, args.offset, known if args.fresh else None)

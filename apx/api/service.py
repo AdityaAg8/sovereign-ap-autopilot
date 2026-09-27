@@ -59,6 +59,7 @@ from apx.db.enums import (
 from apx.db.models import BankDetail, BankDetailHistory, Decision, Invoice, Vendor
 from apx.db.models import Field as FieldRow
 from apx.db.models import FraudFlag as FraudFlagRow
+from apx.db.models import IngestedDocument as IngestedDocumentRow
 from apx.db.models import Label as LabelRow
 from apx.db.models import Proposal as ProposalRow
 from apx.db.session import get_session
@@ -122,6 +123,31 @@ def _to_summary(invoice: Invoice, vendor_name: str | None) -> InvoiceSummary:
         supplier_name=vendor_name,
         total=format(invoice.total, "f"),
         received_at=invoice.created_at,
+    )
+
+
+def failed_document_detail(document: IngestedDocumentRow) -> InvoiceDetail:
+    """The detail of a document whose workflow failed before its invoice row existed
+    (`mark_failed` wrote `failed_at`/`failure` on its `ingested_documents` row): status FAILED
+    with the recorded error, no route, fields or decisions. The id is the document sha256,
+    which is the invoice id the workflow would have used."""
+    if document.failed_at is None or document.failure is None:
+        raise ValueError(f"document {document.sha256} has no recorded failure")
+    return InvoiceDetail(
+        summary=InvoiceSummary(
+            id=InvoiceId(document.sha256),
+            status=InvoiceStatus.FAILED,
+            route=None,
+            vendor_id=None,
+            supplier_name=None,
+            total=None,
+            received_at=document.received_at,
+        ),
+        fields=(),
+        accepted={},
+        reasons=(),
+        proposals=(),
+        error=document.failure,
     )
 
 
@@ -247,6 +273,11 @@ class DbInvoiceService:
         async with get_session() as session:
             invoice = await session.get(Invoice, invoice_id)
             if invoice is None:
+                # A workflow that failed before persisting its invoice leaves its failure on
+                # the document row; one still in flight (or never ingested) is a plain 404.
+                document = await session.get(IngestedDocumentRow, invoice_id)
+                if document is not None and document.failed_at is not None:
+                    return failed_document_detail(document)
                 raise NotFoundError(f"invoice {invoice_id} not found")
 
             vendor_name = None

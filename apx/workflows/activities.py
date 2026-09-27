@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from pydantic import JsonValue
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
@@ -25,6 +25,7 @@ from apx.asp_mock.interfaces import Archive, ArchiveRecord, AspClient, AspReceip
 from apx.audit.interfaces import AuditEvent, AuditLog
 from apx.common.errors import (
     EInvoiceError,
+    FailureNotRecordedError,
     ModelOutputError,
     ModelServingError,
     ParsedArtifactIntegrityError,
@@ -36,6 +37,7 @@ from apx.common.invoice import Invoice
 from apx.common.master import Vendor
 from apx.common.types import IdempotencyKey, Sha256Hex
 from apx.db.enums import DbInvoiceStatus
+from apx.db.models import IngestedDocument as IngestedDocumentRow
 from apx.db.models import Invoice as InvoiceRow
 from apx.einvoice.interfaces import (
     EInvoiceDocument,
@@ -555,18 +557,46 @@ class DefaultInvoiceActivities:
 
     @activity.defn(name="mark_failed")
     async def mark_failed(self, invoice_id: str, error: str) -> None:
-        """Writes FAILED to `invoices.status` once the workflow gives up (I4: nothing silently
-        dropped), so the API and the review queue stop showing it as in flight. A terminal
-        status is never overwritten: a SENT invoice whose archive failed stays SENT, since the
-        ASP already has it. Idempotent; a run that failed before the invoice row existed
-        updates nothing and is still audited."""
+        """Records that the workflow gave up (I4: nothing silently dropped), so the API and the
+        review queue stop showing it as in flight. With an invoice row, writes FAILED to
+        `invoices.status`; a terminal status is never overwritten (a SENT invoice whose archive
+        failed stays SENT, since the ASP already has it). Without one (the run failed before
+        `build_invoice` persisted it), writes `failed_at`/`failure` on the document's
+        `ingested_documents` row (the invoice id is the document sha256), keeping the first
+        failure. Neither row: `FailureNotRecordedError`, retried by the workflow until the
+        ingest commit lands. Idempotent; audited once the record is written."""
+        failure = error[:_FAILED_ERROR_CHARS]
         async with self._deps.session_factory() as session:
-            await session.execute(
-                update(InvoiceRow)
-                .where(
-                    InvoiceRow.id == invoice_id,
-                    InvoiceRow.status.not_in(_NEVER_MARKED_FAILED),
-                )
-                .values(status=DbInvoiceStatus.FAILED)
+            has_invoice = await session.scalar(
+                select(InvoiceRow.id).where(InvoiceRow.id == invoice_id)
             )
-        await self._audit("failed", invoice_id, {"error": error[:_FAILED_ERROR_CHARS]})
+            if has_invoice is not None:
+                await session.execute(
+                    update(InvoiceRow)
+                    .where(
+                        InvoiceRow.id == invoice_id,
+                        InvoiceRow.status.not_in(_NEVER_MARKED_FAILED),
+                    )
+                    .values(status=DbInvoiceStatus.FAILED)
+                )
+                recorded_on = "invoice"
+            else:
+                has_document = await session.scalar(
+                    select(IngestedDocumentRow.sha256).where(
+                        IngestedDocumentRow.sha256 == invoice_id
+                    )
+                )
+                if has_document is None:
+                    raise FailureNotRecordedError(
+                        f"no invoice or ingested document {invoice_id} to record the failure on"
+                    )
+                await session.execute(
+                    update(IngestedDocumentRow)
+                    .where(
+                        IngestedDocumentRow.sha256 == invoice_id,
+                        IngestedDocumentRow.failed_at.is_(None),
+                    )
+                    .values(failed_at=datetime.now(UTC), failure=failure)
+                )
+                recorded_on = "document"
+        await self._audit("failed", invoice_id, {"error": failure, "recorded_on": recorded_on})

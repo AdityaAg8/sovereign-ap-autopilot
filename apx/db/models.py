@@ -300,11 +300,14 @@ class IngestedDocument(Base):
     whichever concurrent `INSERT ... ON CONFLICT DO NOTHING` wins the row is the only caller
     that proceeds to start the workflow. `workflow_id` is set once that call succeeds; a row
     with `workflow_id IS NULL` was rolled back by a failed start (see `Ingestor.ingest`) and its
-    sha256 becomes ingestible again."""
+    sha256 becomes ingestible again. `failed_at`/`failure` record a workflow that gave up before
+    its `invoices` row existed (`mark_failed`, migration 0011), so that failure has a durable,
+    queryable home; both are set together or not at all."""
 
     __tablename__ = "ingested_documents"
     __table_args__ = (
         CheckConstraint(f"sha256 ~ '{SHA256_PATTERN}'", name="sha256_is_sha256"),
+        CheckConstraint("(failed_at IS NULL) = (failure IS NULL)", name="failure_recorded_whole"),
         CheckConstraint(
             "media_type IN ('application/pdf', 'image/png', 'image/jpeg', 'image/tiff')",
             name="media_type_known",
@@ -322,6 +325,9 @@ class IngestedDocument(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     workflow_id: Mapped[str | None] = mapped_column(String(150))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure: Mapped[str | None] = mapped_column(Text)
+    """The typed failure chain `InvoiceWorkflow` gave up with, cut to `mark_failed`'s limit."""
 
 
 # ---------------------------------------------------------------------------------------

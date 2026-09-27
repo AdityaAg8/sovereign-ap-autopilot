@@ -93,6 +93,8 @@ start, so a pull that adds a migration is applied on the next `make up`. Migrati
 | `0007_invoice_kind` | `invoices.kind` (invoice or credit note, ADR-0012) |
 | `0008_agent_routed_payee` | `v_agent_invoices` reads the payee P1 pinned at routing, masked (ADR-0014 §7) |
 | `0009_invoice_kind_check_name` | Renames the `invoices.kind` check constraint on databases that ran the first 0007; a no-op on fresh databases |
+| `0010_page_embeddings` | pgvector page embeddings for vendor-scoped near-duplicate detection |
+| `0011_document_failure` | `ingested_documents.failed_at`/`failure`: a workflow that failed before its invoice row existed reads as `failed` in the API |
 
 ## Ops dashboard (development)
 

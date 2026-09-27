@@ -924,6 +924,86 @@ def test_invoice_detail_returns_stored_fraud_flags_with_explanations(api_schema:
     asyncio.run(_fraud_flags_scenario())
 
 
+async def _failed_before_invoice_scenario() -> None:
+    """M5.6: a workflow that failed before `build_invoice` persisted its row. The real
+    `mark_failed` records it on `ingested_documents` and audits it; the detail endpoint then
+    answers FAILED with the error, while a document still in flight stays a 404."""
+    from typing import Any, cast
+
+    from apx.audit.chain import PgAuditLog
+    from apx.db.models import IngestedDocument
+    from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
+    from apx.workflows.idempotency import SqlIdempotencyStore
+    from apx.workflows.sql import SqlInvoiceRecords
+
+    failed_id = _invoice_id("failed-before-invoice")
+    running_id = _invoice_id("still-running")
+    async with get_session() as session:
+        await _seed_roles(session)
+        await _create_user(session, user_id="reviewer5", password="pw", roles=[Role.REVIEWER])
+        for sha in (failed_id, running_id):
+            session.add(
+                IngestedDocument(
+                    sha256=sha,
+                    filename=f"{sha[:8]}.pdf",
+                    media_type="application/pdf",
+                    size_bytes=10,
+                    source="watch",
+                    workflow_id=sha,
+                )
+            )
+
+    unused = cast(Any, None)
+    activities = DefaultInvoiceActivities(
+        InvoiceActivityDeps(
+            documents=unused,
+            scanner=unused,
+            parser=unused,
+            parsed=unused,
+            extraction=unused,
+            invoices=unused,
+            feature_builder=unused,
+            trust_gate=unused,
+            validator=unused,
+            fraud_engine=unused,
+            vendors=unused,
+            policy_engine=unused,
+            ubl_builder=unused,
+            schematron=unused,
+            asp_client=unused,
+            archive=unused,
+            audit=PgAuditLog(),
+            records=SqlInvoiceRecords(get_session),
+            session_factory=get_session,
+            idempotency=SqlIdempotencyStore(),
+        )
+    )
+    error = "ActivityError: Activity task failed <- ModelOutputError: totals missing"
+    await activities.mark_failed(failed_id, error)
+
+    transport = ASGITransport(app=_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "reviewer5", "pw")
+        failed = await client.get(f"/invoices/{failed_id}", headers=_auth(token))
+        running = await client.get(f"/invoices/{running_id}", headers=_auth(token))
+
+    assert failed.status_code == 200, failed.text
+    body = failed.json()
+    assert body["summary"]["id"] == failed_id
+    assert body["summary"]["status"] == "failed"
+    assert body["summary"]["route"] is None
+    assert body["error"] == error
+    assert body["fields"] == []
+    assert running.status_code == 404
+    async with get_session() as session:
+        assert await _audit_entities(session, f"invoice:{failed_id}") == ["activity:failed"]
+    await db_session.get_engine().dispose()
+
+
+def test_a_document_failed_before_its_invoice_row_reads_as_failed(api_schema: str) -> None:
+    asyncio.run(_failed_before_invoice_scenario())
+
+
 async def _ops_dashboard_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
     """M10.3 acceptance: every dashboard number equals an independent check -- the hand-derived
     value for this seed, and a recomputation in Python from raw rows (not the dashboard SQL)."""

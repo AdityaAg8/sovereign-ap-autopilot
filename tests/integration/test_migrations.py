@@ -374,3 +374,44 @@ def test_invoice_kind_check_name_is_repaired_by_0009(env_database_url: str) -> N
         assert asyncio.run(_invoice_check_names(ASYNCPG_DSN)) == {"ck_invoices_kind_known"}
     finally:
         command.downgrade(cfg, "base")
+
+
+async def _document_failure_shape(dsn: str) -> tuple[set[str], str | None]:
+    conn = await asyncpg.connect(dsn)
+    try:
+        rows = await conn.fetch(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'ingested_documents' AND column_name IN ('failed_at', 'failure')"
+        )
+        check = await conn.fetchval(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname = 'ck_ingested_documents_failure_recorded_whole'"
+        )
+        return {row["column_name"] for row in rows}, check
+    finally:
+        await conn.close()
+
+
+def test_document_failure_migration_up_and_down(env_database_url: str) -> None:
+    """M5.6: 0011 adds `ingested_documents.failed_at`/`failure` (set together, by CHECK) for a
+    workflow that failed before its invoice row existed; the downgrade removes all three."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "0011_document_failure")
+    try:
+        columns, check = asyncio.run(_document_failure_shape(ASYNCPG_DSN))
+        assert columns == {"failed_at", "failure"}
+        assert check is not None and "failed_at IS NULL" in check and "failure IS NULL" in check
+        sha = "a" * 64
+        with pytest.raises(asyncpg.CheckViolationError):
+            asyncio.run(
+                _execute(
+                    ASYNCPG_DSN,
+                    "INSERT INTO ingested_documents "
+                    "(sha256, filename, media_type, size_bytes, source, failure) VALUES "
+                    f"('{sha}', 'x.pdf', 'application/pdf', 1, 'watch', 'no timestamp')",
+                )
+            )
+        command.downgrade(cfg, "0010_page_embeddings")
+        assert asyncio.run(_document_failure_shape(ASYNCPG_DSN)) == (set(), None)
+    finally:
+        command.downgrade(cfg, "base")
