@@ -27,12 +27,16 @@ class ParseClientConfig(BaseSettings):
         description="TCP connect timeout for a parse service request.",
     )
     request_timeout_s: float = Field(
-        default=120.0,
+        default=240.0,
         gt=0.0,
         description=(
             "Total per-page request timeout, covering the service's model inference time. "
             "Measured (ADR-0013): a cold page (lazy model load ~12 s) 24.7 s, warm pages "
-            "13-15 s at 1024 max new tokens; the worker sends one page at a time."
+            "13-15 s at 1024 max new tokens; the worker sends one page at a time. At the "
+            "amendment-1 budget of 3072 tokens a dense page that finishes without looping took "
+            "125 s (~21 tok/s, 2026-09-27 parse-cache run), so the unbounded first pass can reach "
+            "~150 s plus the ~12 s cold load; strips only start inside the service's 90 s page "
+            "deadline. 240 s covers that worst case with margin."
         ),
     )
     service_token: SecretStr | None = Field(
