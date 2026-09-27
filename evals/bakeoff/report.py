@@ -1,18 +1,21 @@
-"""reports/bakeoff.md and the ADR-0016 decision block from the M3.4 bake-off rows (PRD §10 M3.4):
+"""reports/bakeoff.md, its machine-readable twin reports/bakeoff.json (read by the scoreboard) and
+the ADR-0016 decision block from the M3.4 bake-off rows (PRD §10 M3.4):
 per arm UAE field F1 (EN/AR/pooled), valid JSON, p50/p95 latency, ExtractBench short value F1,
 probe and eval-run VRAM, then the PRD decision rule: Qwen3.5-9B stays unless a challenger beats
 it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists;
 a challenger the pre-registered futility rule stopped at an interim look loses (ADR-0016 amdt 1).
 
-Usage: python -m evals.bakeoff.report [--no-adr]
+Usage: python -m evals.bakeoff.report [--no-adr] [--json reports/bakeoff.json]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
@@ -44,6 +47,9 @@ from evals.bakeoff.subset import BAKEOFF_SUBSET_SIZE
 from evals.extraction_identity import require_identity
 
 REPORT_PATH: Final[Path] = Path("reports/bakeoff.md")
+JSON_PATH: Final[Path] = Path("reports/bakeoff.json")
+JSON_SCHEMA_VERSION: Final[int] = 1
+"""Contract read by `evals.scoreboard_sources.parse_bakeoff` (docs/evals.md); bump on any change."""
 ADR_PATH: Final[Path] = Path("docs/adr/0016-extractor-a-bakeoff.md")
 ADR_START: Final[str] = "<!-- BAKEOFF:DECISION:START -->"
 ADR_END: Final[str] = "<!-- BAKEOFF:DECISION:END -->"
@@ -314,6 +320,67 @@ def decision_block(results: Sequence[ArmResult], verdicts: Sequence[Verdict]) ->
     return "\n".join(lines)
 
 
+def to_json(
+    results: Sequence[ArmResult], verdicts: Sequence[Verdict], *, generated_at: datetime
+) -> dict[str, Any]:
+    """reports/bakeoff.json: the decision and, per arm, its verdict and measured numbers. Rates
+    are in [0, 1]; a metric not measured yet is null, never 0 (the scoreboard shows pending)."""
+    if generated_at.tzinfo is None:
+        raise BakeoffError("bakeoff.json generated_at must be timezone-aware")
+    by_arm = {v.arm: v for v in verdicts}
+    decision = overall(results, verdicts)
+    arms: list[dict[str, Any]] = []
+    for r in results:
+        verdict = by_arm.get(r.arm.key)
+        if verdict is None:
+            raise BakeoffError(f"no verdict for arm `{r.arm.key}`")
+        en, ar, pooled = r.uae_f1 if r.uae_f1 is not None else (None, None, None)
+        stop = r.stopped
+        arms.append(
+            {
+                "arm": r.arm.key,
+                "alias": r.arm.alias,
+                "label": r.arm.label,
+                "kind": r.arm.kind.value,
+                "verdict": verdict.outcome.value,
+                "reasons": list(verdict.reasons),
+                "complete": r.complete,
+                "uae_rows": r.uae_rows,
+                "uae_expected": r.uae_expected,
+                "eb_rows": r.eb_rows,
+                "eb_expected": r.eb_expected,
+                "uae_f1_en": en,
+                "uae_f1_ar": ar,
+                "uae_f1_pooled": pooled,
+                "uae_valid_json": r.uae_valid_json,
+                "eb_value_f1": r.eb_value_f1,
+                "eb_valid_json": r.eb_valid_json,
+                "p50_s": r.p50_s,
+                "p95_s": r.p95_s,
+                "run_peak_gb": r.run_peak_gb,
+                "stopped_at_look": None if stop is None else stop.look,
+                "stopped_at_n": None if stop is None else stop.n,
+            }
+        )
+    return {
+        "schema_version": JSON_SCHEMA_VERSION,
+        "generated_at": generated_at.isoformat(),
+        "decision": {
+            "status": decision.status,
+            "champion": decision.champion,
+            "text": decision.text,
+        },
+        "arms": arms,
+    }
+
+
+def write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
+
+
 def render_report(
     results: Sequence[ArmResult],
     verdicts: Sequence[Verdict],
@@ -529,6 +596,7 @@ def _live(args: argparse.Namespace) -> int:  # pragma: no cover - reads local ro
     )
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8", newline="\n")
+    write_json(args.json, to_json(results, verdicts, generated_at=datetime.now(UTC)))
     if args.adr:
         adr = args.adr_path.read_text(encoding="utf-8")
         args.adr_path.write_text(
@@ -545,6 +613,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wr
     parser.add_argument("--rows-dir", type=Path, default=Path("logs/bakeoff"))
     parser.add_argument("--probe", type=Path, default=PROBE_PATH)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
+    parser.add_argument("--json", type=Path, default=JSON_PATH)
     parser.add_argument("--adr-path", type=Path, default=ADR_PATH)
     parser.add_argument("--no-adr", dest="adr", action="store_false")
     parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))

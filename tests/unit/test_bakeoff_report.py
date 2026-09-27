@@ -1,11 +1,13 @@
 """Unit tests for the M3.4 report and decision rule (`evals.bakeoff.report`): the ≥ 1.0 F1 point /
 ≤ 1.5x p50 / budget edges, PENDING until every row exists, the latency arm never becoming
-champion, scoring from real row files through the real scorers, and the ADR decision block."""
+champion, scoring from real row files through the real scorers, the ADR decision block and the
+reports/bakeoff.json twin the scoreboard reads."""
 
 from __future__ import annotations
 
 import dataclasses
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ from evals.bakeoff.probe import ProbeResult
 from evals.bakeoff.report import (
     ADR_END,
     ADR_START,
+    JSON_SCHEMA_VERSION,
     ArmResult,
     Outcome,
     collect_arm,
@@ -26,7 +29,11 @@ from evals.bakeoff.report import (
     overall,
     render_report,
     run_peak,
+    to_json,
+    write_json,
 )
+from evals.bakeoff.sequential import Futility, LookResult
+from evals.scoreboard_sources import parse_bakeoff
 from tests.unit._bakeoff_fakes import write_uae_doc
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -310,3 +317,68 @@ def test_report_without_interim_looks_says_so() -> None:
     )
     assert "No interim look taken yet." in report and "Stopped: none." in report
     assert "measured at the first look: not measured yet" in report
+
+
+def test_json_twin_carries_verdicts_and_round_trips_through_the_scoreboard_reader() -> None:
+    results = _all(
+        ("q38-27b", {"probe": _probe("q38-27b", "over_budget")}),
+        ("q38-9b-distill", {"uae_rows": 150, "uae_f1": None, "uae_valid_json": None}),
+    )
+    verdicts = [decide(results[0], r) for r in results]
+    at = datetime(2026, 9, 27, 9, 0, tzinfo=UTC)
+    payload = to_json(results, verdicts, generated_at=at)
+
+    assert payload["schema_version"] == JSON_SCHEMA_VERSION
+    assert payload["decision"]["status"] == overall(results, verdicts).status == "PENDING"
+    by_arm = {a["arm"]: a for a in payload["arms"]}
+    assert [a["arm"] for a in payload["arms"]] == [arm.key for arm in ARMS]
+    assert by_arm["q38-27b"]["verdict"] == "disqualified"
+    assert by_arm["a"]["uae_f1_pooled"] == 0.90 and by_arm["a"]["p50_s"] == 20.0
+    unmeasured = by_arm["q38-9b-distill"]
+    assert unmeasured["uae_f1_en"] is None and unmeasured["uae_valid_json"] is None  # never 0
+    assert unmeasured["verdict"] == "pending" and unmeasured["stopped_at_look"] is None
+
+    parsed = parse_bakeoff(json.dumps(payload))
+    assert parsed.generated_at == at and parsed.decision == "PENDING"
+    assert [a.verdict for a in parsed.arms] == [a["verdict"] for a in payload["arms"]]
+
+
+def test_json_twin_records_where_futility_stopped_an_arm(tmp_path: Path) -> None:
+    look = LookResult(
+        look=1,
+        n=50,
+        z=4.05,
+        delta_points=-3.0,
+        delta_se=0.5,
+        delta_upper=-2.0,
+        doc_sd_points=3.5,
+        ratio=None,
+        ratio_lower=None,
+        invalid=0,
+        max_invalid=10,
+        reasons=("ΔF1 upper bound -2.00 pt < +1.0 pt",),
+    )
+    stopped = _result(
+        "q38-27b", uae_rows=50, uae_f1=None, futility=Futility(looks=(look,), total=200)
+    )
+    results = [BASE, stopped, _result("q38-9b-distill"), _result("q35-9b-mtp")]
+    verdicts = [decide(BASE, r) for r in results]
+    out = tmp_path / "reports" / "bakeoff.json"
+    write_json(out, to_json(results, verdicts, generated_at=datetime(2026, 9, 27, tzinfo=UTC)))
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    arm = next(a for a in data["arms"] if a["arm"] == "q38-27b")
+    assert (arm["verdict"], arm["stopped_at_look"], arm["stopped_at_n"]) == (
+        "stopped (futility)",
+        1,
+        50,
+    )
+    assert data["decision"]["status"] == "KEEP"
+
+
+def test_json_twin_requires_an_aware_timestamp() -> None:
+    results = _all()
+    with pytest.raises(BakeoffError, match="timezone-aware"):
+        to_json(
+            results, [decide(results[0], r) for r in results], generated_at=datetime(2026, 1, 1)
+        )

@@ -209,7 +209,7 @@ bakeoff-probe:
 
 bakeoff:
 	@echo "==> M3.4 bake-off: 200 UAE + ExtractBench short per in-budget arm (GPU, resumable rows: logs/bakeoff/)"
-	$(HOST_PARSE) uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
+	$(HOST_PARSE) uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS)) $(if $(BAKEOFF_REUSE_A),--reuse-a-rows $(BAKEOFF_REUSE_A))
 	$(MAKE) bakeoff-report
 
 bakeoff-report:

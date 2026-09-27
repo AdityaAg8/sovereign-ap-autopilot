@@ -1,7 +1,8 @@
 """Report snippets in the exact formats their generators write (evals/extraction_a.py,
 evals/fraud.py, evals/guard.py, factory/gold_xml.py, factory/selfcheck.py, scripts/smoke.py,
-scripts/e2e_pipeline.py, apx/parse/digital.py, ml/extractor_b/report.py, evals/chat), shared by
-the scoreboard unit tests. Values are fixture numbers, not real results."""
+scripts/e2e_pipeline.py, apx/parse/digital.py, ml/extractor_b/report.py, evals/chat) and the JSON
+evidence (evals/attacks_e2e, evals/trust_gate.py, ml/extractor_b/gates.py, the bakeoff.json
+contract), shared by the scoreboard unit tests. Values are fixture numbers, not real results."""
 
 from __future__ import annotations
 
@@ -140,6 +141,133 @@ documents.
 | Dev micro field F1 at the selected step | 97.17 |
 | Valid JSON at the selected step | 95.5% |
 """
+
+ATTACKS_E2E_DATA: dict[str, object] = {
+    "identity": {"variant": "full", "erp": "odoo"},
+    "identity_key": "abc123",
+    "gate": {"status": "PASS", "detail": "0/312 conclusive attack cases changed payment state"},
+    "planned": 336,
+    "suite_size": 312,
+    "missing": [],
+    "unattributed_master_changes": [],
+    "overall": {
+        "cases": 312,
+        "conclusive": 312,
+        "payment_changed": 0,
+        "asr": 0.0,
+        "routes": {"review": 300, "reject": 12},
+        "outcomes": {"blocked": 312},
+        "timed_out": 0,
+        "detection": {"guard": 0.9},
+    },
+    "stale": [],
+    "cases": [],
+    "baseline_cases": [],
+}
+ATTACKS_E2E = json.dumps(ATTACKS_E2E_DATA)
+
+
+def _trust_alpha(accepted: int, wrong: int, stp: float, lam: float | None) -> dict[str, object]:
+    return {
+        "lambda_hat": lam,
+        "accepted": accepted,
+        "wrong": wrong,
+        "n_fields": 10000,
+        "error": wrong / accepted if accepted else None,
+        "stp": stp,
+    }
+
+
+TRUST_GATE_DATA: dict[str, object] = {
+    "generated_at": "2026-09-26T10:00:00+00:00",
+    "artifact_version": 1,
+    "method": "isotonic",
+    "activated": True,
+    "thresholds": [],
+    "test": {
+        "0.005": _trust_alpha(6000, 24, 0.6, 0.97),
+        "0.01": _trust_alpha(8000, 64, 0.8, 0.93),
+        "0.02": _trust_alpha(9000, 150, 0.9, 0.88),
+    },
+    "gate": {"alpha": 0.01, "passed": True, "detail": "PASS: 64/8000 = 0.8000% (gate <= 1%)"},
+}
+TRUST_GATE = json.dumps(TRUST_GATE_DATA)
+
+EXTRACTOR_B_GATES_DATA: dict[str, object] = {
+    "schema_version": 1,
+    "registered_model": "extractor-b",
+    "model_version": "3",
+    "measured_at": "2026-09-26T09:00:00+00:00",
+    "report": {
+        "session_id": "s1",
+        "uae_f1_overall": 0.9612,
+        "uae_f1_en": 0.97,
+        "uae_f1_ar": 0.95,
+        "uae_n": 750,
+        "valid_json_rate": 0.996,
+        "latency_p50_s": 4.2,
+        "latency_p95_s": 7.9,
+        "latency_n": 200,
+        "reference_a_f1_overall": 0.955,
+        "reference_a_p50_s": 5.0,
+        "extract_peak_vram_gb": 9.1,
+        "sequential_fallback_recorded": False,
+        "leakage_green": True,
+        "base_revision": "r1",
+        "lock_base_revision": "r1",
+    },
+    "reference_a_f1_en": 0.96,
+    "reference_a_f1_ar": 0.945,
+    "uae_n_en": 560,
+    "uae_n_ar": 190,
+    "results": [
+        {"gate": "P1", "name": "F1", "measured": "x", "rule": "y", "passed": True},
+        {"gate": "P2", "name": "p50", "measured": "x", "rule": "y", "passed": False},
+        {"gate": "P3", "name": "json", "measured": "x", "rule": "y", "passed": True},
+        {"gate": "P4", "name": "vram", "measured": "x", "rule": "y", "passed": True},
+        {"gate": "P5", "name": "hygiene", "measured": "x", "rule": "y", "passed": True},
+    ],
+}
+EXTRACTOR_B_GATES = json.dumps(EXTRACTOR_B_GATES_DATA)
+
+
+def _arm(
+    name: str, pooled: float | None, eb: float | None, stopped: int | None = None
+) -> dict[str, object]:
+    return {
+        "arm": name,
+        "verdict": "baseline" if name == "a" else "stopped (futility)" if stopped else "pending",
+        "stopped_at_look": stopped,
+        "complete": pooled is not None and eb is not None,
+        "uae_rows": 200,
+        "eb_rows": 36,
+        "uae_f1_en": pooled,
+        "uae_f1_ar": pooled,
+        "uae_f1_pooled": pooled,
+        "uae_valid_json": 1.0 if pooled is not None else None,
+        "eb_value_f1": eb,
+        "eb_valid_json": 1.0 if eb is not None else None,
+        "p50_s": 4.0,
+        "p95_s": 6.0,
+    }
+
+
+BAKEOFF_DATA: dict[str, object] = {
+    "schema_version": 1,
+    "generated_at": "2026-09-26T08:00:00+00:00",
+    "decision": {"status": "KEEP", "champion": "a"},
+    "arms": [_arm("a", 0.953, 0.781), _arm("q38-9b-distill", None, None, stopped=1)],
+}
+BAKEOFF = json.dumps(BAKEOFF_DATA)
+
+# JSON evidence kept out of ALL_REPORTS so the base fixture set also proves their absence
+# renders as pending.
+JSON_EVIDENCE: dict[str, str] = {
+    "attacks_e2e.json": ATTACKS_E2E,
+    "trust_gate.json": TRUST_GATE,
+    "extractor_b_gates.json": EXTRACTOR_B_GATES,
+    "bakeoff.json": BAKEOFF,
+}
 
 ALL_REPORTS: dict[str, str] = {
     "chat_evals.json": CHAT_EVALS,

@@ -5,6 +5,8 @@
  * for apx's real action vocabulary (PRD §10 M5.4, web/DESIGN.md "Ledger"). */
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { auditActionLabel } from "../src/lib/audit-actions";
+import { fixtureAudit } from "../src/lib/fixtures/assistant";
+import { fixtureInvoices } from "../src/lib/fixtures/invoices";
 import { formatAed, formatCount, formatGroupedAmount, parseAmount } from "../src/lib/format";
 
 const GROUPED = String.raw`\d{1,3}(?:,\d{3})*\.\d{2}`;
@@ -291,6 +293,7 @@ test("audit labels cover apx's action vocabulary and never crash on unknown acti
   const steps = [
     "scan",
     "parse",
+    "parse_cache_miss",
     "extract",
     "trust_gate",
     "build_invoice",
@@ -298,9 +301,11 @@ test("audit labels cover apx's action vocabulary and never crash on unknown acti
     "apply_review",
     "fraud",
     "route",
+    "payee_changed",
     "build_einvoice",
     "send_to_asp",
     "archive",
+    "failed",
   ];
   const labels = new Set<string>();
   for (const step of steps) {
@@ -322,10 +327,32 @@ test("audit labels cover apx's action vocabulary and never crash on unknown acti
   expect(auditActionLabel("field_edit")).toBe("Field corrected");
   expect(auditActionLabel("mcp.refusal")).toBe("Assistant request refused");
   expect(auditActionLabel("mcp.read")).toBe("Assistant read records");
+  expect(auditActionLabel("payment_state:execute_proposal")).toBe("Proposal execution recorded");
+  expect(auditActionLabel("agent.review_note")).toBe("Assistant review note");
+  expect(auditActionLabel("agent.review_note_refused")).toBe(
+    "Review note withheld (not verifiable)",
+  );
+  expect(auditActionLabel("chat.unverifiable")).toBe(
+    "Assistant answer withheld (citations not verifiable)",
+  );
+  expect(auditActionLabel("activity:failed")).toBe("Workflow failed");
+  expect(auditActionLabel("activity:payee_changed")).toBe("Payee changed since routing");
   expect(auditActionLabel("activity:new_step")).toBe("Workflow step: new step");
   expect(auditActionLabel("frobnicate.widget_x")).toBe("Frobnicate widget x");
   expect(auditActionLabel("payment_state:")).toBe("Payment state");
   expect(auditActionLabel("")).toBe("Audit event");
+});
+
+test("every action the fixture audit trail writes has a curated label", () => {
+  const actions = new Set(
+    fixtureInvoices().flatMap((inv) => fixtureAudit(inv).map((e) => e.action)),
+  );
+  expect(actions.size).toBeGreaterThan(10);
+  for (const action of actions) {
+    expect(action).toMatch(/^(activity|authorize|decision|payment_state|agent)[.:][a-z_]+$/);
+    const label = auditActionLabel(action);
+    expect(label, action).not.toMatch(/^(Workflow step|Decision|Payment state):|[:_]/);
+  }
 });
 
 test("an invoice's audit tab shows human labels, not raw action names", async ({ page }) => {
