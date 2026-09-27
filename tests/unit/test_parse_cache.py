@@ -151,3 +151,24 @@ async def test_broken_entries_and_keys_fail_loudly(tmp_path: Path) -> None:
         with pytest.raises(ParseCacheError, match="invalid parse cache key"):
             _ = bad in cache
     assert os.path.isdir(cache.directory / "store")
+
+
+def test_split_inputs_builds_one_document_per_access(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import evals.scan_input as scan_input
+    from evals.parse_cache import SplitInputs
+
+    built: list[str] = []
+
+    def fake_document_input(data_dir: Path, sha: str, truth: object) -> tuple[str, bytes]:
+        built.append(sha)
+        return "digital", sha.encode()
+
+    monkeypatch.setattr(scan_input, "document_input", fake_document_input)
+    monkeypatch.setattr(scan_input, "load_truth", lambda data_dir, sha: {})
+    inputs = SplitInputs(tmp_path, ["a", "b", "c"])
+    assert len(inputs) == 3 and built == []
+    assert inputs[1] == ("b", hashlib.sha256(b"b").hexdigest(), b"b")
+    assert built == ["b"]
+    assert len(inputs[:2]) == 2 and built == ["b"]

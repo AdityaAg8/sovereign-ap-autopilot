@@ -17,7 +17,7 @@ import sys
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Final
+from typing import Final, overload
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
@@ -230,18 +230,43 @@ async def warm(
     return parsed
 
 
-def split_inputs(data_dir: Path, split: str, limit: int = 0) -> list[tuple[str, str, bytes]]:
+class SplitInputs(Sequence[tuple[str, str, bytes]]):
     """The parse inputs `evals.extraction_a` feeds for a UAE split, in its order: the runtime
-    form of each document (scan PDF for `has_scan`) under the sha256 of those bytes."""
-    from evals.scan_input import document_input, load_truth
+    form of each document (scan PDF for `has_scan`) under the sha256 of those bytes. Built one
+    document at a time on access: a split's scan PDFs hold raw page pixels, so materialising
+    all of them up front ran the host out of memory."""
+
+    def __init__(self, data_dir: Path, shas: Sequence[str]) -> None:
+        self._data_dir = data_dir
+        self._shas = list(shas)
+
+    def __len__(self) -> int:
+        return len(self._shas)
+
+    @overload
+    def __getitem__(self, index: int) -> tuple[str, str, bytes]: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[tuple[str, str, bytes]]: ...
+
+    def __getitem__(
+        self, index: int | slice
+    ) -> tuple[str, str, bytes] | Sequence[tuple[str, str, bytes]]:
+        if isinstance(index, slice):
+            return SplitInputs(self._data_dir, self._shas[index])
+        from evals.scan_input import document_input, load_truth
+
+        sha = self._shas[index]
+        _, data = document_input(self._data_dir, sha, load_truth(self._data_dir, sha))
+        return sha, hashlib.sha256(data).hexdigest(), data
+
+
+def split_inputs(data_dir: Path, split: str, limit: int = 0) -> SplitInputs:
+    """`SplitInputs` for the UAE `split` documents present in `data_dir` (first `limit`)."""
     from evals.splits import load_splits
 
     shas = [s for s in sorted(load_splits().sets["uae"][split]) if (data_dir / f"{s}.pdf").exists()]
-    inputs: list[tuple[str, str, bytes]] = []
-    for sha in shas[:limit] if limit else shas:
-        _, data = document_input(data_dir, sha, load_truth(data_dir, sha))
-        inputs.append((sha, hashlib.sha256(data).hexdigest(), data))
-    return inputs
+    return SplitInputs(data_dir, shas[:limit] if limit else shas)
 
 
 def _log(message: str) -> None:
