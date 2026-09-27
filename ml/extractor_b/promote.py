@@ -790,12 +790,15 @@ async def _live_latency(
     from apx.llm.client import LlamaSwapClient, LlmSettings
     from apx.parse.client import ParseServiceClient
     from apx.parse.parser import PaddleOcrDocumentParser
+    from evals.parse_cache import ParseCache
     from ml.extractor_b.gates import StrictVramSampler, llm_extract_fn, run_latency
 
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
+    cache = ParseCache()  # shared with the eval harness: a parse is never redone per session
     documents = [
-        await parser.parse(sha, (args.data_dir / f"{sha}.pdf").read_bytes()) for sha in shas
+        await cache.parse(sha, (args.data_dir / f"{sha}.pdf").read_bytes(), parser.parse)
+        for sha in shas
     ]
     await parse_client.unload()  # parse stage over: its VRAM is not part of the extract stage
     client = LlamaSwapClient(

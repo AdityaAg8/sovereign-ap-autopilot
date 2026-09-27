@@ -3,8 +3,10 @@
 the parse words and writes `reports/extraction_a.md`: valid-JSON rate (gate ≥ 99%), grounding
 rate, field accuracy against the factory labels, box agreement and latency. Per-document rows go
 to a resumable JSONL under logs/ so an interrupted GPU run continues where it stopped; each row
-carries the run identity (alias, served GGUF sha256, prompt version) and a resume refuses a file
-written by another build or prompt.
+carries the run identity (alias, served GGUF sha256, prompt version) and the serving identity
+(llama-swap args of the alias, parser build), and a resume refuses a file written by another
+build, prompt, server config or parser. Parses come from the shared `evals.parse_cache`
+(`--no-parse-cache` parses inline), so a resume or a later eval never re-OCRs a scan.
 `--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
 llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
 `--split cal` runs the same harness over the UAE cal split for the M7.4 trust calibration; every
@@ -14,7 +16,7 @@ image-only PDF, parsed by the OCR service like any scanned upload); every row re
 `input_kind` and the report splits every metric by input kind and Arabic-first layout.
 
 Usage: python -m evals.extraction_a --data-dir <factory out>/test [--limit N] [--base-url URL]
-       [--extractor a|b] [--model ALIAS] [--split test|cal]
+       [--extractor a|b] [--model ALIAS] [--split test|cal] [--parse-cache DIR | --no-parse-cache]
 """
 
 from __future__ import annotations
@@ -43,10 +45,15 @@ from apx.parse.parser import PaddleOcrDocumentParser
 from apx.trust.features import final_value_of, ocr_support
 from evals.extraction_identity import (
     RowIdentity,
+    ServingIdentity,
     prompt_version,
     require_identity,
+    require_serving,
     served_gguf_sha256,
+    serving_args_sha256,
 )
+from evals.parse_cache import DEFAULT_ROOT as DEFAULT_PARSE_CACHE
+from evals.parse_cache import ParseCache, parser_identity
 from evals.scan_input import INPUT_KINDS, InputKind, document_input, load_truth
 from evals.splits import load_splits
 
@@ -93,6 +100,14 @@ def run_identity(
             models_root=models_root,
         ),
         prompt_version=prompt_version(prompt_builder_for(extractor)),
+    )
+
+
+def run_serving(model: str, *, llama_swap_config: Path, parser_id: str) -> ServingIdentity:
+    """Serving identity stamped on every row: the alias's llama-swap args and the parser build."""
+    return ServingIdentity(
+        serving_args_sha256=serving_args_sha256(model, llama_swap_config=llama_swap_config),
+        parser_identity=parser_id,
     )
 
 
@@ -174,13 +189,27 @@ def field_cells(
     return fields
 
 
+async def parse_input(
+    data: bytes, parser: PaddleOcrDocumentParser, cache: ParseCache | None
+) -> ParsedDocument:
+    """Parse one runtime input the way the runtime keys it (the sha256 of its uploaded bytes,
+    the scan's for a scan), through the parse cache when one is given."""
+    document_sha256 = hashlib.sha256(data).hexdigest()
+    if cache is None:
+        return await parser.parse(document_sha256, data)
+    return await cache.parse(document_sha256, data, parser.parse)
+
+
 async def _run_one(
-    sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
+    sha: str,
+    data_dir: Path,
+    extractor: LlmExtractor,
+    parser: PaddleOcrDocumentParser,
+    cache: ParseCache | None = None,
 ) -> dict[str, Any]:
     truth = load_truth(data_dir, sha)
     kind, data = document_input(data_dir, sha, truth)
-    # The runtime keys a document by the sha256 of its uploaded bytes (the scan's, for a scan).
-    document = await parser.parse(hashlib.sha256(data).hexdigest(), data)
+    document = await parse_input(data, parser, cache)
     return await extract_row(sha, document, data_dir, extractor, kind)
 
 
@@ -408,6 +437,14 @@ async def run(args: argparse.Namespace) -> int:
         models_root=args.models_root,
     )
     require_identity(rows, identity, rows_path)  # never mix builds or prompts in one file
+    cache = None if args.no_parse_cache else ParseCache(args.parse_cache)
+    serving = run_serving(
+        model,
+        llama_swap_config=args.llama_swap_config,
+        parser_id=cache.parser_id if cache is not None else parser_identity(),
+    )
+    require_serving(rows, serving, rows_path)  # nor server configs or parser builds
+    stamp = {**identity.as_row_fields(), **serving.as_row_fields()}
     # Offline tooling names its one alias explicitly (apx.llm.client LlmSettings.allowed_models).
     client = LlamaSwapClient(LlmSettings(base_url=args.base_url, allowed_models=frozenset({model})))
     parser = PaddleOcrDocumentParser()
@@ -425,7 +462,7 @@ async def run(args: argparse.Namespace) -> int:
         )
         while not queue.empty():
             sha = queue.get_nowait()
-            row = {**await _run_one(sha, data_dir, extractor, parser), **identity.as_row_fields()}
+            row = {**await _run_one(sha, data_dir, extractor, parser, cache), **stamp}
             rows[sha] = row
             sink.write(json.dumps(row, ensure_ascii=False) + "\n")
             sink.flush()
@@ -468,6 +505,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))
     parser.add_argument("--models-lock", type=Path, default=Path("infra/models.lock.json"))
     parser.add_argument("--models-root", type=Path, default=Path("models"))
+    parser.add_argument("--parse-cache", type=Path, default=DEFAULT_PARSE_CACHE)
+    parser.add_argument("--no-parse-cache", action="store_true", help="parse every input inline")
     return asyncio.run(run(parser.parse_args(argv)))
 
 

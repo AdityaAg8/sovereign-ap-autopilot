@@ -20,7 +20,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
-        guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report \
+        guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all ci-local
 
@@ -162,6 +162,25 @@ test-artifacts:
 # Host-run GPU evals reach the parse service through gateway's loopback-only 127.0.0.1:8010
 # (ADR-0001 amendment 2); the runtime default `http://parse:8000` resolves only on `app`.
 HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010)
+
+## --- GPU queue: one parse per document, then the GPU evals back to back -----------------
+# `parse-cache` fills data/cache/parse/<parser identity>/ (evals.parse_cache) with the UAE split
+# inputs the extraction harness feeds, so the A/B test and cal runs and gates-b never re-OCR a
+# scan; a parser source change gives a new identity (a fresh cache). Needs the parse service.
+# `gpu-queue` runs QUEUE (comma-separated make targets, each optionally with VAR=value) holding
+# data/ml/gpu.lock, one log per item under logs/, stopping at the first failure; rerun resumes.
+# Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
+SPLITS ?= test,cal
+QUEUE ?=
+
+parse-cache:
+	@echo "==> parse UAE $(SPLITS) into the shared parse cache data/cache/parse/ (parse service; resumable)"
+	$(HOST_PARSE) uv run python -m evals.parse_cache --splits $(SPLITS)
+
+gpu-queue:
+	@test -n "$(QUEUE)" || { echo 'gpu-queue: set QUEUE="target1,target2 VAR=x,..."' >&2; exit 2; }
+	@echo "==> GPU queue holding data/ml/gpu.lock: $(QUEUE) (logs/<item>.log; done markers logs/gpu_queue/)"
+	IFS=, read -r -a items <<< "$(QUEUE)"; bash scripts/gpu_queue.sh "$${items[@]}"
 
 ## --- ADR-0012 §7: M3.3 before/after on the same documents ---------------------------
 M33_DATA_DIR ?= data/uae/test
