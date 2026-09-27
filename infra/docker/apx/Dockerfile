@@ -33,6 +33,9 @@ COPY apx ./apx
 COPY factory ./factory
 COPY db ./db
 COPY alembic.ini ./
+# The learning splits (I5): which documents evaluation holds out. The API assigns every review
+# correction a split from it and refuses to start without it (apx.learning.splits, REVIEW H-04).
+COPY evals/splits.json ./evals/splits.json
 RUN uv sync --frozen --no-dev --inexact
 
 RUN useradd --create-home --uid 10001 apx && mkdir -p /app/data && chown apx /app/data

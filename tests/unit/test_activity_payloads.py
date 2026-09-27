@@ -40,6 +40,7 @@ from apx.workflows.activities import DefaultInvoiceActivities
 from apx.workflows.components import DetectorScanner
 from apx.workflows.corrections import LineCorrection, ReviewCorrections
 from apx.workflows.interfaces import InvoiceWorkflowInput, InvoiceWorkflowState
+from apx.workflows.review_guard import ReviewGuardActivities
 from apx.workflows.workflow import ReviewDecision
 from tests.fixtures.scan import pdf_builder
 from tests.unit import _payload_fixtures as fx
@@ -77,6 +78,7 @@ FIXTURES: dict[type[Any], Callable[[], object]] = {
     ArchiveRecord: fx.archive_record,
     str: fx.idempotency_key,
     bool: lambda: True,
+    Route: lambda: Route.REVIEW,
     type(None): lambda: None,
 }
 
@@ -84,7 +86,8 @@ FIXTURES: dict[type[Any], Callable[[], object]] = {
 def _activity_definitions() -> list[Any]:
     definitions = [
         activity._Definition.from_callable(member)
-        for member in vars(DefaultInvoiceActivities).values()
+        for cls in (DefaultInvoiceActivities, ReviewGuardActivities)
+        for member in vars(cls).values()
         if callable(member)
     ]
     return [d for d in definitions if d is not None]
@@ -114,7 +117,9 @@ def test_every_registered_activity_is_covered() -> None:
         "validate",
         "fraud",
         "route",
+        "review_hold",
         "review_note",
+        "confirm_review",
         "apply_review",
         "build_einvoice",
         "send_to_asp",

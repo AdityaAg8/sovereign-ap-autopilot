@@ -11,9 +11,12 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from apx.api import bank_routes
 from apx.api.errors import install_exception_handlers
 from apx.api.routers import auth, chat, invoices, ops, proposals, uploads, vendors
+from apx.api.security import dummy_hash
 from apx.api.settings import get_settings
+from apx.learning.splits import require_splits
 
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -36,7 +39,10 @@ async def _security_headers_middleware(
 def create_app() -> FastAPI:
     """Builds the API app. Settings are only read here, inside the factory, so importing this
     module never fails on a missing `API_JWT_SECRET`; only calling `create_app()` (or a route's
-    own `Depends(get_settings)`) does."""
+    own `Depends(get_settings)`) does. Refuses to build (`SplitsUnavailableError`) without a
+    readable learning splits file, so corrections are never silently left unassigned (H-04)."""
+    require_splits()
+    dummy_hash()  # warm it now, so the first unknown-email login costs what any other does
     app = FastAPI(
         title="Sovereign AP Autopilot API",
         description="JWT-authenticated REST + SSE API for invoice review and approval.",
@@ -60,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(proposals.router)
     app.include_router(uploads.router)
     app.include_router(vendors.router)
+    app.include_router(bank_routes.router)
     app.include_router(ops.router)
     app.include_router(chat.router)
 

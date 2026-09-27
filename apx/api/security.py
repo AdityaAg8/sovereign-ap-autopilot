@@ -5,7 +5,9 @@ login and verifies them on every request via `JwtTokenVerifier` (PRD §10 M5.3, 
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime, timedelta
+from functools import cache
 
 import jwt
 from argon2 import PasswordHasher
@@ -31,6 +33,24 @@ def verify_password(password_hash: str, password: str) -> bool:
         return _password_hasher.verify(password_hash, password)
     except (VerifyMismatchError, VerificationError, InvalidHash):
         return False
+
+
+@cache
+def dummy_hash() -> str:
+    """An argon2 hash of a random secret, computed once (the app warms it at start-up), that no
+    password can match. Verifying against it costs what a real verify costs (same parameters)."""
+    return _password_hasher.hash(secrets.token_urlsafe(32))
+
+
+def verify_login(password_hash: str | None, password: str) -> bool:
+    """`verify_password` for a login attempt whose user may not exist: with no stored hash it
+    still runs a full argon2 verify against `dummy_hash()` and returns False, so an unknown
+    email takes as long as a wrong password and response timing does not reveal which emails
+    are registered (REVIEW L-02)."""
+    if password_hash is None:
+        verify_password(dummy_hash(), password)
+        return False
+    return verify_password(password_hash, password)
 
 
 def create_access_token(

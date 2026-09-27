@@ -20,16 +20,14 @@ down_revision: str | None = "0003_ingested_documents"
 branch_labels: str | tuple[str, ...] | None = None
 depends_on: str | tuple[str, ...] | None = None
 
-# Dev-only credential, same convention as apx.db.session.DEFAULT_DATABASE_URL's "apx-dev-only"
-# password: every non-dev environment overrides it (here via AGENT_DATABASE_URL / the role's
-# actual Postgres password, set out of band), so there is nothing secret to leak from source.
-_AGENT_RO_PASSWORD = "apx-agent-ro-dev-only"
-
-_CREATE_ROLE_SQL = f"""
+# The role is created without a password, so it cannot log in until migration
+# 0013_agent_ro_password sets one from the AGENT_RO_PASSWORD env var (REVIEW L-01: no credential
+# in source).
+_CREATE_ROLE_SQL = """
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'apx_agent_ro') THEN
-        CREATE ROLE apx_agent_ro LOGIN PASSWORD '{_AGENT_RO_PASSWORD}';
+        CREATE ROLE apx_agent_ro LOGIN;
     END IF;
 END
 $$

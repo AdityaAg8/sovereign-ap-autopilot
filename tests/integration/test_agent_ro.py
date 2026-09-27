@@ -49,7 +49,7 @@ HOST_PORT = 55439
 PG_USER = "apx"
 PG_PASSWORD = "apx"
 PG_DB = "apx"
-AGENT_PASSWORD = "apx-agent-ro-dev-only"  # matches db/migrations/versions/0002_*.py
+AGENT_PASSWORD = "agent-ro-test-only-password"  # set on the role by migration 0013
 
 APP_DATABASE_URL = f"postgresql+asyncpg://{PG_USER}:{PG_PASSWORD}@127.0.0.1:{HOST_PORT}/{PG_DB}"
 APP_DSN = f"postgresql://{PG_USER}:{PG_PASSWORD}@127.0.0.1:{HOST_PORT}/{PG_DB}"
@@ -210,6 +210,7 @@ def migrated_and_seeded(
     postgres_ready: None, monkeypatch_module: pytest.MonkeyPatch
 ) -> Iterator[None]:
     monkeypatch_module.setenv("DATABASE_URL", APP_DATABASE_URL)
+    monkeypatch_module.setenv("AGENT_RO_PASSWORD", AGENT_PASSWORD)
     cfg = _alembic_config()
     command.upgrade(cfg, "head")
     asyncio.run(_seed(APP_DSN))

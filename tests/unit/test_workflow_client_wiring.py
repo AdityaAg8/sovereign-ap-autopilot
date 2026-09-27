@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
 
@@ -48,11 +49,19 @@ class _StubClient:
         self.started: list[tuple[InvoiceWorkflowInput, str, str]] = []
         self.signals: list[tuple[str, ReviewDecision]] = []
         self.start_error: Exception | None = None
+        self.reuse_policies: list[WorkflowIDReusePolicy] = []
         self.signal_error: Exception | None = None
 
     async def start_workflow(
-        self, _run: Any, arg: InvoiceWorkflowInput, *, id: str, task_queue: str
+        self,
+        _run: Any,
+        arg: InvoiceWorkflowInput,
+        *,
+        id: str,
+        task_queue: str,
+        id_reuse_policy: WorkflowIDReusePolicy,
     ) -> None:
+        self.reuse_policies.append(id_reuse_policy)
         if self.start_error is not None:
             raise self.start_error
         self.started.append((arg, id, task_queue))
@@ -100,6 +109,8 @@ async def test_starter_uses_the_sha256_as_workflow_id() -> None:
         filename="invoice.pdf",
         llm_task_queue=LLM_TASK_QUEUE,  # extract/review_note go to the bounded LLM worker
     )
+    # A closed invoice workflow's id is never started again (REVIEW L-06).
+    assert stub.reuse_policies == [WorkflowIDReusePolicy.REJECT_DUPLICATE]
 
 
 async def test_starter_treats_an_already_started_workflow_as_success() -> None:

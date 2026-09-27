@@ -3,7 +3,9 @@ List/filter/paginate, invoice detail (masking `iban` fields from non-admins, doc
 B5), field edits (audit event + label row), decisions and proposal execution (P1-P5, I3: every
 payment-affecting action goes `PolicyGuard` -> `SqlPaymentStateWriter`, then signals the
 invoice's workflow), a document-serving lookup and a polling-based SSE status stream (PRD §10
-M5.3). Also `DbVendorService`, the vendor list/detail read model for the M5.4 vendor view.
+M5.3). Review decisions follow the invoice state machine: reject only while awaiting review,
+send-to-review only before routing (a durable hold the workflow honours), else 409. Also
+`DbVendorService`, the vendor list/detail read model for the M5.4 vendor view.
 """
 
 from __future__ import annotations
@@ -46,7 +48,11 @@ from apx.api.settings import ApiSettings, get_settings
 from apx.api.signals import ReviewSignaller, UnconfiguredReviewSignaller
 from apx.audit.chain import PgAuditLog
 from apx.audit.interfaces import AuditEvent
-from apx.common.errors import PolicyDeniedError
+from apx.common.errors import (
+    InvoiceStateConflictError,
+    PolicyDeniedError,
+    ProposalNotExecutableError,
+)
 from apx.common.master import BankDetailChange, User
 from apx.common.types import BBox, InvoiceId, Money, Role, Sha256Hex, UserId, VendorId
 from apx.db.enums import (
@@ -101,6 +107,20 @@ _TERMINAL_STATUSES = frozenset(
         DbInvoiceStatus.FAILED,
     }
 )
+_PRE_ROUTE_STATUSES = frozenset(
+    {
+        DbInvoiceStatus.RECEIVED,
+        DbInvoiceStatus.SCANNED,
+        DbInvoiceStatus.PARSED,
+        DbInvoiceStatus.EXTRACTED,
+        DbInvoiceStatus.GATED,
+        DbInvoiceStatus.VALIDATED,
+        DbInvoiceStatus.FRAUD_CHECKED,
+    }
+)
+"""Statuses before the workflow's `route` step: the only ones `send_to_review` may hold (H-02).
+The hold is a `send_to_review` decision row that the workflow's `review_hold` activity turns an
+AUTO route into REVIEW with; the status itself is left to the workflow."""
 _POLL_INTERVAL_S = 1.0
 _MAX_PAGE_SIZE = 200
 _RECENT_INVOICES_LIMIT = 20
@@ -242,7 +262,11 @@ class DbInvoiceService:
             sod_cooldown_days=self._settings.sod_cooldown_days,
         )
         self._guard = DefaultPolicyGuard(DefaultPolicyEngine(thresholds), self._audit)
-        self._writer = SqlPaymentStateWriter(get_session, self._audit)
+        self._writer = SqlPaymentStateWriter(
+            get_session,
+            self._audit,
+            approval_limit=Money(amount=self._settings.approval_limit, currency="AED"),
+        )
 
     async def list(
         self,
@@ -379,45 +403,57 @@ class DbInvoiceService:
         correction is a complete, self-contained record -- invoice, field, before/after value,
         box, reviewer, timestamp and the model/revision that produced the original)."""
         async with get_session() as session:
-            invoice = await session.get(Invoice, invoice_id)
-            if invoice is None:
-                raise NotFoundError(f"invoice {invoice_id} not found")
-            previous = (
-                await session.execute(
-                    select(FieldRow)
-                    .where(FieldRow.invoice_id == invoice_id, FieldRow.name == edit.field)
-                    .order_by(FieldRow.id.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            session.add(
-                FieldRow(
-                    invoice_id=invoice_id,
-                    name=edit.field,
-                    value=edit.value,
-                    normalized_value=edit.value,
-                    source=FieldSource.HUMAN,
-                )
-            )
-            session.add(
-                LabelRow(
-                    invoice_id=invoice_id,
-                    field_name=edit.field,
-                    corrected_value=edit.value,
-                    corrected_normalized=edit.value,
-                    previous_value=previous.value if previous else None,
-                    previous_boxes=previous.boxes if previous else None,
-                    previous_source=previous.source if previous else None,
-                    previous_model_revision=previous.model_revision if previous else None,
-                    source="review",
-                    # I5: a held-out eval document's correction stays unassigned and is never
-                    # exported for training; anything else trains (M10.1).
-                    split=split_for_document(invoice.document_sha256),
-                    labeled_by=user.id,
-                    notes=edit.reason,
-                )
-            )
+            previous = await self._write_field_edit(session, invoice_id, edit, user)
+        await self._audit_field_edit(invoice_id, edit, user, previous)
 
+    async def _write_field_edit(
+        self, session: AsyncSession, invoice_id: InvoiceId, edit: FieldEdit, user: User
+    ) -> FieldRow | None:
+        """Adds the human `fields` row and its `labels` row to `session`; returns the field row
+        it supersedes. Shared by a direct edit and an accepted `edit_field` proposal (M-06)."""
+        invoice = await session.get(Invoice, invoice_id)
+        if invoice is None:
+            raise NotFoundError(f"invoice {invoice_id} not found")
+        previous = (
+            await session.execute(
+                select(FieldRow)
+                .where(FieldRow.invoice_id == invoice_id, FieldRow.name == edit.field)
+                .order_by(FieldRow.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        session.add(
+            FieldRow(
+                invoice_id=invoice_id,
+                name=edit.field,
+                value=edit.value,
+                normalized_value=edit.value,
+                source=FieldSource.HUMAN,
+            )
+        )
+        session.add(
+            LabelRow(
+                invoice_id=invoice_id,
+                field_name=edit.field,
+                corrected_value=edit.value,
+                corrected_normalized=edit.value,
+                previous_value=previous.value if previous else None,
+                previous_boxes=previous.boxes if previous else None,
+                previous_source=previous.source if previous else None,
+                previous_model_revision=previous.model_revision if previous else None,
+                source="review",
+                # I5: a held-out eval document's correction stays unassigned and is never
+                # exported for training; anything else trains (M10.1).
+                split=split_for_document(invoice.document_sha256),
+                labeled_by=user.id,
+                notes=edit.reason,
+            )
+        )
+        return previous
+
+    async def _audit_field_edit(
+        self, invoice_id: InvoiceId, edit: FieldEdit, user: User, previous: FieldRow | None
+    ) -> None:
         await self._audit.append(
             AuditEvent(
                 actor=str(user.id),
@@ -578,12 +614,24 @@ class DbInvoiceService:
             if Capability.ROUTE_EXCEPTION not in capabilities_for(user.roles):
                 raise PolicyDeniedError("actor lacks the route_exception capability")
             async with get_session() as session:
-                invoice = await session.get(Invoice, invoice_id)
+                # Row lock: serialises with an approval (the writer locks the same row) and with
+                # the workflow's `routed` status write, so the status checked here is the one
+                # the decision lands on.
+                invoice = await session.get(Invoice, invoice_id, with_for_update=True)
                 if invoice is None:
                     raise NotFoundError(f"invoice {invoice_id} not found")
                 if request.action == "reject":
-                    if invoice.status is DbInvoiceStatus.AWAITING_REVIEW:
-                        signal = False
+                    if invoice.status is not DbInvoiceStatus.AWAITING_REVIEW:
+                        # C-01: the workflow only hears a rejection while it waits for review,
+                        # so accepting one earlier would be lost and the invoice paid anyway.
+                        raise InvoiceStateConflictError(
+                            f"invoice {invoice_id} is {invoice.status.value}; only an invoice "
+                            "awaiting review can be rejected"
+                        )
+                    # H-01: the terminal status and the decision commit together, so a later
+                    # approval (the writer also refuses any invoice with a REJECT decision) or
+                    # a reopen can never override the rejection.
+                    invoice.status = DbInvoiceStatus.BLOCKED
                     session.add(
                         Decision(
                             invoice_id=invoice_id,
@@ -592,7 +640,14 @@ class DbInvoiceService:
                             route=invoice.route,
                         )
                     )
+                    signal = False
                 else:
+                    if invoice.status not in _PRE_ROUTE_STATUSES:
+                        # H-02: never reopens a routed, approved, paid or ended invoice.
+                        raise InvoiceStateConflictError(
+                            f"invoice {invoice_id} is {invoice.status.value}; only an invoice "
+                            "not yet routed can be sent to review"
+                        )
                     session.add(
                         Decision(
                             invoice_id=invoice_id,
@@ -600,7 +655,6 @@ class DbInvoiceService:
                             action=DecisionAction.SEND_TO_REVIEW,
                         )
                     )
-                    invoice.status = DbInvoiceStatus.AWAITING_REVIEW
 
         await self._audit.append(
             AuditEvent(
@@ -628,7 +682,10 @@ class DbInvoiceService:
     ) -> tuple[ProposalKind, InvoiceId | None]:
         """P5/K4: authorizes EXECUTE_PROPOSAL (plus the kind's capability) through
         `PolicyGuard`. Payment-affecting kinds (approve_payment, change_bank) are applied only
-        by `SqlPaymentStateWriter.execute_proposal`; the rest are marked executed here."""
+        by `SqlPaymentStateWriter.execute_proposal`; an `edit_field` proposal is applied through
+        the same path as a direct field edit, in the transaction that marks it executed. `route`
+        and `request_info` have no executable effect here and are refused (M-06), so nothing is
+        ever marked executed without having happened."""
         async with get_session() as session:
             row = await session.get(ProposalRow, proposal_id)
             if row is None:
@@ -637,6 +694,12 @@ class DbInvoiceService:
                 raise PolicyDeniedError(f"proposal {proposal_id} is not pending")
             kind = ProposalKind(row.kind)
             invoice_id = InvoiceId(row.invoice_id) if row.invoice_id else None
+            if kind in (ProposalKind.ROUTE, ProposalKind.REQUEST_INFO):
+                raise ProposalNotExecutableError(
+                    f"a {kind.value} proposal has no action to execute; use the invoice's "
+                    "review actions, or send the drafted request yourself, and dismiss it"
+                )
+            edit = _proposed_edit(row) if kind is ProposalKind.EDIT_FIELD else None
 
             invoice: Invoice | None = None
             bank_change: BankDetailChange | None = None
@@ -669,14 +732,20 @@ class DbInvoiceService:
             )
 
         grant = await self._guard.require(action_request)
-        if kind in (ProposalKind.APPROVE_PAYMENT, ProposalKind.CHANGE_BANK):
+        if edit is None:
             await self._writer.execute_proposal(proposal_id, grant)
         else:
+            if invoice_id is None:
+                raise ProposalNotExecutableError(
+                    f"edit_field proposal {proposal_id} names no invoice"
+                )
             async with get_session() as session:
                 locked = await session.get(ProposalRow, proposal_id, with_for_update=True)
                 if locked is None or locked.status != ProposalStatus.PENDING:
                     raise PolicyDeniedError(f"proposal {proposal_id} is not pending")
+                previous = await self._write_field_edit(session, invoice_id, edit, user)
                 locked.status = ProposalStatus.EXECUTED
+            await self._audit_field_edit(invoice_id, edit, user, previous)
 
         # `decisions` rows are per invoice; a vendor-level proposal (change_bank) has none and is
         # recorded by the writer's `payment_state:*` audit events instead.
@@ -774,6 +843,25 @@ class DbInvoiceService:
             if invoice.status in _TERMINAL_STATUSES:
                 return
             await asyncio.sleep(_POLL_INTERVAL_S)
+
+
+def _proposed_edit(row: ProposalRow) -> FieldEdit:
+    """The `FieldEdit` an `edit_field` proposal carries: payload `{"field": str, "value": str,
+    "reason"?: str}`. A malformed payload is refused, never partly applied."""
+    payload = row.payload
+    field, value, reason = payload.get("field"), payload.get("value"), payload.get("reason")
+    if not isinstance(field, str) or not isinstance(value, str):
+        raise ProposalNotExecutableError(
+            f"edit_field proposal {row.id} needs string 'field' and 'value' in its payload"
+        )
+    try:
+        return FieldEdit(
+            field=field,
+            value=value,
+            reason=reason if isinstance(reason, str) else f"accepted proposal {row.id}",
+        )
+    except ValueError as exc:
+        raise ProposalNotExecutableError(f"edit_field proposal {row.id}: {exc}") from exc
 
 
 class DbVendorService:

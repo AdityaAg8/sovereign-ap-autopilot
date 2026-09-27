@@ -12,15 +12,23 @@ from temporalio import activity
 
 import apx.asp_mock.errors
 import apx.common.errors
+import apx.common.raster
 import apx.einvoice.schematron
 import apx.ingest.errors
 import apx.workflows.corrections
 from apx.workflows import workflow as workflow_module
 from apx.workflows.activities import DefaultInvoiceActivities
-from apx.workflows.workflow import NON_RETRYABLE_ERRORS, _retry_policy
+from apx.workflows.workflow import (
+    NON_RETRYABLE_ERRORS,
+    OUTAGE_ATTEMPTS,
+    OUTAGE_WINDOW,
+    _retry_policy,
+    attempts_spanning,
+)
 
 _ERROR_MODULES = (
     apx.common.errors,
+    apx.common.raster,
     apx.ingest.errors,
     apx.einvoice.schematron,
     apx.asp_mock.errors,
@@ -52,6 +60,11 @@ def test_only_registered_activities_are_listed() -> None:
     assert set(NON_RETRYABLE_ERRORS) <= registered
 
 
+def test_parse_never_retries_an_oversized_raster() -> None:
+    """A page too large to render is the same page on every attempt (H-03): fail once."""
+    assert "RasterTooLargeError" in NON_RETRYABLE_ERRORS["parse"]
+
+
 def test_parse_consumers_never_retry_an_integrity_error() -> None:
     for name in ("extract", "trust_gate", "fraud"):
         assert "ParsedArtifactIntegrityError" in NON_RETRYABLE_ERRORS[name]
@@ -75,11 +88,48 @@ def test_each_activity_call_uses_its_own_policy() -> None:
         assert isinstance(policy, ast.Call), first.value
         assert ast.literal_eval(policy.args[0]) == first.value
         checked += 1
-    assert checked == 13  # incl. mark_failed on the failure path
+    assert checked == 15  # incl. mark_failed on the failure path and the review guards
 
 
 def test_the_failed_status_write_retries_without_limit_and_others_stay_capped() -> None:
     # Cheap and idempotent: until it lands the execution stays Running (visible), instead of
     # failing with the row still at its last in-flight status.
     assert _retry_policy("mark_failed").maximum_attempts == 0
-    assert _retry_policy("extract").maximum_attempts == 5
+    assert _retry_policy("extract").maximum_attempts == OUTAGE_ATTEMPTS
+
+
+def _backoff_total(attempts: int) -> float:
+    """Seconds Temporal waits between `attempts` attempts under the default policy."""
+    policy = _retry_policy("send_to_asp")
+    assert policy.maximum_interval is not None
+    cap = policy.maximum_interval.total_seconds()
+    total, interval = 0.0, policy.initial_interval.total_seconds()
+    for _ in range(attempts - 1):
+        total += interval
+        interval = min(interval * policy.backoff_coefficient, cap)
+    return total
+
+
+def test_idempotent_activities_ride_out_a_thirty_minute_outage() -> None:
+    """A Postgres, llama-swap or ASP outage shorter than `OUTAGE_WINDOW` must not mark an
+    invoice FAILED: the money-path, review and LLM activities keep retrying across it, and the
+    cap is the smallest one that does (bounded, not endless)."""
+    assert OUTAGE_WINDOW.total_seconds() >= 30 * 60
+    for name in (
+        "send_to_asp",
+        "archive",
+        "build_einvoice",
+        "apply_review",
+        "route",
+        "review_hold",
+        "confirm_review",
+        "extract",
+        "parse",
+    ):
+        policy = _retry_policy(name)
+        assert policy.maximum_attempts == OUTAGE_ATTEMPTS, name
+        assert policy.maximum_interval is not None
+        assert policy.maximum_interval.total_seconds() <= 60, name
+    assert _backoff_total(OUTAGE_ATTEMPTS) >= OUTAGE_WINDOW.total_seconds()
+    assert _backoff_total(OUTAGE_ATTEMPTS - 1) < OUTAGE_WINDOW.total_seconds()
+    assert attempts_spanning(OUTAGE_WINDOW) == OUTAGE_ATTEMPTS

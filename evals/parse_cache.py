@@ -19,15 +19,63 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Final
 
+import httpx
 from pydantic import ValidationError as PydanticValidationError
 
-from apx.common.errors import ApxError
+from apx.common.errors import ApxError, ParseError
 from apx.parse.interfaces import ParsedDocument, ParsedDocumentRef
 from apx.parse.parser import SERVICE_PARSER_VERSION
 from apx.parse.store import FileParsedDocumentStore
 
 ParseFn = Callable[[str, bytes], Awaitable[ParsedDocument]]
 """`DocumentParser.parse`: (document sha256, file bytes) -> parse."""
+
+PARSE_RETRY_BACKOFF_S: Final[tuple[float, ...]] = (5.0, 20.0, 60.0)
+"""Waits before each retry of a transient parse-service failure (so at most 4 attempts): the OCR
+service shares the GPU with llama-server, and a page can time out while the LLM holds it."""
+TRANSIENT_STATUS: Final[frozenset[int]] = frozenset({408, 429, 500, 502, 503, 504})
+
+
+def is_transient_parse_error(exc: ParseError) -> bool:
+    """A parse-service failure worth retrying: a timeout, a transport error (refused, reset) or a
+    busy/5xx status, read from the httpx cause `apx.parse.client` chains. A malformed response,
+    an unreadable document or a raster-cap refusal is deterministic and never retried."""
+    cause = exc.__cause__
+    if isinstance(cause, httpx.HTTPStatusError):
+        return cause.response.status_code in TRANSIENT_STATUS
+    return isinstance(cause, httpx.TransportError)
+
+
+def retrying(
+    parse: ParseFn,
+    *,
+    backoff_s: Sequence[float] = PARSE_RETRY_BACKOFF_S,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    log: Callable[[str], None] = print,
+) -> ParseFn:
+    """`parse` with bounded retries: a transient `ParseError` is retried after each wait in
+    `backoff_s`; the last failure (or any deterministic one) propagates unchanged, typed, so the
+    caller records it. Every retry is logged, never silent."""
+
+    async def call(document_sha256: str, data: bytes) -> ParsedDocument:
+        waits = list(backoff_s)
+        attempt = 1
+        while True:
+            try:
+                return await parse(document_sha256, data)
+            except ParseError as exc:
+                if not waits or not is_transient_parse_error(exc):
+                    raise
+                delay = waits.pop(0)
+                log(
+                    f"parse {document_sha256[:12]} attempt {attempt} failed ({exc}); "
+                    f"retrying in {delay:g} s"
+                )
+                attempt += 1
+                await sleep(delay)
+
+    return call
+
 
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
 DEFAULT_ROOT: Final[Path] = Path("data/cache/parse")
@@ -196,6 +244,10 @@ def split_inputs(data_dir: Path, split: str, limit: int = 0) -> list[tuple[str, 
     return inputs
 
 
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
 async def _run(args: argparse.Namespace) -> int:  # pragma: no cover - needs the parse service
     from apx.parse.client import ParseServiceClient
     from apx.parse.parser import PaddleOcrDocumentParser
@@ -211,7 +263,7 @@ async def _run(args: argparse.Namespace) -> int:  # pragma: no cover - needs the
                 print(f"no UAE {split} documents in {args.data_root / split}", file=sys.stderr)
                 return 2
             print(f"==> {split}: {len(inputs)} documents -> {cache.directory}", flush=True)
-            parsed += await warm(cache, inputs, parser.parse, lambda m: print(m, flush=True))
+            parsed += await warm(cache, inputs, retrying(parser.parse, log=_log), _log)
     finally:
         if parsed:
             await client.unload()  # free the OCR model's VRAM before the GPU evals start

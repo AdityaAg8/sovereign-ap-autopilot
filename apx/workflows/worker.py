@@ -1,9 +1,10 @@
-"""Wiring for the `InvoiceWorkflow` Temporal worker: a `Client` configured with the Pydantic
-data converter (every `InvoiceActivities` type is a Pydantic model, which the default Temporal
-converter cannot serialise) and the `Worker`s bound to `DefaultInvoiceActivities`: one for the
-workflow and its CPU/IO activities, and one for the llama-swap activities on `LLM_TASK_QUEUE`
-with a hard cap on concurrent activities (ADR-0013 backpressure). This module only assembles what
-it is given (PRD §10 M5.2); `apx.workflows.main` builds the real dependencies."""
+"""Wiring for the `InvoiceWorkflow` Temporal worker: a `Client` configured with the Pydantic data
+converter (every `InvoiceActivities` type is a Pydantic model, which the default Temporal
+converter cannot serialise) and the `Worker`s bound to `DefaultInvoiceActivities` (plus the
+`ReviewGuardActivities` review checks): one for the workflow and its CPU/IO activities, and one
+for the llama-swap activities on `LLM_TASK_QUEUE` with a hard cap on concurrent activities
+(ADR-0013 backpressure). This module only assembles what it is given (PRD §10 M5.2);
+`apx.workflows.main` builds the real dependencies."""
 
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from temporalio.worker import Worker
 
 from apx.observability.tracing import configure_tracing
 from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
+from apx.workflows.review_guard import ReviewGuardActivities
 from apx.workflows.workflow import InvoiceWorkflow
 
 TASK_QUEUE = "invoice-workflow"
@@ -41,6 +43,7 @@ def build_worker(client: Client, deps: InvoiceActivityDeps, task_queue: str = TA
     `llm_task_queue` (tests, the crash test) still completes on this one worker. `client` must
     have been created with `connect_client` (or otherwise carry the Pydantic data converter)."""
     activities = DefaultInvoiceActivities(deps)
+    review_guard = ReviewGuardActivities(deps.session_factory, deps.audit)
     return Worker(
         client,
         task_queue=task_queue,
@@ -55,7 +58,9 @@ def build_worker(client: Client, deps: InvoiceActivityDeps, task_queue: str = TA
             activities.apply_review,
             activities.fraud,
             activities.route,
+            review_guard.review_hold,
             activities.review_note,
+            review_guard.confirm_review,
             activities.build_einvoice,
             activities.send_to_asp,
             activities.archive,

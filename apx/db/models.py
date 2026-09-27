@@ -528,6 +528,10 @@ class Approval(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    invoice_digest: Mapped[str | None] = mapped_column(String(64))
+    """`apx.policy.writer.approval_digest` of the invoice and vendor payee at approval time. The
+    workflow re-derives it before paying and holds when it does not match (REVIEW.md C-03);
+    NULL only on rows written before migration 0012, which the workflow treats as unbacked."""
 
 
 class Proposal(Base):

@@ -3,7 +3,8 @@ pipeline module's Protocol (or, for ASP send and archive, an idempotency-guarded
 client) through the injected `InvoiceActivityDeps` registry, then appends an audit event.
 Business logic for scanning, parsing, extraction, trust, validation, fraud, policy and
 e-invoicing lives on their own module branches; this file wires, never re-implements, them
-(PRD §3, §6.2 I4, §6.4, §10 M5.2)."""
+(PRD §3, §6.2 I4, §6.4, §10 M5.2). Where an activity writes state in its own transaction
+(`send_to_asp`, `archive`, `mark_failed`), the audit entry joins that transaction (REVIEW M-02)."""
 
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from temporalio.exceptions import ApplicationError
 from apx.agent.interfaces import AgentContext, ExceptionAgent
 from apx.agent.runner import record_review_note
 from apx.asp_mock.interfaces import Archive, ArchiveRecord, AspClient, AspReceipt, AspSubmission
+from apx.audit.chain import append_in_transaction
 from apx.audit.interfaces import AuditEvent, AuditLog
 from apx.common.errors import (
     EInvoiceError,
@@ -162,6 +164,15 @@ def verified_payment_iban(vendor: Vendor | None, claimed: str | None) -> str | N
         return None
 
 
+def _activity_event(step: str, invoice_id: str, payload: dict[str, JsonValue]) -> AuditEvent:
+    return AuditEvent(
+        actor="workflow",
+        action=f"activity:{step}",
+        entity=f"invoice:{invoice_id}",
+        payload=payload,
+    )
+
+
 class DefaultInvoiceActivities:
     """Structurally satisfies `apx.workflows.interfaces.InvoiceActivities`. Instances (not the
     class) are registered with the Temporal `Worker`, one bound method per activity, so the
@@ -171,13 +182,19 @@ class DefaultInvoiceActivities:
         self._deps = deps
 
     async def _audit(self, step: str, invoice_id: str, payload: dict[str, JsonValue]) -> None:
-        await self._deps.audit.append(
-            AuditEvent(
-                actor="workflow",
-                action=f"activity:{step}",
-                entity=f"invoice:{invoice_id}",
-                payload=payload,
-            )
+        await self._deps.audit.append(_activity_event(step, invoice_id, payload))
+
+    async def _audit_in(
+        self,
+        session: AsyncSession,
+        step: str,
+        invoice_id: str,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        """`_audit` inside `session`'s transaction: the entry commits with the state writes
+        before it, or neither does (`apx.audit.chain.append_in_transaction`)."""
+        await append_in_transaction(
+            self._deps.audit, session, _activity_event(step, invoice_id, payload)
         )
 
     @activity.defn(name="scan")
@@ -493,7 +510,10 @@ class DefaultInvoiceActivities:
 
     @activity.defn(name="send_to_asp")
     async def send_to_asp(self, key: IdempotencyKey, document: EInvoiceDocument) -> AspReceipt:
-        """Idempotent by `key` (§6.4): a retried call after a worker crash never resubmits."""
+        """Idempotent by `key` (§6.4): a retried call after a worker crash never resubmits. The
+        idempotency record, `SENT` and the audit entry commit in one transaction, so a failed
+        audit append leaves no record and the retry replays `submit` (idempotent by `key`, same
+        receipt) and writes the event: exactly one `send_to_asp` entry per key (M-02)."""
         async with self._deps.session_factory() as session:
             cached = await self._deps.idempotency.get(session, key)
         if cached is not None:
@@ -505,27 +525,34 @@ class DefaultInvoiceActivities:
         )
 
         async with self._deps.session_factory() as session:
-            await self._deps.idempotency.put(
+            recorded = await self._deps.idempotency.put(
                 session,
                 invoice_id=document.invoice_id,
                 step="asp_send",
                 key=key,
                 payload=receipt.model_dump(mode="json"),
             )
-        await self._deps.records.set_status(document.invoice_id, DbInvoiceStatus.SENT)
-
-        await self._audit(
-            "send_to_asp",
-            document.invoice_id,
-            {"receipt_id": receipt.receipt_id, "status": receipt.status},
-        )
+            await session.execute(
+                update(InvoiceRow)
+                .where(InvoiceRow.id == document.invoice_id)
+                .values(status=DbInvoiceStatus.SENT)
+            )
+            if recorded:  # else a concurrent attempt recorded (and audited) this key first
+                await self._audit_in(
+                    session,
+                    "send_to_asp",
+                    document.invoice_id,
+                    {"receipt_id": receipt.receipt_id, "status": receipt.status},
+                )
         return receipt
 
     @activity.defn(name="archive")
     async def archive(self, key: IdempotencyKey, document: EInvoiceDocument) -> ArchiveRecord:
         """Idempotent by `key` (§6.4). The invoice's one terminal payment-state transition --
         `invoices.status` to `ARCHIVED` -- is written only by the attempt that first records
-        `key`, so a retried call never re-applies it (M5.2 crash-recovery test)."""
+        `key`, so a retried call never re-applies it (M5.2 crash-recovery test). The record, the
+        status and the audit entry commit together, so a failed audit append leaves no record
+        and the retry writes the event: exactly one `archive` entry per key (M-02)."""
         async with self._deps.session_factory() as session:
             cached = await self._deps.idempotency.get(session, key)
         if cached is not None:
@@ -547,12 +574,15 @@ class DefaultInvoiceActivities:
                     .where(InvoiceRow.id == document.invoice_id)
                     .values(status=DbInvoiceStatus.ARCHIVED)
                 )
-
-        await self._audit(
-            "archive",
-            document.invoice_id,
-            {"xml_sha256": record.xml_sha256, "retain_until": record.retain_until.isoformat()},
-        )
+                await self._audit_in(
+                    session,
+                    "archive",
+                    document.invoice_id,
+                    {
+                        "xml_sha256": record.xml_sha256,
+                        "retain_until": record.retain_until.isoformat(),
+                    },
+                )
         return record
 
     @activity.defn(name="mark_failed")
@@ -599,4 +629,6 @@ class DefaultInvoiceActivities:
                     .values(failed_at=datetime.now(UTC), failure=failure)
                 )
                 recorded_on = "document"
-        await self._audit("failed", invoice_id, {"error": failure, "recorded_on": recorded_on})
+            await self._audit_in(
+                session, "failed", invoice_id, {"error": failure, "recorded_on": recorded_on}
+            )

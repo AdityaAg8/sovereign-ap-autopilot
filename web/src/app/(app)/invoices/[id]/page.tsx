@@ -121,6 +121,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         });
         return;
       }
+      if (error instanceof ApiError && error.status === 409) {
+        // Another reviewer or the workflow moved the invoice on: show where it is now.
+        toast.error("This invoice is no longer awaiting review.");
+        load();
+        return;
+      }
       toast.error("Could not record the decision. Try again.");
     } finally {
       setPending(false);
@@ -173,9 +179,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     : overLimit
       ? `Above your ${formatAed(user!.approvalLimitAed!)} approval limit — needs a higher-limit approver.`
       : null;
-  const decisionsClosed = !["awaiting_review", "validated", "fraud_checked", "gated"].includes(
-    invoice.summary.status,
-  );
+  // Approve and reject are offered only while the workflow waits for a reviewer: a decision on an
+  // invoice still in flight would never reach it, and a settled one cannot be reopened (the API
+  // answers 409 for both).
+  const decisionsClosed = invoice.summary.status !== "awaiting_review";
 
   return (
     <div className="flex h-full min-h-0 flex-col">

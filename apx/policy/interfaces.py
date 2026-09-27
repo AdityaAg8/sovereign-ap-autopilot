@@ -282,8 +282,12 @@ class PaymentStateWriter(Protocol):
         """Store the change as an unverified account (P1) and start the P2 window."""
         ...
 
-    async def verify_bank_account(self, vendor_id: VendorId, iban: str, grant: Grant) -> None:
-        """Record the admin callback verification: `verified=True`, `source="admin_callback"`."""
+    async def verify_bank_account(
+        self, vendor_id: VendorId, iban: str, grant: Grant, *, method: str, reference: str
+    ) -> None:
+        """Record the admin's out-of-band verification (`method` and its `reference` kept on the
+        `bank_verifications` row): `verified=True`, `source="admin_callback"`. Raises
+        SegregationOfDutiesError if the verifier is the account's changer (REVIEW.md M-01)."""
         ...
 
     async def execute_proposal(self, proposal_id: str, grant: Grant) -> None: ...
@@ -337,12 +341,12 @@ def required_capabilities(
             caps.add(mapped)
     if is_approval_action(request):
         invoice = request.invoice
-        if invoice is None or _above_limit(invoice.total, thresholds.approval_limit):
+        if invoice is None or above_limit(invoice.total, thresholds.approval_limit):
             caps.add(Capability.APPROVE_ABOVE_LIMIT)
     return frozenset(caps)
 
 
-def _above_limit(total: Money, limit: Money) -> bool:
+def above_limit(total: Money, limit: Money) -> bool:
     """True when `total` cannot be covered by the plain approval capability (P3): a different
     currency is always treated as above limit, since the two amounts cannot be compared."""
     return total.currency != limit.currency or total.amount > limit.amount

@@ -14,6 +14,11 @@ row also records what the trust features need (mean/min logprob, final value, OC
 A `has_scan` document is fed as its runtime scan form (evals.scan_input: the scan PNGs as an
 image-only PDF, parsed by the OCR service like any scanned upload); every row records its
 `input_kind` and the report splits every metric by input kind and Arabic-first layout.
+Every row (A and B) is scored on the parse words (grounding, box IoU, OCR support for the trust
+features), so B runs the full parse too. A transient parse-service failure is retried with backoff
+(`evals.parse_cache.retrying`); a document that still fails gets no row, is appended to
+`<rows>.parse_failures.jsonl`, counted in the report and fails the run (exit 1); a resume
+retries it.
 
 Usage: python -m evals.extraction_a --data-dir <factory out>/test [--limit N] [--base-url URL]
        [--extractor a|b] [--model ALIAS] [--split test|cal] [--parse-cache DIR | --no-parse-cache]
@@ -32,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
+from apx.common.errors import ApxError, ParseError
 from apx.common.types import BBox, FieldValue
 from apx.extract.extractor import LlmExtractor
 from apx.extract.grounding import WordGrounder
@@ -53,7 +59,7 @@ from evals.extraction_identity import (
     serving_args_sha256,
 )
 from evals.parse_cache import DEFAULT_ROOT as DEFAULT_PARSE_CACHE
-from evals.parse_cache import ParseCache, parser_identity
+from evals.parse_cache import PARSE_RETRY_BACKOFF_S, ParseCache, parser_identity, retrying
 from evals.scan_input import INPUT_KINDS, InputKind, document_input, load_truth
 from evals.splits import load_splits
 
@@ -71,6 +77,31 @@ documents are fed as their scan (earlier rows read the born-digital PDF for them
 `input_kind` and `arabic_first`. A resume re-runs documents whose row is older, and the trust job
 refuses them."""
 SPLITS: tuple[str, ...] = ("test", "cal")
+
+
+class DocumentParseFailedError(ApxError):
+    """A document's parse failed after the bounded retries; the harness records it (no row, a
+    failure record, a report count, exit 1) instead of dying or skipping it silently."""
+
+    def __init__(self, sha: str, kind: InputKind, cause: ParseError) -> None:
+        super().__init__(f"{sha[:12]} ({kind}) could not be parsed: {cause}")
+        self.sha = sha
+        self.kind = kind
+        self.cause = cause
+
+    def record(self) -> dict[str, Any]:
+        """The failure's JSONL record (`<rows>.parse_failures.jsonl`)."""
+        return {
+            "sha": self.sha,
+            "input_kind": self.kind,
+            "error_type": type(self.cause).__name__,
+            "error": str(self.cause),
+        }
+
+
+def failures_path(rows_path: Path) -> Path:
+    """Where a run appends its parse failures, next to its rows."""
+    return rows_path.with_name(rows_path.stem + ".parse_failures.jsonl")
 
 
 def prompt_builder_for(extractor: ExtractorId) -> PromptBuilder:
@@ -190,14 +221,19 @@ def field_cells(
 
 
 async def parse_input(
-    data: bytes, parser: PaddleOcrDocumentParser, cache: ParseCache | None
+    data: bytes,
+    parser: PaddleOcrDocumentParser,
+    cache: ParseCache | None,
+    backoff_s: Sequence[float] = PARSE_RETRY_BACKOFF_S,
 ) -> ParsedDocument:
     """Parse one runtime input the way the runtime keys it (the sha256 of its uploaded bytes,
-    the scan's for a scan), through the parse cache when one is given."""
+    the scan's for a scan), through the parse cache when one is given; transient parse-service
+    failures are retried after each wait in `backoff_s`."""
     document_sha256 = hashlib.sha256(data).hexdigest()
+    parse = retrying(parser.parse, backoff_s=backoff_s)
     if cache is None:
-        return await parser.parse(document_sha256, data)
-    return await cache.parse(document_sha256, data, parser.parse)
+        return await parse(document_sha256, data)
+    return await cache.parse(document_sha256, data, parse)
 
 
 async def _run_one(
@@ -206,10 +242,15 @@ async def _run_one(
     extractor: LlmExtractor,
     parser: PaddleOcrDocumentParser,
     cache: ParseCache | None = None,
+    backoff_s: Sequence[float] = PARSE_RETRY_BACKOFF_S,
 ) -> dict[str, Any]:
+    """One row; a parse that still fails after the retries raises `DocumentParseFailedError`."""
     truth = load_truth(data_dir, sha)
     kind, data = document_input(data_dir, sha, truth)
-    document = await parse_input(data, parser, cache)
+    try:
+        document = await parse_input(data, parser, cache, backoff_s)
+    except ParseError as exc:
+        raise DocumentParseFailedError(sha, kind, exc) from exc
     return await extract_row(sha, document, data_dir, extractor, kind)
 
 
@@ -330,7 +371,10 @@ def _latency(metrics: SliceMetrics) -> str:
 
 
 def render_report(
-    rows: list[dict[str, Any]], model: str, extractor: ExtractorId = ExtractorId.A
+    rows: list[dict[str, Any]],
+    model: str,
+    extractor: ExtractorId = ExtractorId.A,
+    failures: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     slices = report_slices(rows)
     overall = slice_metrics(rows)
@@ -348,6 +392,12 @@ def render_report(
         "",
         "Scanned documents are fed as the runtime receives a scan: their Augraphy page images as "
         "an image-only PDF, parsed by the OCR service; born-digital ones as their PDF.",
+        "",
+        f"Parse failures (no row, after retries; the run fails): {len(failures)}.",
+        *(
+            f"- `{f['sha'][:12]}` ({f['input_kind']}): {f['error_type']}: {f['error']}"
+            for f in failures
+        ),
         "",
         "| Metric | Value | Gate |",
         "|---|---:|---|",
@@ -454,7 +504,9 @@ async def run(args: argparse.Namespace) -> int:
         queue.put_nowait(sha)
     done = len(available) - len(pending)
 
-    async def worker(sink: TextIO) -> None:
+    failures: dict[str, dict[str, Any]] = {}
+
+    async def worker(sink: TextIO, failure_sink: TextIO) -> None:
         nonlocal done
         # One extractor per worker: `last_latency_ms` is per-call state.
         extractor = LlmExtractor(
@@ -462,7 +514,14 @@ async def run(args: argparse.Namespace) -> int:
         )
         while not queue.empty():
             sha = queue.get_nowait()
-            row = {**await _run_one(sha, data_dir, extractor, parser, cache), **stamp}
+            try:
+                row = {**await _run_one(sha, data_dir, extractor, parser, cache), **stamp}
+            except DocumentParseFailedError as exc:
+                failures[sha] = exc.record()
+                failure_sink.write(json.dumps(failures[sha], ensure_ascii=False) + "\n")
+                failure_sink.flush()
+                print(f"[parse failed] {exc}", file=sys.stderr, flush=True)
+                continue
             rows[sha] = row
             sink.write(json.dumps(row, ensure_ascii=False) + "\n")
             sink.flush()
@@ -474,19 +533,26 @@ async def run(args: argparse.Namespace) -> int:
             )
 
     try:
-        with rows_path.open("a", encoding="utf-8") as sink:
-            await asyncio.gather(*(worker(sink) for _ in range(args.concurrency)))
+        with (
+            rows_path.open("a", encoding="utf-8") as sink,
+            failures_path(rows_path).open("a", encoding="utf-8") as failure_sink,
+        ):
+            await asyncio.gather(*(worker(sink, failure_sink) for _ in range(args.concurrency)))
     finally:
         if not queue.empty():
             pass  # interrupted: keep the model warm for the resume
         else:
             await client.unload()  # stage done: free the GPU now, not after the idle TTL
         await client.aclose()
-    selected = [rows[sha] for sha in available]
-    report = render_report(selected, model, extractor_id)
+    selected = [rows[sha] for sha in available if sha in rows]
+    failed = [failures[sha] for sha in available if sha in failures]
+    report = render_report(selected, model, extractor_id, failed)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8", newline="\n")
     print(report)
+    if failed or not selected:
+        print(f"{len(failed)} document(s) failed to parse; rerun to retry them", file=sys.stderr)
+        return 1
     valid_rate = sum(row["valid_json"] for row in selected) / len(selected)
     return 0 if valid_rate >= VALID_JSON_GATE else 1
 

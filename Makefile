@@ -131,6 +131,14 @@ down:
 	@echo "==> docker compose down (infra/compose.yaml)"
 	cd infra && $(COMPOSE) down
 
+# One-time (idempotent) for installs whose Postgres volume was created with the old default
+# password (REVIEW C-02/L-01): `make env` adds the generated secrets to .env, this sets both
+# roles' passwords to them over the container's local socket, then `make up` recreates the app.
+.PHONY: rotate-db-password
+rotate-db-password: env
+	@echo "==> setting the apx and apx_agent_ro Postgres passwords from .env (values never printed)"
+	uv run python scripts/rotate_db_password.py
+
 models:
 	@echo "==> resolving infra/models.yaml against the Hugging Face Hub"
 	uv run python scripts/resolve_models.py
@@ -479,3 +487,12 @@ verify-m12:
 # Every milestone gate in order; a milestone whose gate is not built yet fails loudly.
 verify-all:
 	@for n in 0 1 2 3 4 5 6 7 8 9 10 11 12; do $(MAKE) verify-m$$n || exit 1; done
+
+# PRD §11.2 resilience scenarios (REVIEW.md H-06): llama-swap killed mid-extraction (fake server)
+# and Postgres stopped/restarted mid-workflow; needs Docker only. The live llama-swap container
+# variant is marked gpu and runs with the command in its docstring.
+.PHONY: test-resilience
+test-resilience:
+	@echo "==> resilience: llama-swap restart mid-extract, Postgres restart mid-workflow (Docker)"
+	uv run python -m pytest -m "integration and not gpu" --no-cov -p no:cacheprovider \
+		tests/integration/test_resilience_llama_swap.py tests/integration/test_resilience_postgres.py

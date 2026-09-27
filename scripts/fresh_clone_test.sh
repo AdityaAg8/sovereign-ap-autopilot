@@ -43,7 +43,8 @@ step "mypy --strict" uv run mypy
 step "web lint + typecheck" bash -c "cd web && pnpm lint && pnpm typecheck"
 # pyproject's addopts already deselect gpu/integration/artifacts/external/perf tests.
 step "unit tests" uv run pytest -q -p no:cacheprovider --no-cov tests/unit
-step "compose config" bash -c "cd infra && docker compose config --quiet"
+# Compose has no default secrets (REVIEW C-02), so generate them the way `make up` does first.
+step "compose config" bash -c "uv run python scripts/init_env.py && cd infra && docker compose --env-file ../.env config --quiet"
 step "apx image build" docker build -q -f infra/docker/apx/Dockerfile -t apx-fresh-clone-check .
 
 mkdir -p "$(dirname "$report")"

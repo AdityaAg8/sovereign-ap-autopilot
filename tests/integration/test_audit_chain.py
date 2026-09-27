@@ -196,3 +196,41 @@ async def _run_trigger_still_blocks_normal_clients() -> None:
 
 def test_trigger_still_blocks_an_ordinary_update(audit_schema: str) -> None:
     asyncio.run(_run_trigger_still_blocks_normal_clients())
+
+
+async def _run_streamed_verify_across_pages() -> None:
+    # REVIEW L-05: the verifier streams the chain in keyset pages; a page size that does not
+    # divide the chain length, and a tampered row inside a later page, must give exactly the
+    # results of one in-memory walk.
+    audit_log = PgAuditLog()
+    entries = [
+        await audit_log.append(
+            AuditEvent(actor="tester", action="create", entity=f"invoice:{i}", payload={"i": i})
+        )
+        for i in range(23)
+    ]
+    for page_size in (1, 4, 5, 23, 1000):
+        result = await PgAuditVerifier(page_size=page_size).verify()
+        assert result.ok
+        assert result.entries_checked == 23
+
+    tampered_id = entries[16].id
+    conn = await asyncpg.connect(ASYNCPG_DSN)
+    try:
+        await conn.execute("ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only")
+        await conn.execute("UPDATE audit_log SET actor = 'mallory' WHERE id = $1", tampered_id)
+        await conn.execute("ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only")
+    finally:
+        await conn.close()
+
+    for page_size in (1, 4, 5, 1000):
+        result = await PgAuditVerifier(page_size=page_size).verify()
+        assert not result.ok
+        assert result.first_bad_id == tampered_id
+        assert result.entries_checked == 17
+
+    await db_session.get_engine().dispose()
+
+
+def test_streamed_verify_gives_the_same_result_for_any_page_size(audit_schema: str) -> None:
+    asyncio.run(_run_streamed_verify_across_pages())

@@ -12,31 +12,51 @@ from functools import lru_cache
 from typing import Final, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from apx.agent.interfaces import SqlParam, SqlReader, SqlStatement
 from apx.common.errors import ConfigError
 
-DEFAULT_AGENT_DATABASE_URL: Final[str] = (
-    "postgresql+asyncpg://apx_agent_ro:apx-agent-ro-dev-only@localhost:5432/apx"
-)
-"""Matches the `apx_agent_ro` role the migration creates with the same dev-only password
-convention as `apx.db.session.DEFAULT_DATABASE_URL`; overridden by `AGENT_DATABASE_URL` in
-every other environment. A distinct env var from `DATABASE_URL` so the two roles can never be
-confused (ADR-0010 D2: the agent connects as a different, SELECT-only role)."""
+AGENT_ROLE: Final[str] = "apx_agent_ro"
+"""The SELECT-only role migration 0004 creates; its password comes from `AGENT_RO_PASSWORD`
+(migration 0013), never from source (REVIEW L-01)."""
 
 
 def get_agent_database_url() -> str:
-    """Reads `AGENT_DATABASE_URL`, falling back to the local Compose default.
+    """Reads `AGENT_DATABASE_URL`, or builds the Compose URL for `apx_agent_ro` from
+    `AGENT_RO_PASSWORD`, `POSTGRES_HOST` (default localhost, the host's devports passthrough) and
+    `POSTGRES_DB` (default `apx`). A distinct setting from `DATABASE_URL` so the two roles can
+    never be confused (ADR-0010 D2: the agent connects as a different, SELECT-only role).
 
-    Raises `ConfigError` if the URL is set but does not use the `asyncpg` driver.
+    Raises `ConfigError` if neither is set (there is no built-in password), or if the URL does
+    not use the `asyncpg` driver.
     """
-    url = os.environ.get("AGENT_DATABASE_URL", DEFAULT_AGENT_DATABASE_URL)
+    url = os.environ.get("AGENT_DATABASE_URL") or _compose_agent_url()
     if not url.startswith("postgresql+asyncpg://"):
         raise ConfigError(
-            f"AGENT_DATABASE_URL must use the postgresql+asyncpg:// driver, got: {url!r}"
+            "AGENT_DATABASE_URL must use the postgresql+asyncpg:// driver, got: "
+            f"{url.split('://', 1)[0]!r}"
         )
     return url
+
+
+def _compose_agent_url() -> str:
+    password = os.environ.get("AGENT_RO_PASSWORD")
+    if not password:
+        raise ConfigError(
+            "set AGENT_RO_PASSWORD (generated into .env by `make env`) or AGENT_DATABASE_URL "
+            "for the read-only agent role"
+        )
+    url = URL.create(
+        "postgresql+asyncpg",
+        username=AGENT_ROLE,
+        password=password,
+        host=os.environ.get("POSTGRES_HOST") or "localhost",
+        port=5432,
+        database=os.environ.get("POSTGRES_DB") or "apx",
+    )
+    return url.render_as_string(hide_password=False)
 
 
 @lru_cache(maxsize=1)
@@ -211,8 +231,8 @@ def escape_like(fragment: str) -> str:
 
 # Re-exported so callers only need `apx.agent.sql` for the reader; kept for typing clarity.
 __all__ = [
+    "AGENT_ROLE",
     "AGENT_SQL",
-    "DEFAULT_AGENT_DATABASE_URL",
     "SQL_EXPLAIN_DECISION_EVENTS",
     "SQL_GET_INVOICE",
     "SQL_SEARCH_INVOICES_RECEIVED_ASC",

@@ -38,7 +38,7 @@ from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import TrustDecision
 from apx.validate.interfaces import ValidationReport
 from apx.workflows.interfaces import InvoiceStatus, InvoiceWorkflowInput, InvoiceWorkflowState, Step
-from apx.workflows.workflow import InvoiceWorkflow, ReviewDecision
+from apx.workflows.workflow import OUTAGE_ATTEMPTS, InvoiceWorkflow, ReviewDecision
 
 TASK_QUEUE = "test-invoice-workflow"
 
@@ -163,6 +163,12 @@ class FakeInvoiceActivities:
     build_invoice_error: Exception | None = None
     mark_failed_unrecorded: int = 0
     """`mark_failed` raises `FailureNotRecordedError` this many times before it lands."""
+    held_for_review: bool = False
+    """`review_hold` finds a reviewer's pre-route send-to-review hold."""
+    unbacked_signals: int = 0
+    """`confirm_review` finds this many review signals unbacked before one is backed."""
+    confirmed: list[bool] = field(default_factory=list)
+    """The `approved` flag of every signal `confirm_review` checked."""
 
     @activity.defn(name="scan")
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport:
@@ -220,6 +226,20 @@ class FakeInvoiceActivities:
         self.calls.append("route")
         return self.route_decision
 
+    @activity.defn(name="review_hold")
+    async def review_hold(self, invoice_id: str, route: Route) -> Route:
+        self.calls.append("review_hold")
+        return Route.REVIEW if self.held_for_review and route is Route.AUTO else route
+
+    @activity.defn(name="confirm_review")
+    async def confirm_review(self, invoice_id: str, approved: bool) -> bool:
+        self.calls.append("confirm_review")
+        self.confirmed.append(approved)
+        if self.unbacked_signals > 0:
+            self.unbacked_signals -= 1
+            return False
+        return True
+
     @activity.defn(name="review_note")
     async def review_note(self, invoice: Invoice, routing: RoutingDecision) -> bool:
         self.calls.append("review_note")
@@ -267,7 +287,9 @@ def _activities(fake: FakeInvoiceActivities) -> Sequence[Callable[..., object]]:
         fake.validate,
         fake.fraud,
         fake.route,
+        fake.review_hold,
         fake.review_note,
+        fake.confirm_review,
         fake.build_einvoice,
         fake.send_to_asp,
         fake.archive,
@@ -324,6 +346,7 @@ async def test_auto_route_completes_through_archive(temporal_env: WorkflowEnviro
         "validate",
         "fraud",
         "route",
+        "review_hold",
         "build_einvoice",
         "send_to_asp",
         "archive",
@@ -401,7 +424,10 @@ async def test_review_route_waits_then_approved_completes(
         result = await handle.result()
 
     assert result.status is InvoiceStatus.ARCHIVED
-    assert fake.calls.index("review_note") == fake.calls.index("route") + 1
+    assert fake.calls.index("review_note") == fake.calls.index("review_hold") + 1
+    # C-03: the approval is checked against the database before anything is built.
+    assert fake.confirmed == [True]
+    assert fake.calls.index("confirm_review") < fake.calls.index("build_einvoice")
 
 
 @pytest.mark.asyncio
@@ -459,8 +485,129 @@ async def test_review_route_rejected_ends_blocked(temporal_env: WorkflowEnvironm
         result = await handle.result()
 
     assert result.status is InvoiceStatus.BLOCKED
+    assert fake.confirmed == [False]
     assert "build_einvoice" not in fake.calls
     assert "archive" not in fake.calls
+
+
+async def _start_review(
+    temporal_env: WorkflowEnvironment,
+) -> WorkflowHandle[InvoiceWorkflow, InvoiceWorkflowState]:
+    handle = await temporal_env.client.start_workflow(
+        InvoiceWorkflow.run, WORKFLOW_INPUT, id=INVOICE_ID, task_queue=TASK_QUEUE
+    )
+
+    async def _awaiting_review() -> bool:
+        state = await handle.query(InvoiceWorkflow.status)
+        return bool(state.status is InvoiceStatus.AWAITING_REVIEW)
+
+    await _wait_until(_awaiting_review)
+    return handle
+
+
+def _confirm_count(fake: FakeInvoiceActivities, n: int) -> Callable[[], Awaitable[bool]]:
+    async def _checked() -> bool:
+        return fake.calls.count("confirm_review") == n
+
+    return _checked
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approved", [True, False], ids=["raw-approve", "raw-reject"])
+async def test_an_unbacked_review_signal_is_ignored_and_the_invoice_keeps_waiting(
+    temporal_env: WorkflowEnvironment, approved: bool
+) -> None:
+    """C-03: a `review` signal sent straight to Temporal (the Web UI, tctl) with no approval row
+    or recorded rejection behind it never builds or sends the e-invoice. The workflow stays
+    awaiting review, and a later decision the database backs still goes through."""
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.REVIEW, reasons=()), unbacked_signals=1
+    )
+    async with Worker(
+        temporal_env.client,
+        task_queue=TASK_QUEUE,
+        workflows=[InvoiceWorkflow],
+        activities=_activities(fake),
+    ):
+        handle = await _start_review(temporal_env)
+        await handle.signal(InvoiceWorkflow.review, ReviewDecision(approved=approved))
+        await _wait_until(_confirm_count(fake, 1))
+        state = await handle.query(InvoiceWorkflow.status)
+        assert state.status is InvoiceStatus.AWAITING_REVIEW
+        assert "build_einvoice" not in fake.calls
+        assert "send_to_asp" not in fake.calls
+
+        await handle.signal(InvoiceWorkflow.review, ReviewDecision(approved=True))
+        result = await handle.result()
+
+    assert fake.confirmed == [approved, True]
+    assert result.status is InvoiceStatus.ARCHIVED
+    assert fake.calls.count("send_to_asp") == 1
+
+
+@pytest.mark.asyncio
+async def test_unbacked_signals_alone_never_reach_payment(
+    temporal_env: WorkflowEnvironment,
+) -> None:
+    """Several forged approvals in a row: each is checked, none is acted on."""
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.REVIEW, reasons=()), unbacked_signals=3
+    )
+    async with Worker(
+        temporal_env.client,
+        task_queue=TASK_QUEUE,
+        workflows=[InvoiceWorkflow],
+        activities=_activities(fake),
+    ):
+        handle = await _start_review(temporal_env)
+        for attempt in range(1, 4):
+            await handle.signal(InvoiceWorkflow.review, ReviewDecision(approved=True))
+            await _wait_until(_confirm_count(fake, attempt))
+        state = await handle.query(InvoiceWorkflow.status)
+        await handle.terminate("test done")
+
+    assert state.status is InvoiceStatus.AWAITING_REVIEW
+    assert fake.confirmed == [True, True, True]
+    assert "build_einvoice" not in fake.calls
+
+
+@pytest.mark.asyncio
+async def test_a_pre_route_send_to_review_hold_turns_auto_into_review(
+    temporal_env: WorkflowEnvironment,
+) -> None:
+    """H-02: a reviewer sent the invoice to review before it was routed, and the policy then
+    said AUTO. `review_hold` honours the hold: the invoice waits for a human instead of paying."""
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.AUTO, reasons=()), held_for_review=True
+    )
+    async with Worker(
+        temporal_env.client,
+        task_queue=TASK_QUEUE,
+        workflows=[InvoiceWorkflow],
+        activities=_activities(fake),
+    ):
+        handle = await _start_review(temporal_env)
+        mid_state = await handle.query(InvoiceWorkflow.status)
+        assert mid_state.route is Route.REVIEW
+        assert "build_einvoice" not in fake.calls
+        await handle.signal(InvoiceWorkflow.review, ReviewDecision(approved=False))
+        result = await handle.result()
+
+    assert result.status is InvoiceStatus.BLOCKED
+    assert "send_to_asp" not in fake.calls
+
+
+@pytest.mark.asyncio
+async def test_a_hold_never_softens_a_block(temporal_env: WorkflowEnvironment) -> None:
+    reason = PolicyReason(rule=PolicyRule.P4_FLAGS, route=Route.BLOCK, message="blocked for test")
+    fake = FakeInvoiceActivities(
+        route_decision=RoutingDecision(route=Route.BLOCK, reasons=(reason,)), held_for_review=True
+    )
+    _handle, result = await _run_workflow(temporal_env, fake)
+
+    assert result.status is InvoiceStatus.BLOCKED
+    assert "review_note" not in fake.calls
+    assert "build_einvoice" not in fake.calls
 
 
 async def _wait_until(
@@ -482,8 +629,8 @@ async def _wait_until(
     [
         # Deterministic for the same ref: retrying would only re-run OCR and fail again.
         (ParsedArtifactIntegrityError("stored parse does not match its ref"), 1),
-        # Transient: keeps the default five attempts.
-        (ModelServingError("llama-swap timed out"), 5),
+        # Transient: retried across the outage window (OUTAGE_ATTEMPTS).
+        (ModelServingError("llama-swap timed out"), OUTAGE_ATTEMPTS),
     ],
     ids=["integrity-error-not-retried", "serving-error-retried"],
 )
@@ -580,7 +727,8 @@ async def test_a_failure_before_the_invoice_row_exists_is_still_recorded(
     with pytest.raises(WorkflowFailureError):
         await _run_workflow(temporal_env, fake)
 
-    assert fake.calls.count("build_invoice") == 5  # transient: default retries, then give up
+    # Transient: retried across the outage window, then given up.
+    assert fake.calls.count("build_invoice") == OUTAGE_ATTEMPTS
     assert "validate" not in fake.calls
     assert fake.calls[-1] == "mark_failed"
     assert [invoice_id for invoice_id, _ in fake.failures] == [INVOICE_ID]

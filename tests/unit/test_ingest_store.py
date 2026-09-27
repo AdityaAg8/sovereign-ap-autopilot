@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from PIL import Image
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -98,15 +99,17 @@ def test_get_raises_typed_error_for_an_unknown_sha256(tmp_path: Path) -> None:
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(
-    magic=st.sampled_from([b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff"]),
+    image_format=st.sampled_from(["PNG", "JPEG"]),
     suffix=st.binary(max_size=200),
 )
 def test_put_always_returns_the_true_sha256_of_the_bytes_it_stored(
-    magic: bytes, suffix: bytes, tmp_path: Path
+    image_format: str, suffix: bytes, tmp_path: Path
 ) -> None:
-    # PNG/JPEG are accepted on magic bytes alone (unlike PDF, which is also opened and page
-    # -checked), so any suffix here reaches `put` and must round-trip through the real sha256.
-    data = magic + suffix
+    # PNG/JPEG are accepted on a readable, in-cap header (REVIEW H-03); trailing bytes after
+    # the image are never read, so any suffix reaches `put` and must round-trip its sha256.
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4)).save(buf, format=image_format)
+    data = buf.getvalue() + suffix
     store = _store(tmp_path)
     document = store.put(data, "f", "upload")
     assert document.sha256 == sha256_hex(data)

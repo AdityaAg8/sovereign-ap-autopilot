@@ -19,10 +19,10 @@ and sits on the internal `app` network; the host reaches it only through `gatewa
 |---|---|
 | API (REST + SSE) | http://localhost:8000 (`/health` needs no token) |
 | Web app | http://localhost:3000 (`make demo` starts it; log in `logs/web.log`) |
-| Temporal UI (workflow histories) | http://localhost:8233 |
+| Temporal UI (workflow histories, read-only) | http://localhost:8233, only with the `devports` profile (see Security) |
 | Phoenix (traces of every workflow step and model call) | http://localhost:6006 |
 | MLflow (model registry) | http://localhost:5000 |
-| Postgres (dev tools only) | 127.0.0.1:5432, user `apx`, password from `.env` (default `apx-dev-only`) |
+| Postgres (dev tools only) | 127.0.0.1:5432, only with the `devports` profile; user `apx`, password `POSTGRES_PASSWORD` in `.env` |
 | Inbox the worker watches | `data/inbox/` |
 | Stored documents, by sha256 | `data/documents/` |
 
@@ -120,6 +120,51 @@ cd infra && docker compose exec worker python -m apx.audit verify
 
 A clean run advances the anchor; a broken link is reported with the first bad event id and is
 never repaired automatically.
+
+## Security
+
+**Secrets.** `make env` (run by `make up` and `make bootstrap`) generates `API_JWT_SECRET`,
+`POSTGRES_PASSWORD` and `AGENT_RO_PASSWORD` into `.env` when they are missing or empty. It never
+changes a value that is set and never prints one. Compose has no fallback for any of them and
+stops with `... is not set -- run make env` instead.
+
+**Installs created before generated passwords.** The Postgres volume still holds the old default
+(`apx-dev-only`) until you rotate it once:
+
+```bash
+make env                  # appends the new secrets to .env (existing keys untouched)
+make rotate-db-password   # sets apx + apx_agent_ro to the .env values
+make up                   # recreates api/worker/migrate with the new credentials
+```
+
+`rotate-db-password` connects through `psql` on the container's own socket, which the Postgres
+image trusts, so it needs neither the old nor the new password. It runs as one transaction and
+is safe to repeat. Run it again after changing either password in `.env` by hand.
+
+**What the host can reach.** By default the gateway publishes, on 127.0.0.1 only: the API (8000),
+llama-swap (8080), Phoenix (6006), MLflow (5000) and parse (8010). Postgres and the Temporal UI
+are not published. From the Temporal UI anyone on the host could signal `review` and approve a
+payment without an approval record, and a direct Postgres login is the schema owner. For
+debugging, turn on the `devports` profile:
+
+```bash
+COMPOSE_PROFILES=devports make up    # adds 127.0.0.1:5432 (Postgres) and 127.0.0.1:8233 (Temporal UI)
+```
+
+The Temporal UI behind `devports` is read-only: nginx passes GET and HEAD only, so signal,
+reset, terminate, cancel and start return 403, and the UI hides those buttons. Host tools that
+open Postgres directly need this profile, for example `make eval-attacks` and a host-run
+`python -m apx.agent.mcp_server` (set `AGENT_RO_PASSWORD` or `AGENT_DATABASE_URL` for it).
+
+**Web UI headers.** `web/next.config.ts` sends a CSP (scripts, workers and fetches limited to the
+app origin plus the API origin, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`,
+`Referrer-Policy: no-referrer`, COOP and a Permissions-Policy. When the API is not on
+`localhost:8000`, set `NEXT_PUBLIC_API_BASE_URL` before `pnpm build` so the CSP allows it.
+
+**Large blobs in history (REVIEW M-05).** Two files over 1 MB are in git history:
+`web/public/pdfjs/pdf.worker.min.mjs` (1.27 MB) and `evals/splits.json` (1.18 MB). Rewriting
+history is not safe with open PRs. The plan is to stop tracking new copies (LFS, or a generated
+artifact) and record the exception in `KNOWN_ISSUES.md`.
 
 ## Reset to a clean demo
 

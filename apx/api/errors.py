@@ -1,7 +1,7 @@
 """Maps typed `apx` errors to HTTP responses without ever leaking a stack trace to the client
-(PRD §10 M5.3): policy denials become 403, not-found becomes 404, upload hardening failures
-become 4xx, and anything unexpected becomes a generic 500 whose real cause is only logged
-server-side via structlog.
+(PRD §10 M5.3): policy denials become 403, review-state conflicts 409, not-found 404, upload
+hardening failures 4xx, and anything unexpected becomes a generic 500 whose real cause is only
+logged server-side via structlog.
 """
 
 from __future__ import annotations
@@ -11,11 +11,19 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from apx.api.signals import WorkflowSignalError
-from apx.common.errors import ApxError, ConfigError, PolicyDeniedError, SegregationOfDutiesError
+from apx.common.errors import (
+    ApxError,
+    ConfigError,
+    InvoiceStateConflictError,
+    PolicyDeniedError,
+    ProposalNotExecutableError,
+    SegregationOfDutiesError,
+)
 from apx.ingest.errors import DocumentNotFoundError, WorkflowStartError
 from apx.ingest.validate import (
     EncryptedDocumentError,
     PayloadTooLargeError,
+    RasterTooLargeError,
     TooManyPagesError,
     UnsupportedMediaTypeError,
 )
@@ -44,6 +52,14 @@ def install_exception_handlers(app: FastAPI) -> None:
     async def _policy_denied(_request: Request, exc: PolicyDeniedError) -> JSONResponse:
         return _error_response(status.HTTP_403_FORBIDDEN, str(exc))
 
+    @app.exception_handler(InvoiceStateConflictError)
+    async def _state_conflict(_request: Request, exc: InvoiceStateConflictError) -> JSONResponse:
+        return _error_response(status.HTTP_409_CONFLICT, str(exc))
+
+    @app.exception_handler(ProposalNotExecutableError)
+    async def _not_executable(_request: Request, exc: ProposalNotExecutableError) -> JSONResponse:
+        return _error_response(status.HTTP_409_CONFLICT, str(exc))
+
     @app.exception_handler(NotFoundError)
     async def _not_found(_request: Request, exc: NotFoundError) -> JSONResponse:
         return _error_response(status.HTTP_404_NOT_FOUND, str(exc))
@@ -62,6 +78,10 @@ def install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(TooManyPagesError)
     async def _too_many_pages(_request: Request, exc: TooManyPagesError) -> JSONResponse:
+        return _error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    @app.exception_handler(RasterTooLargeError)
+    async def _raster_too_large(_request: Request, exc: RasterTooLargeError) -> JSONResponse:
         return _error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
     @app.exception_handler(EncryptedDocumentError)

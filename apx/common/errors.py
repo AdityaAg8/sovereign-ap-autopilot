@@ -167,6 +167,18 @@ class SegregationOfDutiesError(PolicyDeniedError):
     """Actor is barred from approving by segregation of duties (P2, I3)."""
 
 
+class InvoiceStateConflictError(ApxError):
+    """A review decision is not allowed from the invoice's current status (the review state
+    machine: reject only while awaiting review, send-to-review only before routing). The API
+    answers 409 and records nothing (REVIEW.md C-01, H-02)."""
+
+
+class ProposalNotExecutableError(ApxError):
+    """A proposal kind that has no executable effect in this system (edit_field, route,
+    request_info) was accepted. Refused rather than marked executed, so the audit never claims
+    an action that did not happen (REVIEW.md M-06); the proposal stays pending."""
+
+
 class AuditChainError(ApxError):
     """Audit chain append failed or verification found a broken link (I4)."""
 

@@ -36,14 +36,15 @@ services:
     image: pgvector/pgvector:pg16-trixie
     restart: unless-stopped
     environment:
-      # Local dev-only defaults, never used outside 127.0.0.1 -- set POSTGRES_USER/PASSWORD/DB
-      # in `.env` (see .env.example) to override.
+      # User and database name default to `apx`; the password has no default (REVIEW C-02):
+      # `make env` (scripts/init_env.py) generates it into `.env`, and compose refuses to start
+      # without it. Existing volumes created with the old default: `make rotate-db-password`.
       POSTGRES_USER: ${POSTGRES_USER:-apx}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apx-dev-only}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set -- run `make env`}
       POSTGRES_DB: ${POSTGRES_DB:-apx}
-    # No `ports:` here (see the network comment above): reachable from the host through
-    # `gateway`'s TCP passthrough on 127.0.0.1:5432 (infra/docker/gateway/nginx.conf's
-    # `stream` block), for local dev tools (psql, a DB GUI) -- never the internet.
+    # No `ports:` here (see the network comment above), and not proxied by `gateway` either:
+    # host dev tools (psql, a DB GUI, `make eval-attacks`) reach it on 127.0.0.1:5432 only
+    # through the opt-in `devports` service (`COMPOSE_PROFILES=devports make up`).
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks: [app]
@@ -77,8 +78,10 @@ services:
     volumes:
       - temporal-data:/home/temporal
     # No `ports:` here: `app` is internal, so a direct publish never worked (see the network
-    # comment above). The Web UI (8233) is reachable from the host through `gateway`; the
-    # gRPC frontend (7233) is for in-network clients only (the `api` and `worker` services).
+    # comment above). The Web UI (8233) is not reachable from the host by default: its signal,
+    # reset and terminate actions bypass the review API's approvals (REVIEW C-03). The opt-in
+    # `devports` service proxies it read-only (GET only, write actions hidden). The gRPC
+    # frontend (7233) is for in-network clients only (the `api` and `worker` services).
     networks: [app]
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
@@ -245,7 +248,8 @@ services:
   gateway:
     # Static nginx reverse proxy (PRD §2 C1, §10 M0.4; docs/adr/0001 amendment): the only
     # container on both `app` and `edge`, so it is the only way a host tool or browser
-    # reaches llama-swap/Phoenix/MLflow/Temporal. Runs no application code -- config is a
+    # reaches llama-swap/Phoenix/MLflow/the API (Postgres and the Temporal UI only through the
+    # opt-in `devports` service below). Runs no application code -- config is a
     # read-only bind mount, never baked in or templated. Add a proxied port here, never a
     # new host-published port on another service.
     image: nginx:1.27-alpine
@@ -256,8 +260,6 @@ services:
       - "127.0.0.1:8080:8080" # llama-swap
       - "127.0.0.1:6006:6006" # Phoenix UI + OTLP/HTTP
       - "127.0.0.1:5000:5000" # MLflow
-      - "127.0.0.1:8233:8233" # Temporal Web UI
-      - "127.0.0.1:5432:5432" # Postgres (TCP passthrough, `stream` block -- dev tools only)
       - "127.0.0.1:8000:8000" # apx API (REST + SSE) for the web app
       - "127.0.0.1:8010:8010" # parse, for host-run GPU evals (ADR-0001 amendment 2)
     networks: [app, edge]
@@ -293,10 +295,12 @@ services:
     environment: &apx-env
       POSTGRES_HOST: postgres
       POSTGRES_USER: ${POSTGRES_USER:-apx}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apx-dev-only}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set -- run `make env`}
       POSTGRES_DB: ${POSTGRES_DB:-apx}
-      AGENT_DATABASE_URL: postgresql+asyncpg://apx_agent_ro:apx-agent-ro-dev-only@postgres:5432/${POSTGRES_DB:-apx}
-      API_JWT_SECRET: ${API_JWT_SECRET:-}
+      # The read-only agent role's password (REVIEW L-01): migration 0013 sets it on the role and
+      # apx.agent.sql builds the agent's URL from it (with POSTGRES_HOST/POSTGRES_DB).
+      AGENT_RO_PASSWORD: ${AGENT_RO_PASSWORD:?AGENT_RO_PASSWORD is not set -- run `make env`}
+      API_JWT_SECRET: ${API_JWT_SECRET:?API_JWT_SECRET is not set -- run `make env`}
       API_TEMPORAL_ADDRESS: temporal:7233
       API_CORS_ORIGIN: ${API_CORS_ORIGIN:-http://localhost:3000}
       WORKER_TEMPORAL_ADDRESS: temporal:7233
@@ -456,6 +460,33 @@ services:
     build:
       context: ..
       dockerfile: infra/docker/exporter/Dockerfile
+
+  devports:
+    # Opt-in host access for dev tools only (REVIEW C-02/C-03): Postgres on 127.0.0.1:5432 (a
+    # raw TCP passthrough) and a read-only Temporal Web UI on 127.0.0.1:8233 (GET only, write
+    # actions hidden). Never started by `make up`; enable with `COMPOSE_PROFILES=devports make up`
+    # (needed by host-run DB tools such as `make eval-attacks`). Same static-nginx design as
+    # `gateway`, with its own read-only config (infra/docker/gateway/nginx.devports.conf).
+    profiles: [devports]
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./docker/gateway/nginx.devports.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:5432:5432" # Postgres (TCP passthrough -- dev tools only)
+      - "127.0.0.1:8233:8233" # Temporal Web UI, read-only
+    networks: [app, edge]
+    depends_on:
+      temporal:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8888/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
 
   # Optional containerized alternative to running scripts/download_models.py on the host
   # (e.g. a CI runner without uv). Not started by `make up`/`docker compose up` -- only by
