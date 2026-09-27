@@ -249,3 +249,64 @@ def test_extractbench_gold_ignores_rows_outside_the_selection(tmp_path: Path) ->
     )
     assert result.eb_rows == 1 and result.eb_value_f1 == 0.0 and result.eb_valid_json == 0.0
     assert json.dumps(result.uae_f1)  # plain floats, report-ready
+
+
+def test_a_stopped_challenger_loses_and_the_report_says_where(tmp_path: Path) -> None:
+    shas = [f"{i:064x}" for i in range(8)]
+    for sha in shas:
+        write_uae_doc(tmp_path, sha)
+    base_rows = {sha: _uae_row(sha, True, "INV-1", 1000.0) for sha in shas}
+    wrong = {sha: _uae_row(sha, True, "INV-9", 1000.0) for sha in shas[:2]}
+
+    def collect(arm: str, rows: dict[str, Any], baseline: dict[str, Any] | None) -> ArmResult:
+        return collect_arm(
+            arm_by_key(arm),
+            probe=_probe(arm),
+            uae_rows=rows,
+            uae_shas=shas,
+            uae_data_dir=tmp_path,
+            eb_rows={},
+            eb_records={},
+            eb_external_repo=tmp_path / "no-clone",
+            vram_sessions=[{"peak_gb": 8.5}],
+            baseline_uae_rows=baseline,
+        )
+
+    base = collect("a", base_rows, None)
+    stopped = collect("q38-27b", wrong, base_rows)
+    assert base.futility is None and stopped.stopped is not None
+    verdict = decide(base, stopped)
+    assert verdict.outcome is Outcome.STOPPED and "look 1 (n=2)" in verdict.reasons[0]
+    # Without the rule the same partial arm would only be pending.
+    assert decide(base, dataclasses.replace(stopped, futility=None)).outcome is Outcome.PENDING
+    # A complete arm is judged on the full evaluation even where a bound was crossed.
+    full = collect(
+        "q38-27b", {sha: _uae_row(sha, True, "INV-9", 1000.0) for sha in shas}, base_rows
+    )
+    assert full.futility is not None and full.futility.stopped is not None
+    assert full.stopped is None and decide(base, full).outcome is Outcome.PENDING  # EB rows
+    mtp = collect("q35-9b-mtp", wrong, base_rows)
+    assert mtp.futility is None and decide(base, mtp).outcome is Outcome.PENDING
+
+    results = [
+        BASE,  # complete rows, so the overall decision is not waiting on the baseline
+        stopped,
+        _result("q38-9b-distill"),
+        _result("q35-9b-mtp"),
+    ]
+    verdicts = [decide(BASE, r) for r in results]
+    assert overall(results, verdicts).status == "KEEP"
+    report = render_report(results, verdicts, uae_digest="u" * 64, eb_digest="e" * 64)
+    assert "## Interim looks (futility rule, ADR-0016 amendment 1)" in report
+    assert "Stopped: `q38-27b` at look 1 (n=2)." in report
+    assert "| `q38-27b` | 1 | 2 | 4.05 | -100.00 |" in report and "**stop**" in report
+    assert "stopped (futility)" in decision_block(results, verdicts)
+
+
+def test_report_without_interim_looks_says_so() -> None:
+    results = _all()
+    report = render_report(
+        results, [decide(results[0], r) for r in results], uae_digest="u", eb_digest="e"
+    )
+    assert "No interim look taken yet." in report and "Stopped: none." in report
+    assert "measured at the first look: not measured yet" in report

@@ -1,7 +1,8 @@
 """reports/bakeoff.md and the ADR-0016 decision block from the M3.4 bake-off rows (PRD §10 M3.4):
 per arm UAE field F1 (EN/AR/pooled), valid JSON, p50/p95 latency, ExtractBench short value F1,
 probe and eval-run VRAM, then the PRD decision rule: Qwen3.5-9B stays unless a challenger beats
-it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists.
+it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists;
+a challenger the pre-registered futility rule stopped at an interim look loses (ADR-0016 amdt 1).
 
 Usage: python -m evals.bakeoff.report [--no-adr]
 """
@@ -31,6 +32,14 @@ from evals.bakeoff.arms import (
     BakeoffError,
 )
 from evals.bakeoff.probe import PROBE_PATH, ProbeResult, load_probe
+from evals.bakeoff.sequential import (
+    ASSUMED_SD_POINTS,
+    FALSE_STOP_BOUND,
+    OBF_C,
+    Futility,
+    LookResult,
+    futility,
+)
 from evals.bakeoff.subset import BAKEOFF_SUBSET_SIZE
 from evals.extraction_identity import require_identity
 
@@ -57,6 +66,8 @@ class Outcome(StrEnum):
     DISQUALIFIED = "disqualified"
     PENDING = "pending"
     LATENCY_ARM = "latency arm"
+    STOPPED = "stopped (futility)"
+    """A challenger the pre-registered futility rule stopped at an interim look: it loses."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +91,16 @@ class ArmResult:
     eb_official: bool | None
     run_peak_gb: float | None
     run_vram_gaps: int
+    futility: Futility | None = None
+    """Interim looks against the baseline (challengers with baseline rows only)."""
+
+    @property
+    def stopped(self) -> LookResult | None:
+        """The look that stopped this arm; None when it was not stopped or has every UAE row
+        (a complete arm is always judged on the full evaluation)."""
+        if self.futility is None or self.uae_rows >= self.uae_expected:
+            return None
+        return self.futility.stopped
 
     @property
     def complete(self) -> bool:
@@ -137,6 +158,13 @@ def decide(baseline: ArmResult, result: ArmResult) -> Verdict:
             key,
             Outcome.DISQUALIFIED,
             (f"eval-run whole-card peak {result.run_peak_gb:.2f} GB > {WHOLE_CARD_BUDGET_GB} GB",),
+        )
+    stopped = result.stopped
+    if stopped is not None:
+        return Verdict(
+            key,
+            Outcome.STOPPED,
+            (f"look {stopped.look} (n={stopped.n}): " + "; ".join(stopped.reasons),),
         )
     if not (result.complete and baseline.complete):
         missing = [r.arm.key for r in (baseline, result) if not r.complete]
@@ -202,6 +230,77 @@ def _gb(value: float | None) -> str:
 
 def _secs(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.1f}"
+
+
+def _look_row(key: str, look: LookResult, ran_in_full: bool) -> str:
+    ratio = "n/a" if look.ratio is None else f"{look.ratio:.2f}"
+    lower = "n/a" if look.ratio_lower is None else f"{look.ratio_lower:.2f}"
+    if not look.stop:
+        verdict = "continue"
+    elif ran_in_full:
+        verdict = "bound crossed; arm ran in full, full evaluation used"
+    else:
+        verdict = "**stop**: " + "; ".join(look.reasons)
+    return (
+        f"| `{key}` | {look.look} | {look.n} | {look.z:.2f} | {look.delta_points:+.2f} "
+        f"| {look.delta_se:.2f} | {look.delta_upper:+.2f} | {look.doc_sd_points:.1f} "
+        f"| {ratio} | {lower} | {look.invalid}/{look.max_invalid} | {verdict} |"
+    )
+
+
+def futility_section(results: Sequence[ArmResult]) -> list[str]:
+    """The interim-look table of every challenger, and which arms stopped where."""
+    rows = [
+        _look_row(r.arm.key, look, r.stopped is None)
+        for r in results
+        if r.futility is not None
+        for look in r.futility.looks
+    ]
+    stopped = [r for r in results if r.stopped is not None]
+    measured = (
+        ", ".join(
+            f"`{r.arm.key}` {r.futility.looks[0].doc_sd_points:.1f} pt"
+            for r in results
+            if r.futility is not None and r.futility.looks
+        )
+        or "not measured yet"
+    )
+    lines = [
+        "## Interim looks (futility rule, ADR-0016 amendment 1)",
+        "",
+        "A challenger is compared with the baseline on the same first n subset documents at "
+        "n = 1/4, 2/4 and 3/4 of the subset (paired bootstrap, "
+        f"O'Brien-Fleming z_k = {OBF_C}/sqrt(t_k)). It stops only when the upper bound of its "
+        "pooled ΔF1 is below +1.0 pt, the lower bound of its p50 ratio is above 1.5x, or it has "
+        "more invalid-JSON rows than the full subset may hold at ≥ 99% valid. Stated false-stop "
+        f"bound for an arm that truly meets the criteria: ≤ {100 * FALSE_STOP_BOUND:.1f}%. "
+        f"Assumed per-document SD of the paired F1 difference: {ASSUMED_SD_POINTS:.0f} pt; "
+        f"measured at the first look: {measured}.",
+        "",
+    ]
+    if rows:
+        lines += [
+            "| Arm | Look | n | z | ΔF1 pt | SE | Upper | Doc SD | p50 ratio | Lower "
+            "| Invalid | Verdict |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            *rows,
+            "",
+        ]
+    else:
+        lines += ["No interim look taken yet.", ""]
+    lines.append(
+        "Stopped: "
+        + (
+            "; ".join(
+                f"`{r.arm.key}` at look {look.look} (n={look.n})"
+                for r in stopped
+                if (look := r.stopped) is not None
+            )
+            or "none"
+        )
+        + "."
+    )
+    return lines
 
 
 def decision_block(results: Sequence[ArmResult], verdicts: Sequence[Verdict]) -> str:
@@ -283,6 +382,8 @@ def render_report(
         "",
         "Arms: " + "; ".join(f"`{r.arm.key}` = {r.arm.label}" for r in results) + ".",
         "",
+        *futility_section(results),
+        "",
         "## MTP speculative decoding",
         "",
         MTP_FINDING,
@@ -319,8 +420,10 @@ def collect_arm(
     eb_records: Mapping[str, Mapping[str, Any]],
     eb_external_repo: Path,
     vram_sessions: Sequence[Mapping[str, Any]],
+    baseline_uae_rows: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ArmResult:
-    """Score one arm's rows over exactly the fixed selections (rows outside them are ignored)."""
+    """Score one arm's rows over exactly the fixed selections (rows outside them are ignored);
+    a challenger with `baseline_uae_rows` also gets its interim looks recomputed from rows."""
     from evals.bakeoff.extractbench import score_extractbench_rows
     from evals.extraction_f1 import score_rows, valid_json_rate
 
@@ -344,6 +447,11 @@ def collect_arm(
         eb_f1, official = score.value_f1.f1, score.used_official_framework
         eb_valid = sum(bool(eb_rows[d]["valid_json"]) for d in eb_ids) / len(eb_ids)
     peak, gaps = run_peak(vram_sessions)
+    looks = (
+        futility(arm.key, uae_rows, baseline_uae_rows, uae_data_dir, uae_shas)
+        if arm.kind is ArmKind.CHALLENGER and baseline_uae_rows is not None
+        else None
+    )
     return ArmResult(
         arm=arm,
         probe=probe,
@@ -361,6 +469,7 @@ def collect_arm(
         eb_official=official,
         run_peak_gb=peak,
         run_vram_gaps=gaps,
+        futility=looks,
     )
 
 
@@ -381,7 +490,8 @@ def _live(args: argparse.Namespace) -> int:  # pragma: no cover - reads local ro
     records, eb_shas, _ = extractbench_inputs(args.data_root, None)
     probe = load_probe(args.probe)
     results = []
-    for arm in ARMS:
+    baseline_rows: dict[str, dict[str, Any]] | None = None
+    for arm in ARMS:  # the baseline first: challengers' interim looks read its rows
         files = arm_files(args.rows_dir, arm)
         identities = arm_identities(
             arm,
@@ -404,8 +514,11 @@ def _live(args: argparse.Namespace) -> int:  # pragma: no cover - reads local ro
                 eb_records=records,
                 eb_external_repo=args.data_root / "external" / "ExtractBench",
                 vram_sessions=load_vram_sessions(files.vram),
+                baseline_uae_rows=baseline_rows,
             )
         )
+        if arm.kind is ArmKind.BASELINE:
+            baseline_rows = uae_rows
     baseline = results[0]
     verdicts = [decide(baseline, r) for r in results]
     report = render_report(
