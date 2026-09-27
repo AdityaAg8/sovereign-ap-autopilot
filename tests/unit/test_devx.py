@@ -173,6 +173,23 @@ def test_open_urls_reports_browser_failure(capsys: pytest.CaptureFixture[str]) -
     assert "manually" in capsys.readouterr().err
 
 
+def test_temporal_ui_down_points_at_the_devports_profile(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The Temporal UI is published only by the `devports` profile (REVIEW C-02/C-03)."""
+    rows = devx.port_rows(lambda _p: False)
+    temporal = next(r for r in rows if r.name == "Temporal")
+    assert temporal.detail.endswith("down (devports profile)")
+    phoenix = next(r for r in rows if r.name == "Phoenix")
+    assert "devports" not in phoenix.detail
+
+    monkeypatch.setattr(devx, "port_open", lambda p: p != 8233)
+    monkeypatch.setattr(devx, "open_urls", lambda urls: 0)
+    assert devx.cmd_dashboard() == 0
+    err = capsys.readouterr().err
+    assert "COMPOSE_PROFILES=devports make up" in err and "read-only" in err
+
+
 def test_dashboards_are_localhost_gateway_ports() -> None:
     assert {p for _, p in devx.DASHBOARDS} == {6006, 5000, 8233}
     assert devx.HOST == "127.0.0.1"

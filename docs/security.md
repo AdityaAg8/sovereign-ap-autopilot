@@ -138,7 +138,8 @@ Control IDs refer to the catalogue in §8.
 | T | Approve, then edit the amount (TOCTOU) | Approval bound to `subject_digest`; writer refuses a stale digest (SEC-14) | `policy/test_grant.py` |
 | T | Human deceived by the rendered document (A06 bidi, A09 stamp) | IBAN and amounts rendered isolated LTR with controls stripped; payee shown from the master; system status visually separate from document content; flag explanations (SEC-18, M8.3) | Playwright `security-ui.spec.ts` |
 | R | Approver denies approving | Grant carries an audit entry id; denials also audited (SEC-16) | `policy/test_grant.py`; audit tamper test |
-| E | Reviewer approves above the limit; bank changer approves | P3, P2 SoD (SEC-10, SEC-09) | M5.3 authz test; `policy/test_sod.py` |
+| E | Reviewer approves above the limit; bank changer approves or verifies | P3, P2 SoD; verifier ≠ changer (SEC-10, SEC-09, SEC-26) | M5.3 authz test; `policy/test_sod.py`; `integration/test_bank_master.py` |
+| S, E | A raw Temporal `review` signal (Temporal UI, CLI) approves a payment with no approval record | `confirm_review` requires an `approvals` row whose `invoice_digest` matches the current invoice, or a recorded rejection; otherwise audited and ignored; Temporal UI unpublished by default and read-only under `devports` (SEC-27, SEC-19) | `integration/test_review_guard.py`, `unit/test_compose_security.py` |
 | I | Reviewers browse full bank details | Role-scoped responses; IBAN masked except for admins (SEC-17, SEC-22) | `api/test_authz_matrix.py` |
 
 ### B6 Agent and ops chat
@@ -167,19 +168,20 @@ Control IDs refer to the catalogue in §8.
 
 | STRIDE | Threat | Controls | Proof |
 |---|---|---|---|
+| S | Password guessing on `POST /auth/login` | Per (client IP, email) token bucket, burst 5, refill 5/min, 429 with `Retry-After`; LRU-bounded buckets; constant-time verify for unknown emails (SEC-29) | `unit/test_api_login_throttle.py` |
 | S | Token forgery or theft | JWT with a pinned algorithm, secret from `.env` (missing or short → `ConfigError`), short expiry; bearer header rather than cookies, so no CSRF (SEC-17, SEC-23) | `api/test_authz_matrix.py` |
 | S | DNS rebinding against `localhost` | Host-header allowlist plus auth (SEC-17) | `api/test_trusted_host.py` |
 | T | SQL injection, mass assignment | Pydantic bodies with `extra="forbid"`; parameterised SQL (SEC-17) | M11 #4 SQL injection attempts |
 | E | Role check only in the UI | Server-side `PolicyGuard` on every state change (SEC-14, SEC-17) | `api/test_authz_matrix.py` |
 | I | XSS through document text in the UI | React escaping, no raw HTML, CSP `default-src 'self'`, pdf.js scripting off (SEC-18) | Playwright `security-headers.spec.ts` |
-| D | Upload bombs, SSE connection exhaustion | Upload limits (SEC-01); connection caps | M11 #4 |
+| D | Upload bombs, SSE connection exhaustion | Upload limits (SEC-01); raster caps on page size, render DPI and pixels and embedded-image pixels at ingest, scan and parse (SEC-28); connection caps | M11 #4; `unit/test_raster_caps.py` |
 | R | Disputed action | Audit with the actor taken from the token (SEC-16) | Audit tamper test |
 
 ### B9 Gateway / edge network
 
 | STRIDE | Threat | Controls | Proof |
 |---|---|---|---|
-| I, T | LAN reaches Postgres, Temporal, Phoenix, MLflow or llama-swap on published ports | Bind every published port to 127.0.0.1; no default passwords (SEC-19, SEC-23). **Currently open: G-1, G-2** | `test_compose_security.py` |
+| I, T | LAN or host reaches Postgres, Temporal, Phoenix, MLflow or llama-swap on published ports | Only the gateway publishes, on 127.0.0.1; Postgres (5432) and the Temporal UI (8233) are published only by the opt-in `devports` profile, whose Temporal UI proxy passes GET/HEAD only; `POSTGRES_PASSWORD`, `AGENT_RO_PASSWORD` and `API_JWT_SECRET` are generated into `.env` by `make env`, Compose has no fallback, and no code or config ships a default password (SEC-19, SEC-23; G-1, G-2 closed in dab25f3) | `unit/test_compose_security.py`, `unit/test_db_passwords.py`, `unit/test_db_session.py`, `unit/test_init_env.py` |
 | I | Runtime egress to the internet | `internal: true` app network (ADR-0001) (SEC-19). **Test missing: G-4** | `integration/test_no_egress.py` |
 | T | Tampered model or image at setup time | `models.lock.json` revision plus sha256; read-only mounts; `uv.lock` (SEC-20) | *exists*: `test_download_models.py` |
 | E | Container breakout from a parser exploit | No privileged containers; non-root app users; read-only model mounts (SEC-19) | `test_compose_security.py` |
@@ -218,10 +220,13 @@ G1 Redirect a payment to an attacker account                                    
 │   │         ✗ SEC-09 P2 REVIEW for 30 days + SoD; SEC-15 bank-change flag; SEC-16 audit
 │   ├── G1.2c Insider admin changes, verifies and self-approves
 │   │         ✗ SEC-09 P2 SoD bars the changer for 30 days → policy/test_sod.py
-│   │           (collusion: residual R-2; self-verification: residual R-5)
-│   └── G1.2d Write the database directly from the LAN (port 5432, password "apx")
-│             ✗ G-1, G-2 (open) + G-3 verification must reference an audit entry
-│               proof: test_compose_security.py, audit verifier
+│   │         ✗ SEC-26 the verifier must differ from the changer (BankMasterService and
+│   │           PaymentStateWriter.verify_bank_account) → integration/test_bank_master.py
+│   │           (collusion: residual R-2)
+│   └── G1.2d Write the database directly (published Postgres port, default password)
+│             ✗ G-1, G-2 closed: 5432 unpublished by default, generated passwords, no default
+│               G-3 verification must reference a bank_verifications row
+│               proof: test_compose_security.py, test_db_passwords.py, audit verifier
 └── G1.3 Swap payee or amount after approval (TOCTOU)
           ✗ SEC-14 approval bound to subject_digest; stale grant refused → policy/test_grant.py
           ✗ SEC-08 payee pinned at routing (RoutingDecision.payee); build_einvoice re-selects and
@@ -356,13 +361,17 @@ Results: pending the first live run (the report above is written by it).
 | SEC-16 | Hash-chained audit of every decision, including denials | I4 | M5, M10.4 | `tests/integration/test_audit_chain.py`, `tests/integration/test_audit_anchor.py`, `tests/unit/test_audit_canonical.py`, `tests/unit/test_audit_verify.py`, `tests/unit/test_audit_anchor.py`, `tests/unit/test_audit_cli.py` | implemented |
 | SEC-17 | API authn/authz: pinned-algorithm JWT, server-side policy, bearer header, host allowlist, strict bodies, parameterised SQL | I3 | M5.3 | `api/test_authz_matrix.py`, `api/test_trusted_host.py` | planned |
 | SEC-18 | Web: CSP and security headers, no raw HTML, pdf.js scripting off, LTR isolation of IBAN/amounts, system status separate from document | - | M5.4, M8.3 | `security-headers.spec.ts`, `security-ui.spec.ts` | planned |
-| SEC-19 | Local-only runtime; loopback-only ports; unprivileged, non-root containers | C1, C6 | M0, M6.5 | `integration/test_no_egress.py`, `test_compose_security.py` | open (G-1, G-4) |
+| SEC-19 | Local-only runtime; loopback-only ports; Postgres and the Temporal UI published only by the opt-in `devports` profile, Temporal UI read-only (GET/HEAD) there; unprivileged, non-root containers | C1, C6 | M0, M6.5, M11 | `integration/test_no_egress.py`, `unit/test_compose_security.py` | implemented (G-1, G-4, C-03 closed) |
 | SEC-20 | Model and data integrity: lock sha256, read-only mounts, leakage test, promotion gates including the attack suite | I5, I6 | M0, M10.2 | `test_download_models.py`, `evals/test_leakage.py` | lock exists |
 | SEC-21 | MCP exposes only `read` and `propose` tools; local authenticated transport | P5 | M9.4 | `integration/test_mcp_tools.py` | planned |
 | SEC-22 | Tool data minimisation: masked IBAN, single-entity scope, row limits, drafts never sent | - | M9.2 | `agent/test_tool_outputs.py` | planned |
-| SEC-23 | Secrets: `.env` only, never committed, required secrets fail with `ConfigError`, gitleaks in CI | C5 | M0 | CI gitleaks job | open (G-2) |
+| SEC-23 | Secrets: `.env` only, never committed; `make env` generates `API_JWT_SECRET`, `POSTGRES_PASSWORD` and `AGENT_RO_PASSWORD` and never overwrites or prints one; Compose fails fast when one is unset; no default password in code or `alembic.ini` (`get_database_url` raises `ConfigError`); `make rotate-db-password` migrates older installs; gitleaks in CI | C5 | M0, M11 | CI gitleaks job, `unit/test_init_env.py`, `unit/test_db_passwords.py`, `unit/test_db_session.py`, `unit/test_compose_security.py` | implemented (G-2, C-02 closed) |
 | SEC-24 | Idempotency keys, exactly-once ASP, sha256 dedupe | §6.4 | M5.2, M5.5 | `integration/test_workflow_crash.py`, `ingest/test_dedupe.py` | planned |
 | SEC-25 | IBAN redaction in logs; traces stay on loopback or the internal network | C6 | M10.3 | `common/test_log_redaction.py` | planned |
+| SEC-26 | Bank master product path (`apx.bank`): an admin proposes a change (stored unverified, audited, P2 window starts); a different admin records the out-of-band verification; the writer refuses a verifier who recorded the change, even with a valid grant; the agent never imports `apx.bank` | P2, I3, K5 | M11 (M-01) | `tests/unit/test_bank_master.py`, `tests/integration/test_bank_master.py` (`test_propose_then_verify_by_another_admin`, `test_writer_refuses_self_verification_even_with_a_grant`) | implemented |
+| SEC-27 | Review guard: approvals carry `invoice_digest` (migration 0012); after every `review` signal `confirm_review` recomputes the digest from the database and acts only on a matching approval or a recorded rejection; anything else is audited and the workflow keeps waiting | I3, K6 | M11 (C-03) | `tests/integration/test_review_guard.py`, `tests/unit/test_invoice_workflow.py` | implemented (corrections carried in the signal are not digest-checked: KNOWN_ISSUES.md KI-02) |
+| SEC-28 | Raster caps (`apx.common.raster`): page side ≤ 2384 pt, render ≤ 200 DPI and ≤ 40 MP, decoded image ≤ 40 MP, embedded images ≤ 100 MP per page; enforced at ingest, scan and parse; over-cap input is refused with a typed error | - | M11 (H-03) | `tests/unit/test_raster_caps.py` | implemented |
+| SEC-29 | Login throttle: in-process token bucket per (client IP, email), burst 5, refill 5/min (API settings `login_burst`, `login_refill_per_minute`), 429 with `Retry-After`, LRU-bounded; unknown emails pay the same password-hash cost | - | M11 (L-02) | `tests/unit/test_api_login_throttle.py` | implemented |
 
 ## 9. Gaps found during M6.1
 
@@ -375,6 +384,16 @@ Found on `main` at 9120b01. Fixes are M6.5 plan item 13 in ADR-0008.
 | G-3 | High | `BankAccount.verified` is a plain column, so a direct database write can forge P1. | Add `verification_audit_id` to `BankAccount`; `select_payee` requires it; `record_approval` checks, in the same transaction, that the referenced entry is a `bank.verify` event for that vendor and IBAN | `policy/test_payee.py`; audit verifier |
 | G-4 | High | ADR-0001's `tests/integration/test_no_egress.py` is missing, so C1 is not proven automatically | Implement it as ADR-0001 describes and add it to `verify-m0` and `verify-m6` | The test itself |
 
+### 9.1 Status after M11 audit pass 1 (dab25f3)
+
+| ID | Status | How |
+|---|---|---|
+| G-1 | Closed | Only the gateway publishes ports, all on 127.0.0.1; Postgres and the Temporal UI need the opt-in `devports` profile |
+| G-2 | Closed | Generated `POSTGRES_PASSWORD`, `AGENT_RO_PASSWORD` and `API_JWT_SECRET` (`make env`), no Compose fallback, no default in `apx/db/session.py` or `alembic.ini`; `make rotate-db-password` for installs that predate it (REVIEW C-02, L-01) |
+| G-3 | Closed | `bank_details.verified` is a generated column over `verification_id`, which references a `bank_verifications` row |
+| G-4 | Closed | `tests/integration/test_no_egress.py` |
+| C-03 | Closed | Temporal UI unpublished by default and read-only under `devports`; review guard (SEC-27) |
+
 ## 10. Residual risks and assumptions
 
 | ID | Risk | Why it remains | Mitigation |
@@ -383,7 +402,7 @@ Found on `main` at 9120b01. Fixes are M6.5 plan item 13 in ADR-0008.
 | R-2 | Admin and approver collude | Technical controls cannot stop two colluding role-holders | Audit chain, dashboard of bank changes followed by approvals |
 | R-3 | A human clicks through an agent proposal | Human attention | P1-P3 and SoD still apply, so a click cannot pay an unverified account |
 | R-4 | A reviewer edits a money field and approves within the limit | No maker-checker on edits (would conflict with the M5.4 flow) | Edit → new digest → routing recomputed (3-way match, fraud); audit |
-| R-5 | An admin verifies their own bank change | PRD requires no four-eyes check on verification | P2 bars self-approval for 30 days; future hardening: verifier ≠ changer |
+| R-5 | ~~An admin verifies their own bank change~~ **Closed** in dab25f3 | - | SEC-26: `apx.bank` and `PaymentStateWriter.verify_bank_account` require verifier ≠ changer; P2 still bars the changer from approving for 30 days |
 | R-6 | A new hiding technique evades scan and guard | Detectors are incomplete by nature | Payment safety does not depend on them (M6.6 guard-off run) |
 | R-7 | Learning-loop poisoning through crafted invoices | Corrections feed Extractor B | Only human-corrected labels; I5 leakage test; promotion only when no gate, including the attack suite, regresses (M10.2) |
 | R-8 | Document text and PII stored in traces and the database | Needed for review and debugging | Loopback-only (G-1), retention in the runbook, full-disk encryption recommended |

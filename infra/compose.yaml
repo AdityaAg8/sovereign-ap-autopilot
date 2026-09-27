@@ -301,6 +301,9 @@ services:
       # apx.agent.sql builds the agent's URL from it (with POSTGRES_HOST/POSTGRES_DB).
       AGENT_RO_PASSWORD: ${AGENT_RO_PASSWORD:?AGENT_RO_PASSWORD is not set -- run `make env`}
       API_JWT_SECRET: ${API_JWT_SECRET:?API_JWT_SECRET is not set -- run `make env`}
+      # One approval limit (AED) for the API's authorization and the worker's review routing
+      # (apx.policy.approval_limit); both services read it from this shared block.
+      APPROVAL_LIMIT: ${APPROVAL_LIMIT:-10000.00}
       API_TEMPORAL_ADDRESS: temporal:7233
       API_CORS_ORIGIN: ${API_CORS_ORIGIN:-http://localhost:3000}
       WORKER_TEMPORAL_ADDRESS: temporal:7233

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Eval scoreboard reads the attack, trust, Extractor B gate and bake-off JSON reports; missing inputs render as pending, never as zero; new `docs/evals.md`; the bake-off writes `reports/bakeoff.json` (955cf5d).
+- `make demo` scenarios assert outcomes against the current API (clean and bilingual archived, poisoned blocked or held by scan, bank change held by P1, duplicate flagged) with typed failure lines, a per-scenario timeout and a bounded, NO_COLOR-aware table (713f56b).
+- Bake-off group-sequential futility stopping (ADR-0016 amendment 1): looks at 50/100/150 documents with O'Brien-Fleming bounds on a paired bootstrap, a possible winner always runs all 200; A test rows are reused; ExtractBench timeouts and 5xx on huge schemas become recorded misses instead of a stall (cb7561f).
+- Shared parse cache per (document, parser identity), so a scan is OCR'd once across the A test, eval-b, gates and cal passes; rows carry a serving-args hash and a resume onto a different server config fails loudly; `scripts/gpu_queue.sh` chains GPU targets under the lock (9eedb21).
+- Extractor B generative evals batch longest target first with an OOM backoff ladder and per-phase timing (ADR-0011 amendment 5): same 178 dev rows, budget and selection rule, about 26% fewer decode steps at batch 4 (9a592a5).
 - M3.4 bake-off VRAM probe (`make bakeoff-probe`, 2026-09-25): every arm fits the 11.8 GB whole-card budget: `q38-27b` peak 10.53 GB (model 8.97 GB), `q35-9b-mtp` 8.94 GB, `q38-9b-distill` 7.00 GB, plus the current Extractor A (`reports/bakeoff_probe.json`). The bake-off parses each UAE document as its runtime input (a scanned invoice as its image-only scan PDF).
 - Scanned invoices are evaluated as scans: `evals/scan_input.py` assembles a document's scan PNGs into an image-only PDF (the form a scanned upload takes), used by the extraction eval, the e2e run and the bake-off; rows carry `input_kind` and `arabic_first` (row schema 4) and every report metric is split by input kind and layout language.
 - Ops dashboard redesign: papaya-on-carbon livery (McLaren-inspired), dark by default; light theme stays on `T`.
@@ -21,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Arabic text reached Extractor A reversed: RTL words were sorted right to left but kept their glyphs in visual order and as presentation forms. `apx/parse/bidi.py` applies the Unicode bidi algorithm per line (numbers, dates and Latin runs kept whole), NFKC-folds presentation forms and re-attaches diacritics; word boxes are unchanged and the parser version bump drops cached parses (2e052de).
+- A workflow that failed before its invoice row existed left no trace: `mark_failed` now records `failed_at` and the failure on `ingested_documents` (migration 0011), `GET /invoices/{id}` reports it as failed and the e2e driver settles such documents (8384c7d).
 - Temporal's dev server kept its store in memory, so `make down` or a reboot dropped every in-flight workflow, and because ingest dedupes by sha256 those documents were never processed again. The store is now a SQLite file on the `temporal-data` volume.
 - The inbox watcher never saw files dropped on the host: `data/` is a bind mount, and Docker Desktop raises no inotify events for host writes, so ingestion only happened when a worker restart swept the inbox. The worker now polls (`WATCHFILES_FORCE_POLLING`).
 - `make test` and `make ci-local` pass on Windows again: the unit suite runs in a Linux container (`scripts/pytest_linux.sh`), because Smart App Control blocks the unsigned Playwright driver and Chromium on the host.
@@ -73,5 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- M11 audit pass 1 (REVIEW.md C-01..C-03, H-01..H-07 and the M/L items, dab25f3): reject and send-to-review only from their legal states under a row lock; approvals carry `invoice_digest` (migration 0012) and the workflow acts on a `review` signal only when a digest-matched approval or a recorded rejection backs it; the Temporal UI and Postgres are unpublished by default and served on 127.0.0.1 by the opt-in `devports` profile (Temporal UI read-only); `make env` generates `POSTGRES_PASSWORD` and `AGENT_RO_PASSWORD` (migration 0013), `make rotate-db-password` migrates older installs; admin bank-detail propose/verify API with verifier ≠ changer (`apx.bank`); raster caps at ingest, scan and parse; login throttle; audit appends inside the state-write transaction; CSP and security headers; one `APPROVAL_LIMIT`; resilience tests for llama-swap and Postgres restarts.
+- No default database password remains: `apx.db.session.get_database_url` raises `ConfigError` when neither `DATABASE_URL` nor `POSTGRES_PASSWORD` is set, and `alembic.ini` ships an empty URL. `infra/compose.yaml` passes `APPROVAL_LIMIT` (default 10000.00) to api and worker. `make dashboard` points at the `devports` profile for the Temporal UI. `docs/security.md` closes R-5, G-1..G-4 and C-03 and adds SEC-26..SEC-29; ADR-0001 amendment 3; new `KNOWN_ISSUES.md`.
 - SEC-08 (ADR-0014): the invoice IBAN only selects among admin-verified accounts, never introduces a payee; the grant digest binds payee IBAN and match, and the routed payee is re-checked at the build (TOCTOU between approval and build closed).
 - Reviewers can no longer relabel a valid non-AED currency as AED (`CurrencyRelabelError`), and an approval with a missing supplier TRN is refused (`SupplierTrnMissingError`, 422).

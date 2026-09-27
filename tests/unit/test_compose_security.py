@@ -108,6 +108,16 @@ def test_app_services_get_the_agent_password_not_a_literal_url() -> None:
     assert env["AGENT_RO_PASSWORD"].startswith("${AGENT_RO_PASSWORD:?")
 
 
+def test_api_and_worker_share_one_approval_limit_passthrough() -> None:
+    """The API's authorization and the worker's review routing read the same `APPROVAL_LIMIT`
+    (apx.policy.approval_limit), defaulting to the code's own 10000.00 AED."""
+    services = _compose()["services"]
+    for name in ("api", "worker"):
+        env = services[name]["environment"]
+        assert env["APPROVAL_LIMIT"] == "${APPROVAL_LIMIT:-10000.00}", name
+        assert not {"API_APPROVAL_LIMIT", "WORKER_APPROVAL_LIMIT"} & set(env), name
+
+
 @pytest.mark.integration
 def test_docker_compose_config_parses_and_publishes_no_dev_ports_by_default() -> None:
     """Needs the Docker CLI (local only): `docker compose config` must fail without the secrets

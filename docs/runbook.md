@@ -129,7 +129,7 @@ changes a value that is set and never prints one. Compose has no fallback for an
 stops with `... is not set -- run make env` instead.
 
 **Installs created before generated passwords.** The Postgres volume still holds the old default
-(`apx-dev-only`) until you rotate it once:
+(the fixed dev password older releases shipped) until you rotate it once:
 
 ```bash
 make env                  # appends the new secrets to .env (existing keys untouched)
