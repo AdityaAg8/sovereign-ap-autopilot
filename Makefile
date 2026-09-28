@@ -19,7 +19,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         seed e2e-pipeline factory restore-scans e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
-        extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
+        extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate archive-stale-rows \
         guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all ci-local
@@ -181,13 +181,14 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 # recorded and the queue goes on, so a failed gate does not leave the GPU idle until a human polls.
 # Sub-items joined by '|' run concurrently (ADR-0018): only jobs whose outputs cannot depend on
 # timing and whose VRAM fits together (B ~4.4 GB + OCR parse ~4.3 GB; never A beside the parse).
-# Default QUEUE is the ADR-0018 reduced plan, grouped by model so each is loaded once: test
-# parses; B on test beside the cal parses; A on cal; the trust gate ('+': a verdict, and it fails
-# typed until the cal-B and test-A rows ADR-0018 lists exist); the attack suite. The fresh e2e
-# (`make e2e-pipeline`) runs before it, alone. Needs `make up` + `make seed`.
+# Default QUEUE is the ADR-0018 reduced plan, sequential (§5: concurrent OCR + B dropped OCR
+# decode from ~60 to 21 tok/s, so no '|' group by default): test and cal parses; A on test and
+# on cal; the champion-only trust gate on A ('+': a verdict, CPU); B on test; the attack suite.
+# Run `make archive-stale-rows` first (rows from another parser build refuse a resume). The fresh
+# e2e (`make e2e-pipeline`) runs before it, alone. Needs `make up` + `make seed`.
 # Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
 SPLITS ?= test,cal
-REDUCED_GPU_QUEUE = parse-cache SPLITS=test,eval-b|parse-cache SPLITS=cal,cal-rows-a,+calibrate,eval-attacks
+REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-adr0012,cal-rows-a,+calibrate TRUST_EXTRACTORS=a,eval-b,eval-attacks
 QUEUE ?= $(REDUCED_GPU_QUEUE)
 
 parse-cache:
@@ -327,6 +328,12 @@ report-b:
 CAL_A_ROWS ?= logs/cal_a.jsonl
 CAL_B_ROWS ?= logs/cal_b.jsonl
 CAL_B_MODEL ?= extractor-b
+# TRUST_EXTRACTORS: "a b" (default) fits the two-extractor calibrator and requires cal/test B
+# rows; "a" is the explicit champion-only calibrator of ADR-0018 §5 (same alpha, delta, λ grid
+# and test gate; never activated while the runtime serves B). Test A rows: M33_AFTER (750 docs).
+TRUST_EXTRACTORS ?= a b
+# Row files `archive-stale-rows` checks against the current parser identity.
+STALE_ROW_FILES ?= $(M33_AFTER) logs/extractor_b_test.jsonl $(CAL_A_ROWS) $(CAL_B_ROWS)
 
 cal-rows-a:
 	@echo "==> Extractor A on UAE cal (750 docs; GPU; needs make up; resumable rows: $(CAL_A_ROWS))"
@@ -340,8 +347,13 @@ cal-rows-b:
 
 calibrate:
 	@echo "==> trust calibrator on cal, LTT at alpha 0.5/1/2%, UAE test gate -> reports/trust_gate.md (CPU)"
-	uv run python -m evals.trust_gate calibrate --cal-a-rows $(CAL_A_ROWS) --cal-b-rows $(CAL_B_ROWS) \
-		$(if $(A_ROWS),--test-a-rows $(A_ROWS)) $(if $(B_ROWS),--test-b-rows $(B_ROWS))
+	uv run python -m evals.trust_gate calibrate --extractors $(TRUST_EXTRACTORS) \
+		--cal-a-rows $(CAL_A_ROWS) --cal-b-rows $(CAL_B_ROWS) \
+		--test-a-rows $(or $(A_ROWS),$(M33_AFTER)) $(if $(B_ROWS),--test-b-rows $(B_ROWS))
+
+archive-stale-rows:
+	@echo "==> move row files from another parser build to logs/archive/ (CPU; never deletes)"
+	uv run python -m evals.archive_stale_rows --archive-dir logs/archive $(STALE_ROW_FILES)
 
 e2e:
 	@echo "==> Playwright end-to-end tests of the review UI on fixtures (web/e2e); fixture build first"

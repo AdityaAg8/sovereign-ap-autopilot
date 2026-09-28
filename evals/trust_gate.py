@@ -3,9 +3,10 @@ calibrator on UAE cal rows of A and B, picks λ̂ by Learn-then-Test for alpha i
 delta = 5%, saves the versioned artifact under data/trust/, measures the error among
 auto-accepted fields on UAE test rows, and only when that M7.5 gate passes and the artifact was
 fitted on the served champions activates it and clears the ADR-0015 invalidation. Writes
-reports/trust_gate.md + .json.
+reports/trust_gate.md + .json. `--extractors a` (ADR-0018 §5) fits and gates the champion A alone,
+with the same alpha, delta, λ grid and test gate, and never activates (the runtime serves B).
 
-Usage: python -m evals.trust_gate calibrate [--cal-a-rows ...] [--test-a-rows ...] ...
+Usage: python -m evals.trust_gate calibrate [--extractors a b] [--cal-a-rows ...] ...
        python -m evals.trust_gate verify     (the real-data half of `make verify-m7`)
 """
 
@@ -18,6 +19,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
@@ -69,6 +71,29 @@ CURVE_STEP: Final[int] = 5
 """Every CURVE_STEP-th grid λ is tabulated and charted in the STP/error curves."""
 
 Champions = Callable[[], ServedBuilds]
+
+
+class TrustExtractors(StrEnum):
+    """Which extractors' rows the calibrator is fitted and gated on. There is no implicit
+    choice: missing B rows in BOTH mode raise TrustRowsError, never fall back to A alone."""
+
+    BOTH = "ab"
+    """The ADR-0009 two-extractor calibrator the runtime gate can activate."""
+    CHAMPION_ONLY = "a"
+    """ADR-0018 §5: A with the fixed B-absent features; measured on test, never activated."""
+
+    @classmethod
+    def parse(cls, names: Sequence[str]) -> TrustExtractors:
+        chosen = frozenset(n.strip().lower() for n in names)
+        if chosen == {"a", "b"}:
+            return cls.BOTH
+        if chosen == {"a"}:
+            return cls.CHAMPION_ONLY
+        raise ValueError(f"--extractors must be 'a b' or 'a', got {' '.join(names)!r}")
+
+
+def _describe(identity: ExtractorIdentity) -> str:
+    return f"{identity.gguf_sha256[:12]}/{identity.prompt_version}"
 
 
 @dataclass(frozen=True)
@@ -182,11 +207,12 @@ def fit_calibration(
     records: Sequence[CalRecord],
     *,
     a: ExtractorIdentity,
-    b: ExtractorIdentity,
+    b: ExtractorIdentity | None,
     rows_sha256: Mapping[str, str],
     now: datetime,
 ) -> Calibration:
-    """ADR-0009 §5-§6 on cal records: FIT/LTT partition, calibrator on FIT, LTT per alpha."""
+    """ADR-0009 §5-§6 on cal records: FIT/LTT partition, calibrator on FIT, LTT per alpha. `b`
+    None records a champion-only artifact (records built with the B-absent encoding)."""
     fit, ltt = partition_cal(records)
     calibrator = IsotonicCalibrator()
     calibrator.fit(fit)
@@ -262,6 +288,9 @@ class Activation:
     activated: bool = False
     cleared_invalidation: bool = False
     note: str = ""
+    champion_a_served: bool | None = None
+    """Champion-only mode: whether A is the build the champion alias serves now (None: unknown,
+    or a two-extractor artifact)."""
 
 
 @dataclass
@@ -288,6 +317,8 @@ def activate_if_champion(
     """Activate the artifact and clear the ADR-0015 marker only when the M7.5 test gate passed
     AND it was fitted on the builds the champion aliases serve right now; otherwise leave the
     active calibrator (and a stale marker) alone and say why."""
+    if artifact.champion_only:
+        return _champion_only_activation(artifact, champions, gate_passed, gate_detail)
     if not gate_passed:
         return Activation(note=f"not activated: the M7.5 test gate did not pass ({gate_detail})")
     try:
@@ -307,12 +338,46 @@ def activate_if_champion(
     )
 
 
+def _champion_only_activation(
+    artifact: CalibratorArtifact, champions: Champions, gate_passed: bool, gate_detail: str
+) -> Activation:
+    """A champion-only artifact is never activated: the runtime pipeline serves B output, which
+    it did not calibrate (the runtime gate would refuse it, `RefusalReason.CHAMPION_ONLY`). The
+    active calibrator and any ADR-0015 marker are left alone; record whether A is the champion."""
+    verdict = "passed" if gate_passed else f"did not pass ({gate_detail})"
+    prefix = f"not activated: champion-only calibrator (ADR-0018 §5), test gate {verdict}"
+    try:
+        served_a = champions().a
+    except IDENTITY_FAILURES as exc:
+        return Activation(note=f"{prefix}; served champion A unknown ({exc})")
+    same = artifact.extractor_a.same_build(served_a)
+    where = (
+        "fitted on the served champion A"
+        if same
+        else f"A fitted on {_describe(artifact.extractor_a)}, served {_describe(served_a)}"
+    )
+    return Activation(
+        note=f"{prefix}; {where}; the runtime serves Extractor B, which it does not calibrate",
+        champion_a_served=same,
+    )
+
+
 def evaluate_test(
-    artifact: CalibratorArtifact, a: SplitRows, b: SplitRows, data_dir: Path
+    artifact: CalibratorArtifact, a: SplitRows, b: SplitRows | None, data_dir: Path
 ) -> TestEvaluation:
     """Error among auto-accepted UAE test fields per alpha, scored by the persisted artifact
-    itself. Test rows must come from the builds the calibrator was fitted on."""
-    for which, fitted, rows in (("A", artifact.extractor_a, a), ("B", artifact.extractor_b, b)):
+    itself. Test rows must come from the builds the calibrator was fitted on; a champion-only
+    artifact is scored on A rows alone and a two-extractor one requires B rows."""
+    if artifact.champion_only != (b is None):
+        raise TrustRowsError(
+            "test B rows given for a champion-only calibrator"
+            if b is not None
+            else "test B rows missing for a two-extractor calibrator"
+        )
+    checks = [("A", artifact.extractor_a, a)]
+    if artifact.extractor_b is not None and b is not None:
+        checks.append(("B", artifact.extractor_b, b))
+    for which, fitted, rows in checks:
         if not fitted.same_build(rows.identity):
             raise TrustRowsError(
                 f"test rows {rows.path} of {which} are from build "
@@ -322,7 +387,8 @@ def evaluate_test(
     scored = score(FrozenCalibrator(artifact.calibrator), labelled_records(a, b, data_dir))
     outcomes = {t.alpha: at_threshold(scored, t.alpha, t.lambda_hat) for t in artifact.thresholds}
     report = reliability(scored.p, scored.correct) if scored.p else None
-    return TestEvaluation(scored, outcomes, report, (str(a.path), str(b.path)))
+    b_path = "none (champion-only)" if b is None else str(b.path)
+    return TestEvaluation(scored, outcomes, report, (str(a.path), b_path))
 
 
 def gate_verdict(test: TestEvaluation | None, test_error: str | None) -> tuple[bool, str]:
@@ -353,17 +419,23 @@ def calibrate(
     store: CalibratorStore,
     champions: Champions,
     now: datetime,
+    extractors: TrustExtractors = TrustExtractors.BOTH,
 ) -> CalibrateResult:
     """The whole M7.4/M7.5 job. Raises TrustRowsError when the cal rows are incomplete; missing
-    or foreign test rows are recorded as a failed gate, never answered by dropping documents."""
+    or foreign test rows are recorded as a failed gate, never answered by dropping documents.
+    CHAMPION_ONLY never reads `cal_b`/`test_b`; BOTH requires them."""
+    both = extractors is TrustExtractors.BOTH
     a_rows = load_split_rows(cal_a, cal_shas, "cal A")
-    b_rows = load_split_rows(cal_b, cal_shas, "cal B")
+    b_rows = load_split_rows(cal_b, cal_shas, "cal B") if both else None
     records = labelled_records(a_rows, b_rows, cal_dir)
+    rows_sha256 = {"a": a_rows.file_sha256}
+    if b_rows is not None:
+        rows_sha256["b"] = b_rows.file_sha256
     calibration = fit_calibration(
         records,
         a=a_rows.identity,
-        b=b_rows.identity,
-        rows_sha256={"a": a_rows.file_sha256, "b": b_rows.file_sha256},
+        b=None if b_rows is None else b_rows.identity,
+        rows_sha256=rows_sha256,
         now=now,
     )
     artifact = calibration.artifact
@@ -376,7 +448,7 @@ def calibrate(
         test = evaluate_test(
             persisted,
             load_split_rows(test_a, test_shas, "test A"),
-            load_split_rows(test_b, test_shas, "test B"),
+            load_split_rows(test_b, test_shas, "test B") if both else None,
             test_dir,
         )
     except TrustRowsError as exc:
@@ -409,7 +481,9 @@ def _lam(value: float | None) -> str:
     return "None" if value is None else f"{value:.6f}"
 
 
-def _identity(identity: ExtractorIdentity) -> str:
+def _identity(identity: ExtractorIdentity | None) -> str:
+    if identity is None:
+        return "none (champion-only, ADR-0018 §5)"
     return (
         f"`{identity.model}` gguf `{identity.gguf_sha256[:12]}` prompt `{identity.prompt_version}`"
     )
@@ -554,7 +628,8 @@ def render_report(result: CalibrateResult) -> str:
         "",
         "## Inputs",
         "",
-        f"- Cal rows: A `{art.rows_sha256['a'][:12]}`, B `{art.rows_sha256['b'][:12]}`; cal "
+        f"- Cal rows: A `{art.rows_sha256['a'][:12]}`, B "
+        f"`{art.rows_sha256['b'][:12] if 'b' in art.rows_sha256 else 'none'}`; cal "
         f"documents digest `{art.cal_documents_digest[:12]}`.",
         "- Test rows: "
         + (
@@ -576,8 +651,12 @@ def evidence(result: CalibrateResult) -> dict[str, Any]:
         "artifact_sha256": result.artifact_sha256,
         "method": art.calibrator.method.value,
         "extractor_a": art.extractor_a.model_dump(mode="json"),
-        "extractor_b": art.extractor_b.model_dump(mode="json"),
+        "extractors": TrustExtractors.CHAMPION_ONLY.value
+        if art.champion_only
+        else TrustExtractors.BOTH.value,
+        "extractor_b": None if art.extractor_b is None else art.extractor_b.model_dump(mode="json"),
         "activated": result.activation.activated,
+        "champion_a_served": result.activation.champion_a_served,
         "activation": result.activation.note,
         "ece_ltt": result.calibration.ltt_reliability.ece,
         "ece_test": None if test is None or test.reliability is None else test.reliability.ece,
@@ -682,6 +761,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         cmd.add_argument("--models-lock", type=Path, default=Path("infra/models.lock.json"))
         cmd.add_argument("--models-root", type=Path, default=Path("models"))
         if name == "calibrate":
+            cmd.add_argument(
+                "--extractors",
+                nargs="+",
+                choices=("a", "b"),
+                default=["a", "b"],
+                help="'a b' (default): two-extractor calibrator; 'a': champion-only (ADR-0018 §5)",
+            )
             cmd.add_argument("--cal-a-rows", type=Path, default=CAL_A_ROWS)
             cmd.add_argument("--cal-b-rows", type=Path, default=CAL_B_ROWS)
             cmd.add_argument("--cal-dir", type=Path, default=CAL_DIR)
@@ -704,6 +790,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("verify-m7 real-data gate OK")
         return 0
 
+    try:
+        extractors = TrustExtractors.parse(args.extractors)
+    except ValueError as exc:
+        parser.error(str(exc))
     splits = load_splits().sets["uae"]
     try:
         result = calibrate(
@@ -718,6 +808,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             store=store,
             champions=champions,
             now=datetime.now(UTC),
+            extractors=extractors,
         )
     except ApxError as exc:
         print(f"calibrate FAILED ({type(exc).__name__}): {exc}", file=sys.stderr)
@@ -735,6 +826,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"report: {args.report}")
     if result.test is None:
         return 2
+    if extractors is TrustExtractors.CHAMPION_ONLY:
+        # Success is the M7.5 test gate for the serving champion A; activation is not expected.
+        return 0 if result.gate_passed and result.activation.champion_a_served else 1
     return 0 if result.gate_passed and result.activation.activated else 1
 
 

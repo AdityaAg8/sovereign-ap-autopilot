@@ -41,6 +41,9 @@ class RefusalReason(StrEnum):
     INVALIDATED = "calibrator_invalidated"
     IDENTITY_MISMATCH = "identity_mismatch"
     SERVED_IDENTITY_UNKNOWN = "served_identity_unknown"
+    CHAMPION_ONLY = "calibrator_champion_only"
+    """The artifact was fitted on Extractor A alone (ADR-0018 §5) but B output is served: that
+    output was never calibrated, so nothing is auto-accepted."""
 
 
 class CalibratorUnavailableError(TrustGateError):
@@ -70,7 +73,10 @@ class CalibratorArtifact(Frozen):
     """12-hex digest of the calibrator version, the A/B identities and the thresholds."""
     calibrator: CalibratorState
     extractor_a: ExtractorIdentity
-    extractor_b: ExtractorIdentity
+    extractor_b: ExtractorIdentity | None
+    """The B build the features saw, or None for a champion-only artifact (ADR-0018 §5): fitted
+    on A with the fixed B-absent encoding. The runtime gate refuses such an artifact whenever B
+    output is served (`RefusalReason.CHAMPION_ONLY`); it never scores B-derived features with it."""
     arbiter: ExtractorIdentity | None
     """The arbiter build the features saw, or None (JSON null) when none was served: the runtime
     gate refuses when the served arbiter differs, including one appearing or disappearing."""
@@ -84,7 +90,12 @@ class CalibratorArtifact(Frozen):
     cal_documents_digest: Sha256Hex
     """sha256 over the sorted cal document sha256s (one per line)."""
     rows_sha256: dict[str, Sha256Hex]
-    """sha256 of the A and B cal row files the calibrator was fitted on."""
+    """sha256 of the A and B cal row files the calibrator was fitted on (A only when
+    champion-only)."""
+
+    @property
+    def champion_only(self) -> bool:
+        return self.extractor_b is None
 
     def threshold(self, alpha: float) -> AlphaThreshold:
         for item in self.thresholds:
@@ -99,16 +110,16 @@ class CalibratorArtifact(Frozen):
 def artifact_version(
     calibrator_version: str,
     extractor_a: ExtractorIdentity,
-    extractor_b: ExtractorIdentity,
+    extractor_b: ExtractorIdentity | None,
     thresholds: tuple[AlphaThreshold, ...],
     arbiter: ExtractorIdentity | None = None,
 ) -> str:
     """12-hex version folding the A/B/arbiter build identities into the calibrator version (ADR-0009
-    §5: the version names the champions it was fitted on)."""
+    §5: the version names the champions it was fitted on; B None = champion-only)."""
     payload = {
         "calibrator": calibrator_version,
         "a": extractor_a.model_dump(mode="json"),
-        "b": extractor_b.model_dump(mode="json"),
+        "b": None if extractor_b is None else extractor_b.model_dump(mode="json"),
         "arbiter": None if arbiter is None else arbiter.model_dump(mode="json"),
         "thresholds": [t.model_dump(mode="json") for t in thresholds],
     }
@@ -234,7 +245,9 @@ class CalibratorStore:
             "cleared_at": now.isoformat(),
             "cleared_by_calibrator": artifact.version,
             "extractor_a": artifact.extractor_a.model_dump(mode="json"),
-            "extractor_b": artifact.extractor_b.model_dump(mode="json"),
+            "extractor_b": None
+            if artifact.extractor_b is None
+            else artifact.extractor_b.model_dump(mode="json"),
             "previous": previous,
         }
         _atomic_write(self.invalidation_path, json.dumps(cleared, indent=2) + "\n")

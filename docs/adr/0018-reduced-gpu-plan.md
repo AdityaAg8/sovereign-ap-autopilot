@@ -100,3 +100,70 @@ GPU validation needed (first run of the group): whole-card VRAM peak during
 parse retry count in `logs/parse-cache_SPLITS_cal.log` (a contention timeout is retried, a
 persistent one fails the item and the rerun resumes it), and the measured wall time against the
 5.5-7.2 h estimate.
+
+## Amendment 1 (2026-09-28): sequential queue, A on test, champion-only trust gate
+
+§1's queue, the adopted `eval-b | parse-cache SPLITS=cal` overlap in §3 and the §2 statement that
+`calibrate` fails typed are superseded by this amendment. §3's other verdicts still stand.
+
+### 5.1 Sequential by default
+
+Measured on the first concurrent run: with B decoding beside the OCR parse, the parse decode rate
+fell from ~60 to 21 tok/s. The overlap did not save time, so the default queue has no `|` group.
+`gpu_queue.sh` keeps the feature for a later, measured use.
+
+```
+REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-adr0012,
+                    cal-rows-a,+calibrate TRUST_EXTRACTORS=a,eval-b,eval-attacks
+```
+
+(one line in the Makefile; `tests/unit/test_gpu_queue.py` pins it). A on test (7.7 h) moves from
+"deferred" into the plan; B on cal stays deferred. The new estimate, all sequential, is
+6.1 + 5.5 + 7.7 + 7.7 + ~0 + 5.0 + 4.2 = 36.2 h, plus the 1.5 h e2e.
+
+### 5.2 A champion-only M7.4/M7.5 gate
+
+B is not promoted and not the extractor whose accepted values ship, so the reduced plan
+calibrates the serving champion A alone (ADR-0009 §5.B):
+
+- `make calibrate TRUST_EXTRACTORS=a` runs `evals.trust_gate calibrate --extractors a`. It reads
+  cal A (`CAL_A_ROWS`) and test A (`--test-a-rows $(M33_AFTER)` = `logs/extraction_a.adr0012.jsonl`,
+  the full 750-document test split `extraction-a-adr0012` writes by default). It never reads a B
+  file. The default is still `TRUST_EXTRACTORS = a b`, and without the flag, missing B rows raise
+  `TrustRowsError` as before. There is no silent fallback.
+- It uses the same alpha set, delta = 5%, λ grid, `LTT_MIN_ACCEPTED` and M7.5 test gate (error
+  among auto-accepted UAE test fields ≤ 1% at alpha = 1%). No threshold changes.
+- The artifact records `extractor_b: null`, is saved under `data/trust/calibrators/` and is never
+  activated. The runtime's dual pipeline serves B output, which this calibrator never saw. The
+  active calibrator and any ADR-0015 marker are left untouched. The evidence
+  (`reports/trust_gate.json`) carries `"extractors": "a"` and `champion_a_served`. The job exits
+  0 only when the test gate passed and A is the build `extractor-a` serves.
+- Fail closed at runtime: if a champion-only artifact is ever made active, `ArtifactTrustGate`
+  refuses every decision with `calibrator_champion_only`. Every field goes to REVIEW and the
+  refusal is audited. A's calibrator is never applied to B-derived features, and B output is
+  never trusted uncalibrated.
+
+What this proves: the provable field error rate of A's values on the UAE test split, under an
+A-only feature set. It does not re-establish the runtime M7.5 activation: `make verify-m7`
+still fails "active calibrator" and "fitted on served champions" until the deferred cal-B and
+test-B rows of the champion `extractor-b` exist and `make calibrate` (default `a b`) activates a
+two-extractor artifact.
+
+### 5.3 Stale rows before the queue
+
+Rows stamped with another `parser_identity` refuse a resume. `make archive-stale-rows`
+(`evals.archive_stale_rows`) checks `STALE_ROW_FILES` (test A, test B, cal A, cal B), moves each
+file whose rows are not all of the current parser identity to
+`logs/archive/<stem>.<old identity>.jsonl`, together with its `.parse_failures.jsonl`. It never
+deletes and never overwrites (`--dry-run` previews). A dry run on 2026-09-28 (current parser
+identity `bed3f35eaf8486f0`) moves only `logs/extractor_b_test.jsonl` (4 rows,
+`440bcc9b05e6d980`). `logs/extraction_a.adr0012.jsonl` is absent: its 182 old rows already sit
+in `logs/extraction_a.adr0012.legacy-no-identity.jsonl`, which no target reads. The manual
+equivalent is:
+
+```
+mkdir -p logs/archive
+mv logs/extractor_b_test.jsonl logs/archive/extractor_b_test.440bcc9b05e6d980.jsonl
+```
+
+Order: `make archive-stale-rows`, then `make e2e-pipeline` (alone), then `nohup make gpu-queue &`.

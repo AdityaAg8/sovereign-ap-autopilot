@@ -308,6 +308,13 @@ class ExtractionFeatureBuilder:
         return out
 
 
+B_ABSENT_AGREEMENT = 1.0
+B_ABSENT_LOGPROB = 0.0
+"""Constant B-derived feature values of the champion-only encoding (`field_features(b=None)`):
+constant columns carry no signal after the calibrator's standard scaling, so only A's evidence
+(logprobs, format, OCR support, missingness) drives P(correct)."""
+
+
 def final_value_of(value: FieldValue) -> str | None:
     """The final value string the features read: the grounded normalised value, else the raw."""
     return value.normalized if value.normalized is not None else value.raw
@@ -317,7 +324,7 @@ def field_features(
     field: FieldName,
     *,
     a: ExtractorOutput,
-    b: ExtractorOutput,
+    b: ExtractorOutput | None,
     arbiter: ExtractorOutput | None,
     disputed: frozenset[FieldName],
     final_value: str | None,
@@ -328,21 +335,31 @@ def field_features(
     string and its OCR support. The one definition shared by `ExtractionFeatureBuilder` (runtime,
     from `ExtractionResult` + `ParsedDocument`) and the M7.4 cal/test job (from eval rows that
     recorded the final value and its OCR support), so the two can never compute a feature
-    differently."""
+    differently.
+
+    `b=None` is the champion-only encoding (ADR-0018 §5): no B output exists, so every B-derived
+    column is a fixed constant (`B_ABSENT`: agreement 1.0, B logprobs 0.0, not missing, no H1 from
+    B) and `disputed` must be empty. A calibrator fitted on it is only valid where no B output is
+    served; the runtime gate refuses it otherwise (`RefusalReason.CHAMPION_ONLY`)."""
     kind = FIELD_KINDS[field]
     a_value, a_missing, a_logprob_missing = _extractor_value(a, field)
-    b_value, b_missing, b_logprob_missing = _extractor_value(b, field)
-
-    agreement_val = (
-        0.0 if (not a.valid_json or not b.valid_json) else agreement(kind, a_value, b_value)
-    )
-
     a_logprobs = a.logprobs.get(field)
-    b_logprobs = b.logprobs.get(field)
     a_mean = _clip_logprob(a_logprobs.mean) if a_logprobs is not None else LOGPROB_FLOOR
     a_min = _clip_logprob(a_logprobs.min) if a_logprobs is not None else LOGPROB_FLOOR
-    b_mean = _clip_logprob(b_logprobs.mean) if b_logprobs is not None else LOGPROB_FLOOR
-    b_min = _clip_logprob(b_logprobs.min) if b_logprobs is not None else LOGPROB_FLOOR
+
+    if b is None:
+        if disputed:
+            raise TrustGateError("champion-only features cannot have disputed fields (no B)")
+        agreement_val, b_mean, b_min = B_ABSENT_AGREEMENT, B_ABSENT_LOGPROB, B_ABSENT_LOGPROB
+        b_value, b_missing, b_logprob_missing = None, False, False
+    else:
+        b_value, b_missing, b_logprob_missing = _extractor_value(b, field)
+        agreement_val = (
+            0.0 if (not a.valid_json or not b.valid_json) else agreement(kind, a_value, b_value)
+        )
+        b_logprobs = b.logprobs.get(field)
+        b_mean = _clip_logprob(b_logprobs.mean) if b_logprobs is not None else LOGPROB_FLOOR
+        b_min = _clip_logprob(b_logprobs.min) if b_logprobs is not None else LOGPROB_FLOOR
 
     h1 = a_logprob_missing or b_logprob_missing
     if h1 or field not in disputed:

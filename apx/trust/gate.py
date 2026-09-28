@@ -2,7 +2,8 @@
 auto-accepts a field only when its calibrated P(correct) >= λ̂ at the runtime alpha. It refuses,
 and routes the invoice to REVIEW, when the artifact is missing, corrupt, invalidated (ADR-0015) or
 fitted on other A/B/arbiter builds than the ones served, and (`refuse_truncated_parse`) when the
-OCR transcription of a page was cut short. It never authorises payment (P1-P5 do).
+OCR transcription of a page was cut short. A champion-only artifact (fitted on A alone, ADR-0018
+§5) is refused while B output is served. It never authorises payment (P1-P5 do).
 """
 
 from __future__ import annotations
@@ -156,6 +157,14 @@ class ArtifactTrustGate:
             raise CalibratorUnavailableError(
                 RefusalReason.SERVED_IDENTITY_UNKNOWN, f"{type(exc).__name__}: {exc}"
             ) from exc
+        if artifact.champion_only:
+            # The served pipeline always produces B output (`ServedBuilds.b`), whose features this
+            # calibrator never saw: route to REVIEW rather than score them or drop B silently.
+            raise CalibratorUnavailableError(
+                RefusalReason.CHAMPION_ONLY,
+                f"calibrator {artifact.version} was fitted on Extractor A alone; the served "
+                f"Extractor B {_describe(served.b)} is uncalibrated",
+            )
         mismatch = builds_match(artifact, served)
         if mismatch is not None:
             raise CalibratorUnavailableError(

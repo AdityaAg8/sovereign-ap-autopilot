@@ -170,3 +170,21 @@ def test_a_self_locking_target_inside_a_group_is_refused(tmp_path: Path) -> None
     result = _queue(tmp_path, "eval-b|train-b")
     assert result.returncode == 2 and "takes data/ml/gpu.lock itself" in result.stderr
     assert _ran(tmp_path) == []
+
+
+def test_reduced_plan_queue_is_sequential_and_gates_the_champion_alone() -> None:
+    """ADR-0018 §5: no '|' group by default (contention slowed OCR decode ~3x); A's test and cal
+    rows precede the champion-only trust gate, which is a '+' verdict item."""
+    makefile = (SCRIPT.parents[1] / "Makefile").read_text(encoding="utf-8")
+    line = next(ln for ln in makefile.splitlines() if ln.startswith("REDUCED_GPU_QUEUE ="))
+    items = line.split("=", 1)[1].strip().split(",")
+    assert items == [
+        "parse-cache SPLITS=test",
+        "parse-cache SPLITS=cal",
+        "extraction-a-adr0012",
+        "cal-rows-a",
+        "+calibrate TRUST_EXTRACTORS=a",
+        "eval-b",
+        "eval-attacks",
+    ]
+    assert not any("|" in item for item in items)

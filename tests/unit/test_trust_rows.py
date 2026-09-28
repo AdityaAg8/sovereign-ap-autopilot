@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from apx.common.errors import TrustGateError
 from apx.common.types import BBox, Language
 from apx.extract.grounding import WordGrounder
 from apx.extract.interfaces import (
@@ -23,7 +24,8 @@ from apx.extract.interfaces import (
 )
 from apx.extract.pipeline import final_fields
 from apx.parse.interfaces import Line, Page, ParsedDocument, Word
-from apx.trust.features import ExtractionFeatureBuilder
+from apx.trust.features import ExtractionFeatureBuilder, field_features, hard_reject
+from apx.trust.interfaces import ArbiterVote
 from evals.extraction_a import ROW_SCHEMA, field_cells, is_current_row
 from evals.trust_rows import (
     TrustRowsError,
@@ -299,3 +301,65 @@ def test_labelled_records_label_the_final_value(tmp_path: Path) -> None:
     assert not by_field[FieldName.TOTAL].correct  # A read 1,050.00, gold 999.00
     assert by_field[FieldName.DUE_DATE].correct  # null == null
     assert not by_field[FieldName.SUPPLIER_TRN].correct  # A read a TRN the gold does not have
+
+
+def test_champion_only_features_use_the_fixed_b_absent_encoding() -> None:
+    """ADR-0018 §5: with no B rows every B column is the same constant, nothing is disputed, and
+    the A-derived columns equal the two-extractor ones (A's JSON is valid, so A is the base)."""
+    document = _document()
+    a = _output(ExtractorId.A, A_VALUES, A_LOGPROBS)
+    b = _output(ExtractorId.B, B_VALUES, B_LOGPROBS)
+    alone = document_features(_row(a, document), None)
+    both = document_features(_row(a, document), _row(b, document))
+    assert set(alone) == set(both)
+    for field, feats in alone.items():
+        assert (feats.agreement, feats.b_mean_logprob, feats.b_min_logprob) == (1.0, 0.0, 0.0)
+        assert not feats.b_missing and not feats.b_logprob_missing
+        assert feats.arbiter is ArbiterVote.NOT_RUN and not hard_reject(feats)
+        other = both[field]
+        assert (
+            feats.a_mean_logprob,
+            feats.a_min_logprob,
+            feats.a_missing,
+            feats.final_missing,
+            feats.format_valid,
+            feats.ocr_support,
+        ) == (
+            other.a_mean_logprob,
+            other.a_min_logprob,
+            other.a_missing,
+            other.final_missing,
+            other.format_valid,
+            other.ocr_support,
+        )
+    invalid_a = _output(ExtractorId.A, A_VALUES, A_LOGPROBS, valid=False)
+    assert all(hard_reject(f) for f in document_features(_row(invalid_a, document), None).values())
+
+
+def test_champion_only_features_refuse_disputed_fields() -> None:
+    a = _output(ExtractorId.A, A_VALUES, A_LOGPROBS)
+    with pytest.raises(TrustGateError, match="champion-only"):
+        field_features(
+            FieldName.TOTAL,
+            a=a,
+            b=None,
+            arbiter=None,
+            disputed=frozenset({FieldName.TOTAL}),
+            final_value="1,050.00",
+            final_ocr_support=1.0,
+            language_ar=False,
+        )
+
+
+def test_champion_only_records_label_a_without_b_rows(tmp_path: Path) -> None:
+    document = _document()
+    a = _output(ExtractorId.A, A_VALUES, A_LOGPROBS)
+    a_path = tmp_path / "a.jsonl"
+    _write_rows(a_path, [_row(a, document)])
+    _write_gold(tmp_path / "gold", DOC_SHA, {"invoice_number": "INV-001", "total": "999.00"}, {})
+    records = labelled_records(load_split_rows(a_path, [DOC_SHA], "A"), None, tmp_path / "gold")
+    by_field = {r.field: r for r in records}
+    assert len(records) == 14
+    assert by_field[FieldName.INVOICE_NUMBER].correct
+    assert not by_field[FieldName.TOTAL].correct
+    assert all(r.features.agreement == 1.0 for r in records)

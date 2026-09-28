@@ -2,6 +2,7 @@
 harness wrote for a UAE split, checks they cover every document, use the current row schema and
 come from one build each, then rebuilds each field's runtime features with the same
 `apx.trust.features.field_features` the worker uses, and labels it against the factory gold.
+With no B rows (champion-only, ADR-0018 §5) the features use the fixed B-absent encoding.
 """
 
 from __future__ import annotations
@@ -110,10 +111,13 @@ class FinalValue(NamedTuple):
     ocr_support: float
 
 
-def final_values(a_row: Mapping[str, Any], b_row: Mapping[str, Any]) -> dict[FieldName, FinalValue]:
+def final_values(
+    a_row: Mapping[str, Any], b_row: Mapping[str, Any] | None
+) -> dict[FieldName, FinalValue]:
     """Final value per field (`apx.extract.pipeline.final_fields`): A's grounded values, or B's
-    when only B's JSON is valid. A field the base output lacks has no final value."""
-    base = a_row if a_row["valid_json"] or not b_row["valid_json"] else b_row
+    when only B's JSON is valid (always A's when champion-only, `b_row` None). A field the base
+    output lacks has no final value."""
+    base = a_row if b_row is None or a_row["valid_json"] or not b_row["valid_json"] else b_row
     out: dict[FieldName, FinalValue] = {}
     for key, cell in base["fields"].items():
         name = _FIELD_BY_VALUE.get(key)
@@ -126,14 +130,15 @@ _NO_FINAL = FinalValue(None, None, 0.0)
 
 
 def document_features(
-    a_row: Mapping[str, Any], b_row: Mapping[str, Any]
+    a_row: Mapping[str, Any], b_row: Mapping[str, Any] | None
 ) -> dict[FieldName, FieldFeatures]:
     """ADR-0009 §4 features of every header field of one document, exactly as
     `ExtractionFeatureBuilder` computes them at runtime (no arbiter is served, so a disputed
-    field is hard-rejected by H2 in both places)."""
+    field is hard-rejected by H2 in both places). `b_row` None: champion-only encoding, nothing
+    is disputed."""
     a = output_from_row(a_row, ExtractorId.A)
-    b = output_from_row(b_row, ExtractorId.B)
-    disputed = disputed_fields(a, b)
+    b = None if b_row is None else output_from_row(b_row, ExtractorId.B)
+    disputed = frozenset[FieldName]() if b is None else disputed_fields(a, b)
     finals = final_values(a_row, b_row)
     language_ar = bool(a_row["arabic"])
     out: dict[FieldName, FieldFeatures] = {}
@@ -177,15 +182,17 @@ def trust_label(field: FieldName, final: str | None, readings: Sequence[str | No
     return any(is_correct(field, final, reading) for reading in readings)
 
 
-def labelled_records(a: SplitRows, b: SplitRows, data_dir: Path) -> list[CalRecord]:
+def labelled_records(a: SplitRows, b: SplitRows | None, data_dir: Path) -> list[CalRecord]:
     """One `CalRecord` per (document, header field), in sorted document then FieldName order.
-    Each document is its own group: the UAE factory draws every document independently."""
-    if set(a.rows) != set(b.rows):
+    Each document is its own group: the UAE factory draws every document independently. `b`
+    None is the explicit champion-only mode (ADR-0018 §5), never a stand-in for missing B rows."""
+    if b is not None and set(a.rows) != set(b.rows):
         raise TrustRowsError("A and B rows cover different documents")
     records: list[CalRecord] = []
     for sha in sorted(a.rows):
-        features = document_features(a.rows[sha], b.rows[sha])
-        finals = final_values(a.rows[sha], b.rows[sha])
+        b_row = None if b is None else b.rows[sha]
+        features = document_features(a.rows[sha], b_row)
+        finals = final_values(a.rows[sha], b_row)
         gold = document_gold(data_dir, sha)
         for field, feats in features.items():
             final = finals.get(field, _NO_FINAL).raw

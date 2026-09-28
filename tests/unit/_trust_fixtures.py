@@ -77,7 +77,7 @@ def artifact(
     *,
     lambda_hat: float | None = 0.9,
     a: ExtractorIdentity = A_ID,
-    b: ExtractorIdentity = B_ID,
+    b: ExtractorIdentity | None = B_ID,
     arbiter: ExtractorIdentity | None = None,
 ) -> CalibratorArtifact:
     state = state or fitted_calibrator().state()
