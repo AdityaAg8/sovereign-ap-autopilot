@@ -1,10 +1,11 @@
-"""M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document once into the parse cache,
-then runs each probed, in-budget arm strictly sequentially over the fixed 200-document UAE subset
-(a scanned document as its image-only scan PDF, as the runtime receives it) and ExtractBench
-short, appending identity-stamped rows (resumable) and one whole-card VRAM
-session per invocation under logs/bakeoff/. A challenger stops early only under the pre-registered
-futility rule (`evals.bakeoff.sequential`); the baseline may import A test rows of the same
-identity. `evals.bakeoff.report` turns the rows into the report.
+"""M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document not yet in the shared parse
+cache (`make parse-cache` already holds the UAE subset), then runs each probed, in-budget arm
+strictly sequentially over the fixed 200-document UAE subset (a scanned document as its
+image-only scan PDF, as the runtime receives it) and ExtractBench short, appending
+identity-stamped rows (resumable) and one whole-card VRAM session per invocation under
+logs/bakeoff/. A challenger stops early only under the pre-registered futility rule
+(`evals.bakeoff.sequential`); the baseline may import A test rows of the same identity, serving
+identity and client concurrency 1. `evals.bakeoff.report` turns the rows into the report.
 
 Usage: python -m evals.bakeoff.run [--arms a,q38-27b,...] [--data-dir data/uae/test] [--limit N]
        [--reuse-a-rows logs/extraction_a.jsonl] [--request-timeout-s 300]
@@ -38,19 +39,27 @@ from evals.bakeoff.extractbench import (
 from evals.bakeoff.parsed import ParseCache
 from evals.bakeoff.probe import ProbeResult
 from evals.bakeoff.sequential import LookResult, futility, look_sizes
-from evals.extraction_a import extract_row, is_current_row, load_rows
+from evals.extraction_a import CLIENT_CONCURRENCY_KEY, extract_row, is_current_row, load_rows
 from evals.extraction_identity import (
     IDENTITY_KEYS,
+    SERVING_KEYS,
     RowIdentity,
+    ServingIdentity,
     prompt_version,
     require_identity,
     served_gguf_sha256,
+    serving_args_sha256,
 )
+from evals.parse_cache import DEFAULT_ROOT as SHARED_PARSE_CACHE
 from evals.scan_input import document_input, input_kind, load_truth
 from ml.extractor_b.gates import StrictVramSampler, VramUnavailableError
 
 ROWS_DIR: Final[Path] = Path("logs/bakeoff")
-PARSE_CACHE_DIR: Final[Path] = Path("data/bakeoff/parsed")
+PARSE_CACHE_DIR: Final[Path] = SHARED_PARSE_CACHE
+"""The shared parse cache `make parse-cache` fills (ADR-0016 amdt 2): the 200 UAE subset documents
+are already there from the test split, keyed the same way, so the bake-off never re-OCRs them,
+and every arm, the reused arm a rows included, reads the very same parses."""
+SCAN_INPUTS_DIR: Final[Path] = Path("data/bakeoff/scan_inputs")
 
 MAX_CONSECUTIVE_SERVER_FAILURES: Final[int] = 3
 """Timeout/5xx rows in a row (each followed by an unload) before the run ends: past this the
@@ -182,25 +191,38 @@ def reuse_a_rows(
     identity: RowIdentity,
     shas: Sequence[str],
     log: Callable[[str], None] = print,
+    *,
+    serving: ServingIdentity,
 ) -> int:
     """Append the A test run's rows (`evals.extraction_a` over the same factory documents) for
-    the bake-off subset to the baseline's UAE row file, so arm a is not re-run (ADR-0016 amdt 1).
-    All or nothing: every row in `source` must carry exactly the baseline's identity (alias,
-    served GGUF sha256, prompt version and whatever else `IDENTITY_KEYS` covers) and the current
-    row schema; otherwise nothing is imported and arm a runs. Returns how many rows were added."""
+    the bake-off subset to the baseline's UAE row file, so arm a is not re-run (ADR-0016 amdt 1
+    and 2). All or nothing: every row in `source` must carry exactly the baseline's identity
+    (alias, served GGUF sha256, prompt version and whatever else `IDENTITY_KEYS` covers), exactly
+    `serving` (the alias's llama-swap args hash and the parser identity of the parse cache the
+    challengers read, so arm a and the challengers extract from the same parses), the current
+    row schema and a recorded client concurrency of 1 (its latency is a decision input and must
+    be measured one request at a time, as the challengers are); otherwise nothing is imported
+    and arm a runs. Returns how many rows were added."""
     rows = load_rows(source)
     if not rows:
         log(f"a: no A test rows at {source}; arm a runs")
         return 0
     want = identity.as_row_fields()
+    want_serving = serving.as_row_fields()
     foreign = [sha for sha, row in rows.items() if {k: row.get(k) for k in IDENTITY_KEYS} != want]
+    served = [
+        sha for sha, row in rows.items() if {k: row.get(k) for k in SERVING_KEYS} != want_serving
+    ]
     stale = [sha for sha, row in rows.items() if not is_current_row(row)]
-    if foreign or stale:
-        first = rows[(foreign or stale)[0]]
-        found = {k: first.get(k) for k in IDENTITY_KEYS}
+    concurrent = [sha for sha, row in rows.items() if row.get(CLIENT_CONCURRENCY_KEY) != 1]
+    if foreign or served or stale or concurrent:
+        first = rows[(foreign or served or stale or concurrent)[0]]
+        found = {k: first.get(k) for k in (*IDENTITY_KEYS, *SERVING_KEYS, CLIENT_CONCURRENCY_KEY)}
         log(
-            f"a: not reusing {source}: {len(foreign)} rows of another identity, {len(stale)} of an "
-            f"old row schema (e.g. {found}, expected {want}); arm a runs"
+            f"a: not reusing {source}: {len(foreign)} rows of another identity, {len(served)} "
+            f"served or parsed differently, {len(stale)} of an old row schema, "
+            f"{len(concurrent)} not run at client concurrency 1 (e.g. {found}, expected "
+            f"{ {**want, **want_serving, CLIENT_CONCURRENCY_KEY: 1} }); arm a runs"
         )
         return 0
     present = load_rows(target)
@@ -405,7 +427,7 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
     cache = ParseCache(args.parse_cache)
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
-    items, uae_keys = uae_inputs(uae_shas, args.data_dir, args.parse_cache / "scan_inputs")
+    items, uae_keys = uae_inputs(uae_shas, args.data_dir, args.scan_dir)
     items += [(eb_shas[doc_id], eb_paths[doc_id]) for doc_id in records]
     if await cache.fill(items, parser.parse):
         await parse_client.unload()  # parse stage over before any arm's VRAM window opens
@@ -444,7 +466,15 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
                 continue
             files = arm_files(args.rows_dir, arm)
             if arm.kind is ArmKind.BASELINE and args.reuse_a_rows is not None:
-                reuse_a_rows(args.reuse_a_rows, files.uae, identities(arm).uae, uae_shas)
+                serving = ServingIdentity(
+                    serving_args_sha256=serving_args_sha256(
+                        arm.alias, llama_swap_config=args.llama_swap_config
+                    ),
+                    parser_identity=cache.parser_id,
+                )
+                reuse_a_rows(
+                    args.reuse_a_rows, files.uae, identities(arm).uae, uae_shas, serving=serving
+                )
             await run_arm(
                 arm,
                 uae_shas=uae_shas,
@@ -475,6 +505,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wr
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--rows-dir", type=Path, default=ROWS_DIR)
     parser.add_argument("--parse-cache", type=Path, default=PARSE_CACHE_DIR)
+    parser.add_argument(
+        "--scan-dir",
+        type=Path,
+        default=SCAN_INPUTS_DIR,
+        help="where the image-only scan PDFs of has_scan documents are written for the parse",
+    )
     parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))
     parser.add_argument("--models-lock", type=Path, default=Path("infra/models.lock.json"))
     parser.add_argument("--models-root", type=Path, default=Path("models"))
@@ -482,8 +518,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wr
         "--reuse-a-rows",
         type=Path,
         default=None,
-        help="A test rows (evals.extraction_a, run alone at --concurrency 1) to import as arm a "
-        "when their identity matches exactly (ADR-0016 amendment 1)",
+        help="A test rows (evals.extraction_a) to import as arm a when their identity, serving "
+        "identity and recorded client concurrency 1 match exactly (ADR-0016 amendments 1-2)",
     )
     parser.add_argument("--request-timeout-s", type=float, default=REQUEST_TIMEOUT_S)
     args = parser.parse_args(argv)

@@ -38,8 +38,8 @@ from evals.bakeoff.run import (
     reuse_a_rows,
     run_arm,
 )
-from evals.extraction_a import ROW_SCHEMA, load_rows
-from evals.extraction_identity import RowIdentity, RowIdentityError
+from evals.extraction_a import CLIENT_CONCURRENCY_KEY, ROW_SCHEMA, load_rows
+from evals.extraction_identity import RowIdentity, RowIdentityError, ServingIdentity
 from tests.unit._bakeoff_fakes import (
     FakeLlm,
     Unloads,
@@ -379,15 +379,26 @@ def test_failure_kinds_separate_documents_from_the_server() -> None:
 BASE_ID = RowIdentity(model="extractor-a", gguf_sha256="a" * 64, prompt_version="pa")
 
 
-def _a_row(sha: str, identity: RowIdentity = BASE_ID, schema: int = ROW_SCHEMA) -> dict[str, Any]:
-    return {
+BASE_SERVING = ServingIdentity(serving_args_sha256="5" * 16, parser_identity="6" * 16)
+
+
+def _a_row(
+    sha: str,
+    identity: RowIdentity = BASE_ID,
+    schema: int = ROW_SCHEMA,
+    serving: ServingIdentity = BASE_SERVING,
+    concurrency: int | None = 1,
+) -> dict[str, Any]:
+    row = {
         "sha": sha,
         "row_schema": schema,
         "valid_json": True,
         "latency_ms": 900.0,
         "fields": {"invoice_number": {"pred": "INV-1", "correct": True}},
         **identity.as_row_fields(),
+        **serving.as_row_fields(),
     }
+    return row if concurrency is None else {**row, CLIENT_CONCURRENCY_KEY: concurrency}
 
 
 def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -399,25 +410,70 @@ def test_a_test_rows_are_reused_only_when_the_identity_matches(tmp_path: Path) -
     source, target = tmp_path / "extraction_a.jsonl", tmp_path / "rows" / "a.uae.jsonl"
     _write_rows(source, [_a_row(U1), _a_row(U2), _a_row("9" * 64)])
     logs: list[str] = []
-    assert reuse_a_rows(source, target, BASE_ID, [U1, U2], logs.append) == 2
+    assert reuse_a_rows(source, target, BASE_ID, [U1, U2], logs.append, serving=BASE_SERVING) == 2
     rows = load_rows(target)
     assert set(rows) == {U1, U2} and rows[U1]["reused_from"] == source.as_posix()
     assert rows[U1]["error"] is None and rows[U1]["latency_ms"] == 900.0
-    assert reuse_a_rows(source, target, BASE_ID, [U1, U2], logs.append) == 0  # idempotent
+    # idempotent
+    assert reuse_a_rows(source, target, BASE_ID, [U1, U2], logs.append, serving=BASE_SERVING) == 0
     assert len(target.read_text(encoding="utf-8").splitlines()) == 2
     other = RowIdentity(model="extractor-a", gguf_sha256="b" * 64, prompt_version="pa")
     _write_rows(source, [_a_row(U1), _a_row(U2, other)])
     fresh = tmp_path / "fresh.jsonl"
-    assert reuse_a_rows(source, fresh, BASE_ID, [U1, U2], logs.append) == 0
+    assert reuse_a_rows(source, fresh, BASE_ID, [U1, U2], logs.append, serving=BASE_SERVING) == 0
     assert not fresh.exists() and "1 rows of another identity" in logs[-1]
     _write_rows(source, [_a_row(U1, schema=ROW_SCHEMA - 1)])
-    assert reuse_a_rows(source, fresh, BASE_ID, [U1], logs.append) == 0
+    assert reuse_a_rows(source, fresh, BASE_ID, [U1], logs.append, serving=BASE_SERVING) == 0
     assert "1 of an old row schema" in logs[-1]
-    assert reuse_a_rows(tmp_path / "none.jsonl", fresh, BASE_ID, [U1], logs.append) == 0
+    none = tmp_path / "none.jsonl"
+    assert reuse_a_rows(none, fresh, BASE_ID, [U1], logs.append, serving=BASE_SERVING) == 0
     # The bake-off file itself must still hold arm a's identity.
     _write_rows(source, [_a_row(U1, other)])
     with pytest.raises(RowIdentityError):
-        reuse_a_rows(source, target, other, [U1], logs.append)
+        reuse_a_rows(source, target, other, [U1], logs.append, serving=BASE_SERVING)
+
+
+@pytest.mark.parametrize(
+    ("row", "reason"),
+    [
+        # Other llama-swap args for the alias: not the server the challengers are compared on.
+        (
+            _a_row(
+                U2, serving=ServingIdentity(serving_args_sha256="7" * 16, parser_identity="6" * 16)
+            ),
+            "1 served or parsed differently",
+        ),
+        # Another parser build: arm a would have read other parses than the challengers.
+        (
+            _a_row(
+                U2, serving=ServingIdentity(serving_args_sha256="5" * 16, parser_identity="8" * 16)
+            ),
+            "1 served or parsed differently",
+        ),
+        # Rows written before the serving identity existed.
+        (
+            {
+                k: v
+                for k, v in _a_row(U2).items()
+                if k not in ("serving_args_sha256", "parser_identity")
+            },
+            "1 served or parsed differently",
+        ),
+        # Two in flight: the latency includes queueing behind the other request.
+        (_a_row(U2, concurrency=2), "1 not run at client concurrency 1"),
+        # Concurrency not recorded: cannot be shown to be one at a time.
+        (_a_row(U2, concurrency=None), "1 not run at client concurrency 1"),
+    ],
+)
+def test_a_test_rows_are_reused_only_when_served_parsed_and_timed_like_the_challengers(
+    tmp_path: Path, row: dict[str, Any], reason: str
+) -> None:
+    source, target = tmp_path / "extraction_a.jsonl", tmp_path / "rows" / "a.uae.jsonl"
+    _write_rows(source, [_a_row(U1), row])
+    logs: list[str] = []
+    assert reuse_a_rows(source, target, BASE_ID, [U1, U2], logs.append, serving=BASE_SERVING) == 0
+    assert not target.exists()  # all or nothing: not even the matching row is imported
+    assert reason in logs[-1] and "arm a runs" in logs[-1]
 
 
 def _uae_docs(tmp_path: Path) -> tuple[Path, list[str], dict[str, dict[str, Any]]]:

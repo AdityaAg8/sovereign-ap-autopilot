@@ -3,9 +3,12 @@
 # ml.extractor_b.gpu takes for training and export), so no trainer can start mid-queue and no
 # idle gap waits on an orchestrator poll. Each item logs to logs/<item>.log, the first failure
 # stops the queue, and a rerun skips items whose done-marker under logs/gpu_queue/ exists.
+# An item prefixed with '+' is one whose non-zero exit is a verdict, not a broken stack (a gate
+# that fails, e.g. "+gates-b"): its failure is recorded (<item>.failed marker, no done-marker, so
+# a rerun retries it), the queue goes on, and the queue exits with that status at the end.
 #
 # Usage: scripts/gpu_queue.sh "extraction-a-adr0012" "eval-b" "cal-rows-b CAL_B_MODEL=extractor-b"
-#        (make gpu-queue QUEUE="extraction-a-adr0012,eval-b"; detach with nohup ... &)
+#        (make gpu-queue QUEUE="extraction-a-adr0012,eval-b,+gates-b"; detach with nohup ... &)
 # Env:   GPU_QUEUE_LOCK (default data/ml/gpu.lock), GPU_QUEUE_LOGS (default logs),
 #        MAKE (default make).
 #
@@ -28,11 +31,13 @@ die() { echo "gpu-queue: $*" >&2; exit 2; }
 # Validate the whole queue before taking the lock: a bad item must not waste a GPU window.
 names=()
 for item in "$@"; do
-  read -r target _ <<<"$item"
+  spec="${item#+}"
+  read -r target _ <<<"$spec"
   [ -n "$target" ] || die "empty queue item"
   case "$SELF_LOCKING" in *" $target "*) die "'$target' takes $LOCK itself; run it outside the queue" ;; esac
-  # Marker/log name: the item with every character outside [A-Za-z0-9._-] replaced by '_'.
-  name="$(printf '%s' "$item" | tr -c 'A-Za-z0-9._-' '_')"
+  # Marker/log name: the item (without a '+') with every character outside [A-Za-z0-9._-]
+  # replaced by '_', so "+gates-b" and "gates-b" share one done-marker.
+  name="$(printf '%s' "$spec" | tr -c 'A-Za-z0-9._-' '_')"
   names+=("$name")
 done
 
@@ -57,25 +62,42 @@ trap 'exit 143' TERM
 
 echo "gpu-queue: holding $LOCK for ${#names[@]} item(s)"
 index=0
+verdict_status=0
+verdict_failed=()
 for item in "$@"; do
   name="${names[$index]}"
   index=$((index + 1))
+  spec="${item#+}"
   marker="$MARKERS/$name.done"
+  failed_marker="$MARKERS/$name.failed"
   if [ -f "$marker" ]; then
-    echo "[$index/${#names[@]}] $item: done $(cat "$marker"), skipped (delete $marker to rerun)"
+    echo "[$index/${#names[@]}] $spec: done $(cat "$marker"), skipped (delete $marker to rerun)"
     continue
   fi
   log="$LOGS/$name.log"
-  echo "[$index/${#names[@]}] $item: started $(date -u +%H:%M:%SZ), log $log"
-  read -r -a words <<<"$item"
+  echo "[$index/${#names[@]}] $spec: started $(date -u +%H:%M:%SZ), log $log"
+  read -r -a words <<<"$spec"
   status=0
   "$MAKE_BIN" "${words[@]}" >"$log" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    echo "gpu-queue: $item failed (exit $status); queue stopped. Tail of $log:" >&2
+    if [ "$spec" != "$item" ]; then
+      echo "gpu-queue: $spec failed (exit $status); '+' item, the queue goes on. Tail of $log:" >&2
+      tail -n 20 "$log" >&2 || true
+      printf '%s exit %d\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" >"$failed_marker"
+      [ "$verdict_status" -ne 0 ] || verdict_status="$status"
+      verdict_failed+=("$spec")
+      continue
+    fi
+    echo "gpu-queue: $spec failed (exit $status); queue stopped. Tail of $log:" >&2
     tail -n 20 "$log" >&2 || true
     exit "$status"
   fi
+  rm -f "$failed_marker"
   date -u +%Y-%m-%dT%H:%M:%SZ >"$marker"
-  echo "[$index/${#names[@]}] $item: ok $(date -u +%H:%M:%SZ)"
+  echo "[$index/${#names[@]}] $spec: ok $(date -u +%H:%M:%SZ)"
 done
+if [ "$verdict_status" -ne 0 ]; then
+  echo "gpu-queue: every item ran; failed: ${verdict_failed[*]} (rerun retries them); $LOCK released" >&2
+  exit "$verdict_status"
+fi
 echo "gpu-queue: all ${#names[@]} item(s) done; $LOCK released"

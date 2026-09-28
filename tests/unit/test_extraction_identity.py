@@ -14,7 +14,14 @@ import pytest
 
 from apx.extract.interfaces import ExtractorId
 from apx.extract.prompt import InvoicePromptBuilder, PromptSettings
-from evals.extraction_a import prompt_builder_for, run, run_identity, run_serving
+from evals.extraction_a import (
+    CLIENT_CONCURRENCY_KEY,
+    prompt_builder_for,
+    row_stamp,
+    run,
+    run_identity,
+    run_serving,
+)
 from evals.extraction_identity import (
     RowIdentity,
     RowIdentityError,
@@ -190,6 +197,20 @@ def test_require_serving_rejects_other_configs_and_legacy_rows(tmp_path: Path) -
         )
     with pytest.raises(RowIdentityError):  # rows from before serving fields: unknown config
         require_serving({"s2": IDENTITY.as_row_fields()}, serving, rows_path)
+
+
+@pytest.mark.parametrize("concurrency", [1, 2])
+def test_every_row_records_identity_serving_and_client_concurrency(concurrency: int) -> None:
+    serving = ServingIdentity(serving_args_sha256="1" * 16, parser_identity="2" * 16)
+    stamp = row_stamp(IDENTITY, serving, concurrency)
+    assert stamp == {
+        **IDENTITY.as_row_fields(),
+        **serving.as_row_fields(),
+        CLIENT_CONCURRENCY_KEY: concurrency,
+    }
+    # Concurrency is metadata for latency consumers, not identity: a resume may change it.
+    require_identity({"s1": stamp}, IDENTITY, Path("rows.jsonl"))
+    require_serving({"s1": stamp}, serving, Path("rows.jsonl"))
 
 
 async def test_harness_refuses_to_resume_rows_served_with_other_args(tmp_path: Path) -> None:

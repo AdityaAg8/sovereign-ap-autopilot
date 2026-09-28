@@ -32,6 +32,17 @@ RUN uv pip install --python /opt/venv/bin/python \
     "unsloth==2026.9.11" "unsloth_zoo==2026.9.7" "transformers==5.5.0" "trl==0.24.0" \
     "peft==0.21.0" "accelerate==1.15.0" "bitsandbytes==0.50.2" "mlflow-skinny==3.7.0"
 
+# Qwen3.5's Gated DeltaNet layers (3 of every 4) run on flash-linear-attention's Triton kernels and
+# causal-conv1d's CUDA kernels when both import; without them transformers silently falls back to
+# a slower, more memory-hungry PyTorch reference path (ADR-0011 amendment 6), and
+# `ml.extractor_b.kernels` refuses to train on it. causal-conv1d ships only an sdist: it is built
+# here against the torch above for the RTX 4080 Laptop (sm_89), never fetched as a prebuilt binary.
+RUN uv pip install --python /opt/venv/bin/python \
+    "flash-linear-attention==0.5.2" "fla-core==0.5.2" "einops==0.8.2" \
+    "setuptools==84.0.0" "wheel==0.48.0" "ninja==1.13.2" "packaging==26.3" \
+    && TORCH_CUDA_ARCH_LIST="8.9" CAUSAL_CONV1D_FORCE_BUILD=TRUE MAX_JOBS=4 \
+    uv pip install --python /opt/venv/bin/python --no-build-isolation "causal-conv1d==1.7.0"
+
 ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
     UNSLOTH_DISABLE_STATISTICS=1 DO_NOT_TRACK=1 \
     PYTHONPATH=/repo

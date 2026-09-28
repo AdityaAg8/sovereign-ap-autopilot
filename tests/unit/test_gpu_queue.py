@@ -85,6 +85,25 @@ def test_first_failure_stops_the_queue_and_a_rerun_resumes(tmp_path: Path) -> No
     assert _ran(tmp_path) == ["cal-rows-a"] and "eval-b: done" in result.stdout
 
 
+def test_a_plus_item_failure_is_recorded_and_the_queue_goes_on(tmp_path: Path) -> None:
+    result = _queue(tmp_path, "+FAIL", "eval-b", "+cal-rows-a")
+    assert result.returncode == 3  # the queue still reports the verdict failure
+    assert _ran(tmp_path) == ["FAIL", "eval-b", "cal-rows-a"]  # '+' is not passed to make
+    markers = tmp_path / "logs" / "gpu_queue"
+    assert "exit 3" in (markers / "FAIL.failed").read_text(encoding="utf-8")
+    assert not (markers / "FAIL.done").exists()
+    assert (markers / "eval-b.done").is_file() and (markers / "cal-rows-a.done").is_file()
+    assert "'+' item, the queue goes on" in result.stderr and "failed: FAIL" in result.stderr
+    assert not (tmp_path / "data" / "ml" / "gpu.lock").exists()
+
+    # A rerun skips the finished items (a '+' item shares its marker with the plain name) and
+    # retries the failed one; a plain failing item still stops the queue.
+    (tmp_path / "ran.txt").unlink()
+    result = _queue(tmp_path, "eval-b", "cal-rows-a", "FAIL", "gates-b")
+    assert result.returncode == 3 and _ran(tmp_path) == ["FAIL"]
+    assert "queue stopped" in result.stderr
+
+
 def test_a_held_lock_refuses_before_anything_runs(tmp_path: Path) -> None:
     lock = tmp_path / "data" / "ml" / "gpu.lock"
     lock.parent.mkdir(parents=True)

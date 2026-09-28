@@ -177,6 +177,8 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 # scan; a parser source change gives a new identity (a fresh cache). Needs the parse service.
 # `gpu-queue` runs QUEUE (comma-separated make targets, each optionally with VAR=value) holding
 # data/ml/gpu.lock, one log per item under logs/, stopping at the first failure; rerun resumes.
+# A '+' item (e.g. `+gates-b`) exits non-zero on a verdict, not a broken stack: its failure is
+# recorded and the queue goes on, so a failed gate does not leave the GPU idle until a human polls.
 # Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
 SPLITS ?= test,cal
 QUEUE ?=
@@ -195,10 +197,13 @@ M33_DATA_DIR ?= data/uae/test
 M33_BEFORE ?= .claude/worktrees/int-m3b/logs/extraction_a.jsonl
 M33_AFTER ?= logs/extraction_a.adr0012.jsonl
 
+# --concurrency 1: extractor-a serves one slot (ADR-0013 amdt 1), so a second request in flight
+# only queues and its latency would include the wait; at 1 the rows' latency is the per-request
+# time the bake-off measures, so `make bakeoff` imports them as arm a (ADR-0016 amdt 2).
 extraction-a-adr0012:
 	@echo "==> Extractor A on $(M33_DATA_DIR) with the ADR-0012 prompt (GPU; needs make up; resumable rows: $(M33_AFTER))"
 	$(HOST_PARSE) uv run python -m evals.extraction_a --data-dir $(M33_DATA_DIR) --rows $(M33_AFTER) \
-		--report reports/extraction_a_adr0012.md
+		--concurrency 1 --report reports/extraction_a_adr0012.md
 
 extraction-a-compare:
 	@echo "==> paired before/after comparison -> reports/extraction_a_schema_delta.md (CPU)"
@@ -208,8 +213,12 @@ extraction-a-compare:
 # Host-side, needs `make up` (llama-swap + parse) and an otherwise idle GPU: every arm runs alone
 # on the card and its whole-card VRAM is part of the result. Probe first; `bakeoff` resumes.
 # Overridable: `make bakeoff BAKEOFF_ARMS=a,q38-9b-distill` (default: every arm).
+# Arm a imports the A test rows (BAKEOFF_REUSE_A) only when every row matches its identity,
+# serving args, parser build and client concurrency 1; otherwise arm a runs (ADR-0016 amdt 2).
+# Parses come from the shared cache `make parse-cache` fills. `BAKEOFF_REUSE_A=` disables reuse.
 BAKEOFF_DATA_DIR ?= data/uae/test
 BAKEOFF_ARMS ?=
+BAKEOFF_REUSE_A ?= $(M33_AFTER)
 
 bakeoff-probe:
 	@echo "==> M3.4 5-page VRAM probe per arm -> reports/bakeoff_probe.json (GPU; needs make up)"
@@ -226,7 +235,7 @@ bakeoff-report:
 
 ## --- Extractor B fine-tune (ADR-0011, docs/design/training-loop.md) ------------------
 # The trainer image digest is part of the resume fingerprint; GIT_SHA is recorded, not compared.
-TRAINER_IMAGE := sovereign-ap/trainer:2026.9.11
+TRAINER_IMAGE := sovereign-ap/trainer:2026.9.28
 TRAINER_RUN = cd infra && TRAINER_IMAGE_DIGEST=$$(docker image inspect -f '{{.Id}}' $(TRAINER_IMAGE)) \
 	GIT_SHA=$$(git rev-parse HEAD) $(COMPOSE) --profile train run --rm --name extractor-b-trainer trainer
 

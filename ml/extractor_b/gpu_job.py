@@ -1,6 +1,7 @@
 """GPU half of the Extractor B run flow (design §4 steps 4-8 and the probe): check VRAM/RAM
 headroom (ADR-0013), resolve the run, cap VRAM, load the base with LoRA via Unsloth, train with
-`GuardedSFTTrainer` and log to MLflow.
+`GuardedSFTTrainer` and log to MLflow. A model whose Gated DeltaNet layers are off the fast kernels
+is refused at load (ADR-0011 amendment 6).
 Runs only inside the trainer image; imported lazily by `train.py` so CI never needs torch."""
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from ml.extractor_b.config import effective_lora_r, rung_spec
 from ml.extractor_b.evaluator import HfDevEvaluator
 from ml.extractor_b.gpu import query_used_mib
 from ml.extractor_b.interfaces import LadderRung, TrainConfig, TrainingError, TrainingSample
+from ml.extractor_b.kernels import require_deltanet_fast_path
 from ml.extractor_b.loop import (
     LoopController,
     PauseFlag,
@@ -93,6 +95,8 @@ def _load_model(cfg: TrainConfig, env: dict[str, str]) -> tuple[Any, Any]:
         random_state=cfg.optim.seed,
         use_gradient_checkpointing="unsloth",
     )
+    # ADR-0011 amendment 6: never train, probe or eval on the slow DeltaNet reference path.
+    require_deltanet_fast_path(model)
     return model, processor
 
 

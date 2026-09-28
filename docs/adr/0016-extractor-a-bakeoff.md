@@ -134,6 +134,29 @@ Now:
 - An unreachable server, or one still busy after the client's backoff, ends the run as before.
 - UAE requests are unchanged: any serving failure other than a 400 rejection ends the run.
 
+## Amendment 2 (2026-09-28): one parse cache, and arm a reuse checked, not trusted
+
+**Problem.** The bake-off kept its own parse cache (`data/bakeoff/parsed/`), so after
+`make parse-cache` it OCRed the 70 scanned documents of the 200 subset a second time (about
+95 s each on the card, some 1.8 h). Worse, arm a's reused rows were extracted from the shared
+cache's parses and the challengers from the bake-off's own, so a paired comparison could rest on
+two different OCR passes. And amendment 1 left the concurrency condition to the operator.
+
+**Decision.** No sample size, look, bound, decision rule or error guarantee changes.
+
+1. `evals.bakeoff.run` reads and fills the shared `evals.parse_cache` (`data/cache/parse/<parser
+   identity>/`). Keys are the same (sha256 of the runtime input bytes; scan PDFs are
+   byte-deterministic), so the subset is a cache hit and every arm reads the same parse.
+   Scan inputs are written under `data/bakeoff/scan_inputs/`.
+2. `evals.extraction_a` records `client_concurrency` on every row, and `make extraction-a-adr0012`
+   runs at `--concurrency 1` (extractor-a has one slot, ADR-0013 amdt 1, so a second request only
+   queued and inflated its latency).
+3. Arm a reuse is all or nothing, as before, and now also requires every row to carry the
+   serving identity the challengers are compared under (extractor-a's llama-swap args hash and
+   the parser identity of the cache the bake-off reads) and `client_concurrency == 1`. Any
+   mismatch, or a row without the fields, logs why and arm a runs. `make bakeoff` passes the A
+   test rows by default (`BAKEOFF_REUSE_A`, empty to disable), since the check is now mechanical.
+
 ## Decision outcome
 
 <!-- BAKEOFF:DECISION:START -->

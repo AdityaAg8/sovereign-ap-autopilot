@@ -420,7 +420,7 @@ services:
     # reaches mlflow by name. The repo, data/ and models/ are read-only except the run
     # directory (models/extractor_b) and data/ml (prepared rows, quarantine, gpu.lock).
     profiles: [train]
-    image: sovereign-ap/trainer:2026.9.11
+    image: sovereign-ap/trainer:2026.9.28
     build:
       context: ..
       dockerfile: infra/docker/trainer/Dockerfile

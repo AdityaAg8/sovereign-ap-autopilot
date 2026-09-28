@@ -5,7 +5,9 @@ rate, field accuracy against the factory labels, box agreement and latency. Per-
 to a resumable JSONL under logs/ so an interrupted GPU run continues where it stopped; each row
 carries the run identity (alias, served GGUF sha256, prompt version) and the serving identity
 (llama-swap args of the alias, parser build), and a resume refuses a file written by another
-build, prompt, server config or parser. Parses come from the shared `evals.parse_cache`
+build, prompt, server config or parser. Rows also record the client concurrency they were run at,
+so a consumer of their latency (the M3.4 bake-off's arm a reuse) can check it was measured one
+request at a time. Parses come from the shared `evals.parse_cache`
 (`--no-parse-cache` parses inline), so a resume or a later eval never re-OCRs a scan.
 `--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
 llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
@@ -77,6 +79,9 @@ documents are fed as their scan (earlier rows read the born-digital PDF for them
 `input_kind` and `arabic_first`. A resume re-runs documents whose row is older, and the trust job
 refuses them."""
 SPLITS: tuple[str, ...] = ("test", "cal")
+CLIENT_CONCURRENCY_KEY = "client_concurrency"
+"""Row field: how many documents the harness had in flight (`--concurrency`) when it wrote the
+row. Metadata, not identity: a resume may change it, and a latency consumer checks every row."""
 
 
 class DocumentParseFailedError(ApxError):
@@ -140,6 +145,17 @@ def run_serving(model: str, *, llama_swap_config: Path, parser_id: str) -> Servi
         serving_args_sha256=serving_args_sha256(model, llama_swap_config=llama_swap_config),
         parser_identity=parser_id,
     )
+
+
+def row_stamp(identity: RowIdentity, serving: ServingIdentity, concurrency: int) -> dict[str, Any]:
+    """The fields every row of a run carries besides its own results: the run and serving
+    identity, and the client concurrency (a row's latency is a per-request wall time, so above
+    the server's `--parallel` it includes queueing behind the other requests in flight)."""
+    return {
+        **identity.as_row_fields(),
+        **serving.as_row_fields(),
+        CLIENT_CONCURRENCY_KEY: concurrency,
+    }
 
 
 def _norm(name: FieldName, value: str | None) -> str | None:
@@ -494,7 +510,7 @@ async def run(args: argparse.Namespace) -> int:
         parser_id=cache.parser_id if cache is not None else parser_identity(),
     )
     require_serving(rows, serving, rows_path)  # nor server configs or parser builds
-    stamp = {**identity.as_row_fields(), **serving.as_row_fields()}
+    stamp = row_stamp(identity, serving, args.concurrency)
     # Offline tooling names its one alias explicitly (apx.llm.client LlmSettings.allowed_models).
     client = LlamaSwapClient(LlmSettings(base_url=args.base_url, allowed_models=frozenset({model})))
     parser = PaddleOcrDocumentParser()

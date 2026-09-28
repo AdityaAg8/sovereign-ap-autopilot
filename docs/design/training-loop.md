@@ -184,7 +184,7 @@ Sort output rows by `sample_id` so the manifest sha256 is stable.
 |---|---|---|
 | `EXTRACTOR_B_BASE_PATH` | Local directory of the HF safetensors base that `FastVisionModel.from_pretrained` loads (offline, `local_files_only`) | `models/<repo_id>` of the `extractor_b_train_base` intent in `infra/models.lock.json` |
 | `EXTRACTOR_B_BASE_REVISION` | Base revision in the run fingerprint (a change blocks resume) | `revision_sha` of that same lock entry |
-| `TRAINER_IMAGE_DIGEST` | Trainer image id in the run fingerprint | Set by `make train-b*` from `docker image inspect -f '{{.Id}}' sovereign-ap/trainer:2026.9.11`; no default, a missing value is a `TrainingError` |
+| `TRAINER_IMAGE_DIGEST` | Trainer image id in the run fingerprint | Set by `make train-b*` from `docker image inspect -f '{{.Id}}' sovereign-ap/trainer:2026.9.28`; no default, a missing value is a `TrainingError` |
 | `GIT_SHA` | Recorded in the fingerprint, never compared | `git rev-parse HEAD` via the Makefile, else `unknown` |
 
 The lock has no `extractor_b_train_base` entry yet (ADR-0009 plan item 6): add the intent to
