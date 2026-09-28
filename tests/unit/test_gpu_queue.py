@@ -1,7 +1,8 @@
 """Unit tests for scripts/gpu_queue.sh, run against a stand-in `make` that records what it ran:
 items run in order with one log each while data/ml/gpu.lock holds a format-1 lock that
 ml.extractor_b.gpu never reclaims, the first failure stops the queue, a rerun skips finished items,
-a held lock or a self-locking target refuses before anything runs, and the lock is released."""
+a held lock or a self-locking target refuses before anything runs, the lock is released, and a
+'|' group runs its sub-items concurrently with a log and done-marker each."""
 
 from __future__ import annotations
 
@@ -23,6 +24,12 @@ echo "$*" >> ran.txt
 cp data/ml/gpu.lock "seen-$1.lock"
 echo "output of $*"
 [ "$1" != FAIL ] || { echo boom; exit 3; }
+# WAITFLAG only succeeds when SETFLAG, started beside it, runs while it waits (a real overlap).
+if [ "$1" = SETFLAG ]; then touch flag; fi
+if [ "$1" = WAITFLAG ]; then
+  for _ in $(seq 1 200); do [ -f flag ] && exit 0; sleep 0.1; done
+  echo "no flag"; exit 4
+fi
 """
 
 
@@ -120,3 +127,46 @@ def test_self_locking_targets_are_refused(tmp_path: Path, target: str) -> None:
     result = _queue(tmp_path, "eval-b", target)
     assert result.returncode == 2 and "takes data/ml/gpu.lock itself" in result.stderr
     assert _ran(tmp_path) == [] and not (tmp_path / "data" / "ml" / "gpu.lock").exists()
+
+
+def test_a_group_runs_its_sub_items_concurrently_with_a_marker_each(tmp_path: Path) -> None:
+    result = _queue(tmp_path, "eval-b", "WAITFLAG|SETFLAG SPLITS=cal", "cal-rows-a")
+    assert result.returncode == 0, result.stdout + result.stderr
+    ran = _ran(tmp_path)
+    assert ran[0] == "eval-b" and ran[-1] == "cal-rows-a"
+    assert sorted(ran[1:3]) == ["SETFLAG SPLITS=cal", "WAITFLAG"]
+    markers = tmp_path / "logs" / "gpu_queue"
+    for name in ("eval-b", "WAITFLAG", "SETFLAG_SPLITS_cal", "cal-rows-a"):
+        assert (markers / f"{name}.done").is_file(), name
+    assert (tmp_path / "logs" / "SETFLAG_SPLITS_cal.log").is_file()
+    assert "holding data/ml/gpu.lock for 4 item(s)" in result.stdout
+    assert not (tmp_path / "data" / "ml" / "gpu.lock").exists()
+
+
+def test_a_group_failure_waits_for_siblings_then_stops_and_a_rerun_resumes(
+    tmp_path: Path,
+) -> None:
+    result = _queue(tmp_path, "FAIL|eval-b", "cal-rows-a")
+    assert result.returncode == 3
+    assert sorted(_ran(tmp_path)) == ["FAIL", "eval-b"]  # the sibling ran to its end
+    markers = tmp_path / "logs" / "gpu_queue"
+    assert (markers / "eval-b.done").is_file() and not (markers / "FAIL.done").exists()
+    assert "queue stopped" in result.stderr
+    assert not (tmp_path / "data" / "ml" / "gpu.lock").exists()
+
+    (tmp_path / "ran.txt").unlink()
+    result = _queue(tmp_path, "FAIL|eval-b", "cal-rows-a")
+    assert result.returncode == 3 and _ran(tmp_path) == ["FAIL"]  # finished sibling skipped
+
+
+def test_a_plus_sub_item_in_a_group_is_a_verdict(tmp_path: Path) -> None:
+    result = _queue(tmp_path, "+FAIL|eval-b", "cal-rows-a")
+    assert result.returncode == 3
+    assert _ran(tmp_path)[-1] == "cal-rows-a"  # the queue went on
+    assert (tmp_path / "logs" / "gpu_queue" / "FAIL.failed").is_file()
+
+
+def test_a_self_locking_target_inside_a_group_is_refused(tmp_path: Path) -> None:
+    result = _queue(tmp_path, "eval-b|train-b")
+    assert result.returncode == 2 and "takes data/ml/gpu.lock itself" in result.stderr
+    assert _ran(tmp_path) == []

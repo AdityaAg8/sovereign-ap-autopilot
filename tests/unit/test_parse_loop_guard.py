@@ -346,7 +346,7 @@ def test_a_page_that_finishes_is_returned_byte_identical_with_no_strip_pass() ->
     spotting, stats = _spot(run, clock)
     assert spotting.text == text and spotting.hit_limit is False
     assert len(run.calls) == 1 and run.calls[0] == ((1190, 1683), 3072, "first", None)
-    assert stats.used == "first"
+    assert stats.used == "first" and stats.first_seconds == 5.0
 
 
 def test_a_looping_page_is_reread_as_strips_and_is_complete_when_all_finish() -> None:
@@ -369,6 +369,8 @@ def test_a_looping_page_is_reread_as_strips_and_is_complete_when_all_finish() ->
         assert band.core_top <= centre + 1 and centre - 1 < band.core_bottom
     assert spotting.hit_limit is False
     assert stats.used == "strips" and stats.strips_finished == 4 and stats.strip_loops == 2
+    # The first pass is timed apart from the strips, so its decode rate shows in the page log.
+    assert stats.first_seconds == 5.0 and stats.seconds == 45.0
 
 
 def test_a_strip_that_did_not_finish_keeps_the_page_truncated() -> None:

@@ -179,9 +179,16 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 # data/ml/gpu.lock, one log per item under logs/, stopping at the first failure; rerun resumes.
 # A '+' item (e.g. `+gates-b`) exits non-zero on a verdict, not a broken stack: its failure is
 # recorded and the queue goes on, so a failed gate does not leave the GPU idle until a human polls.
+# Sub-items joined by '|' run concurrently (ADR-0018): only jobs whose outputs cannot depend on
+# timing and whose VRAM fits together (B ~4.4 GB + OCR parse ~4.3 GB; never A beside the parse).
+# Default QUEUE is the ADR-0018 reduced plan, grouped by model so each is loaded once: test
+# parses; B on test beside the cal parses; A on cal; the trust gate ('+': a verdict, and it fails
+# typed until the cal-B and test-A rows ADR-0018 lists exist); the attack suite. The fresh e2e
+# (`make e2e-pipeline`) runs before it, alone. Needs `make up` + `make seed`.
 # Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
 SPLITS ?= test,cal
-QUEUE ?=
+REDUCED_GPU_QUEUE = parse-cache SPLITS=test,eval-b|parse-cache SPLITS=cal,cal-rows-a,+calibrate,eval-attacks
+QUEUE ?= $(REDUCED_GPU_QUEUE)
 
 parse-cache:
 	@echo "==> parse UAE $(SPLITS) into the shared parse cache data/cache/parse/ (parse service; resumable)"

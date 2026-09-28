@@ -635,6 +635,9 @@ class PageStats(NamedTuple):
     first_tokens: int
     first_finished: bool
     first_loops: int
+    first_seconds: float
+    """Wall time of the first pass alone, so its decode rate (first_tokens / first_seconds) is
+    visible apart from the strips (ADR-0013 amendment 3)."""
     strips_read: int
     strips_finished: int
     strip_tokens: int
@@ -662,12 +665,14 @@ def spot_page(
     fewer zones than the first pass returns the first pass instead."""
     started = clock()
     first = run(image, budget, "first", None)
+    first_seconds = round(clock() - started, 2)
 
     def stats(results: Sequence[Pass], used: Literal["first", "strips"]) -> PageStats:
         return PageStats(
             first_tokens=first.tokens,
             first_finished=first.finished,
             first_loops=first.loops,
+            first_seconds=first_seconds,
             strips_read=len(results),
             strips_finished=sum(r.finished for r in results),
             strip_tokens=sum(r.tokens for r in results),
@@ -819,7 +824,9 @@ def _generate(
     if max_time is not None:
         extra["max_time"] = max_time
 
-    with torch.no_grad():
+    # `inference_mode` rather than `no_grad` (ADR-0013 amendment 3): it also skips autograd's
+    # version-counter and view tracking on every op; the kernels and so the tokens are the same.
+    with torch.inference_mode():
         # `use_cache=True` overrides the checkpoint's `use_cache: false` (see
         # DEFAULT_MAX_NEW_TOKENS): without the KV cache every token re-runs the whole prefix.
         outputs = model.generate(

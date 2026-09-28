@@ -374,3 +374,63 @@ after 37 to 967 generated tokens, against 3072 before. No page that finished mat
 
 **Live verification.** Pending: the GPU run on the 20-document set, measuring IBAN, total and zone
 recovery against baseline, and the 4 English documents byte-identical.
+
+## Amendment 3 (2026-09-28): scan parse throughput without changing the output
+
+**Problem.** The 2026-09-27 parse-cache run spent about 95 s per scanned document (240 of the
+750 test documents are scans, 2.33 pages each, so about 41 s per page), and 458 scans in test and
+cal need about 12 h. A dense page that finished without looping took 125 s, about 21 tokens/s.
+The same first-pass code decoded at about 66 tokens/s on 2026-09-26 (2050 tokens in 31 s,
+amendment 1) and at 37 to 58 tokens/s in the amendment-2 probe (3072 tokens in 53 to 82 s).
+
+**Where the time goes (measured on the host CPU, 6 test scans).** Building the scan input 0.21 s
+per document, rendering a page 0.09 s, the service's PNG re-encode 0.09 s: about 0.7 s per scan,
+under 1%. Stepping the loop guard costs 4 µs per token over a 3000-token page (15 to 48 ms per
+token is decoding). Everything else is `model.generate`: a 0.3 B, 18-layer decoder at batch 1 is
+bound by per-token kernel launches and Python, so its rate follows the CPU and GPU time the model
+process gets. The drop from 66 to 21 tokens/s is not in the code path and points at contention
+(other GPU work or CPU-heavy builds while the cache filled).
+
+**What the service already does.** The model and processor load once per process; weights are
+bf16; the KV cache is on; `transformers` picks SDPA attention; the first pass stops at the first
+loop the guard sees (amendment 2), so a looping page spends 37 to 967 tokens, not 3072.
+
+**Decision.** Only changes whose output is the same token for token:
+
+1. `_generate` runs under `torch.inference_mode()` instead of `torch.no_grad()`. It drops
+   autograd's version-counter and view bookkeeping per op. The kernels, and so the tokens, are
+   unchanged.
+2. The per-page log line gains `first_seconds` (first-pass wall time), so the first pass's rate
+   (`first_tokens / first_seconds`) is visible apart from the strips.
+
+`SERVICE_PARSER_VERSION` stays `paddleocr-vl-1.6+pdfplumber/3`: parse output is unchanged. The
+`evals.parse_cache` identity hashes the service source, so the 5 entries cached under the old
+identity are parsed again once.
+
+**Rejected, because the output could change.**
+
+- Skipping the first pass on Arabic-first pages: 16 of 16 looped in the probe, but the strip pass
+  falls back to the first pass when it recovers fewer zones, so skipping it is not provably the same.
+- Batching a page's 4 strips in one `generate` call: batch 4 with left padding runs different GEMM
+  shapes and a masked attention kernel, so bf16 results and greedy ties can differ.
+- Static KV cache, `torch.compile` or CUDA graphs: different attention kernels over the padded
+  cache length; not bitwise the same.
+- Two model processes decoding at once: each page's tokens would match, but the strip pass is
+  bounded by a 90 s wall-clock deadline, so slower pages would read fewer strips.
+- Client pipelining (render the next page or document while the GPU decodes): output is the same,
+  but it saves at most 0.7 s of about 95 s per scan.
+
+**Estimate.** At 21 tokens/s a scan takes about 95 s (12 h for 458). The code changes above are
+worth about 1%. Uncontended, at the 58 to 66 tokens/s this code path measured before, the decode
+part scales by 21/60: about 95 × 0.35 ≈ 33 s per scan, about 4.2 h for 458. That is only from
+running the cache fill with nothing else on the GPU or the host CPU. Deadline-bound strip passes
+then read more strips before 90 s, which can only recover more zones.
+
+**Validation (GPU, pending).**
+
+- Byte-identical output: parse the 4 English and 4 Arabic-first documents of the amendment-2 probe
+  set before and after this change (same image, nothing else on the GPU), and compare the
+  `/parse` responses and the page log's token counts. Any difference fails the amendment.
+- Rate: `nvidia-smi` shows the parse model process alone, the host is otherwise idle, and the
+  page log's `first_tokens / first_seconds` on a dense English page is at least 50 tokens/s.
+- Then run the parse-cache fill alone and record seconds per scan from its log.
