@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reduced GPU plan (ADR-0018): the default `make gpu-queue` runs parse-cache test and cal, the A test rows, the A cal rows, champion-only trust calibration, eval-b and the attack suite in sequence; the bake-off, cal-rows-b, gates-b and the B retrain are deferred, with the commands to run them later. `gpu_queue.sh` accepts `a|b` groups that run concurrently (e15c9a0, 381fccc).
+- Champion-only trust calibration (`calibrate --extractors a`, ADR-0018 amendment 1): the artifact records `extractor_b: null` and keeps the same alpha, delta, grid, `LTT_MIN_ACCEPTED` and ≤1% test gate. It is never auto-activated and refuses to REVIEW if made active. Missing B rows without the flag still raise `TrustRowsError` (e15c9a0).
+- `make archive-stale-rows` moves row files written by another parser build to `logs/archive/` and never deletes them (e15c9a0).
+- The parse service's per-page log line reports `first_seconds`, so the first-pass decode rate can be read apart from the strip re-reads (ADR-0013 amendment 3, 381fccc).
 - Eval scoreboard reads the attack, trust, Extractor B gate and bake-off JSON reports; missing inputs render as pending, never as zero; new `docs/evals.md`; the bake-off writes `reports/bakeoff.json` (955cf5d).
 - `make demo` scenarios assert outcomes against the current API (clean and bilingual archived, poisoned blocked or held by scan, bank change held by P1, duplicate flagged) with typed failure lines, a per-scenario timeout and a bounded, NO_COLOR-aware table (713f56b).
 - Bake-off group-sequential futility stopping (ADR-0016 amendment 1): looks at 50/100/150 documents with O'Brien-Fleming bounds on a paired bootstrap, a possible winner always runs all 200; A test rows are reused; ExtractBench timeouts and 5xx on huge schemas become recorded misses instead of a stall (cb7561f).
@@ -26,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PaddleOCR-VL looped on 16 of 16 Arabic-first scans and spent the whole 3072-token page budget. A loop or budget stop now re-reads the page as 4 overlapping strips with a loop breaker, and pages that finish are unchanged (`SERVICE_PARSER_VERSION` 3, ADR-0013 amendment 2; 1ec8d8c).
+- M11 pass-2 findings (1ec8d8c): a review signal that arrives before the review wait is buffered, with pre-fix histories replay-tested (N-01). Reject re-sends like approve (N-02). The audit row is written in the same transaction (N-07). `review_hold` never reopens (N-09). Raster errors are non-retryable (N-11). A stale approval ends FAILED with a typed reason (N-13).
+- The parse client timed out at 120 s on a dense non-looping scan page that needed 125 s, which also stopped eval-b. The timeout is now 240 s (dffe210).
+- `make parse-cache` ran out of memory (`MemoryError`) building every scan input of a full split up front. It now builds them lazily (8310c1d).
 - Arabic text reached Extractor A reversed: RTL words were sorted right to left but kept their glyphs in visual order and as presentation forms. `apx/parse/bidi.py` applies the Unicode bidi algorithm per line (numbers, dates and Latin runs kept whole), NFKC-folds presentation forms and re-attaches diacritics; word boxes are unchanged and the parser version bump drops cached parses (2e052de).
 - A workflow that failed before its invoice row existed left no trace: `mark_failed` now records `failed_at` and the failure on `ingested_documents` (migration 0011), `GET /invoices/{id}` reports it as failed and the e2e driver settles such documents (8384c7d).
 - Temporal's dev server kept its store in memory, so `make down` or a reboot dropped every in-flight workflow, and because ingest dedupes by sha256 those documents were never processed again. The store is now a SQLite file on the `temporal-data` volume.
@@ -64,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Extractor B training requires the DeltaNet fast-path kernels: the trainer image (2026.9.28) installs flash-linear-attention and causal-conv1d for sm_89 and refuses the slow torch fallback at model load (ADR-0011 amendment 6). The bake-off reads the shared parse cache and reuses verified arm-a rows, checked on the full serving identity (ADR-0016 amendment 2; 109fd2b).
+- The parse service decodes under `torch.inference_mode()`, which is token-identical to `no_grad` and drops per-op autograd bookkeeping (ADR-0013 amendment 3, 381fccc).
 - Docs: README rewritten (pipeline diagram, measured highlights with report links, security model, quality-gate status, milestone status, docs index); new `docs/README.md` index; the runbook gains the migrations table (0001-0009), the ops dashboard, a `PayeeRefusal` row and the A/B swap; `docs/architecture.md` states the ADR-0013 whole-card budget, preflight and measured stage peaks; `docs/security.md` marks SEC-15 implemented.
 - ADR-0011 amendment 4: `data/ml/gpu.lock` liveness is a kernel `flock` held for the whole training job; a lock with a free flock (empty metadata included) is reclaimed, legacy and no-flock locks need a manual `rm` after confirming no trainer runs; `make gpu-free` does not clear it.
 - M5.4a Mobile Lighthouse 96/96/96 on the key pages: command palette, shortcut help, assistant and toasts load on first use, Radix controls render a stand-in until first interaction, and pdf.js renders in a worker via OffscreenCanvas.
@@ -80,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- M11 audit pass 2 (1ec8d8c, dffe210): a bounded login limiter with an email-keyed account bucket, a coarse IP bucket and a 320-character cap (N-04). Raster caps are a 400 MB decoded budget, so A3 or Legal at 600 dpi and 64 MP photos pass while decompression bombs fail (N-05). The parse service requires a bearer token (`PARSE_SERVICE_TOKEN`, generated by `make env`), allows no browser origins, caps image headers at 100 MP and disables its docs (N-06).
 - M11 audit pass 1 (REVIEW.md C-01..C-03, H-01..H-07 and the M/L items, dab25f3): reject and send-to-review only from their legal states under a row lock; approvals carry `invoice_digest` (migration 0012) and the workflow acts on a `review` signal only when a digest-matched approval or a recorded rejection backs it; the Temporal UI and Postgres are unpublished by default and served on 127.0.0.1 by the opt-in `devports` profile (Temporal UI read-only); `make env` generates `POSTGRES_PASSWORD` and `AGENT_RO_PASSWORD` (migration 0013), `make rotate-db-password` migrates older installs; admin bank-detail propose/verify API with verifier ≠ changer (`apx.bank`); raster caps at ingest, scan and parse; login throttle; audit appends inside the state-write transaction; CSP and security headers; one `APPROVAL_LIMIT`; resilience tests for llama-swap and Postgres restarts.
 - No default database password remains: `apx.db.session.get_database_url` raises `ConfigError` when neither `DATABASE_URL` nor `POSTGRES_PASSWORD` is set, and `alembic.ini` ships an empty URL. `infra/compose.yaml` passes `APPROVAL_LIMIT` (default 10000.00) to api and worker. `make dashboard` points at the `devports` profile for the Temporal UI. `docs/security.md` closes R-5, G-1..G-4 and C-03 and adds SEC-26..SEC-29; ADR-0001 amendment 3; new `KNOWN_ISSUES.md`.
 - SEC-08 (ADR-0014): the invoice IBAN only selects among admin-verified accounts, never introduces a payee; the grant digest binds payee IBAN and match, and the routed payee is re-checked at the build (TOCTOU between approval and build closed).
