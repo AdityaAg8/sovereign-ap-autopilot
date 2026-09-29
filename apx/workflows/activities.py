@@ -37,7 +37,7 @@ from apx.common.errors import (
 )
 from apx.common.invoice import Invoice
 from apx.common.master import Vendor
-from apx.common.types import IdempotencyKey, Sha256Hex
+from apx.common.types import Frozen, IdempotencyKey, Sha256Hex
 from apx.db.enums import DbInvoiceStatus
 from apx.db.models import IngestedDocument as IngestedDocumentRow
 from apx.db.models import Invoice as InvoiceRow
@@ -164,6 +164,30 @@ def verified_payment_iban(vendor: Vendor | None, claimed: str | None) -> str | N
         return None
 
 
+class ExtractAudit(Frozen):
+    """The `activity:extract` audit payload: the disputed fields, whether an arbiter ran, and
+    each extractor's validity and finish reason, so an invalid Extractor B output (which makes
+    every field disputed and the trust gate hard-reject, rule H1) is visible in the audit."""
+
+    disputed: tuple[str, ...]
+    has_arbiter: bool
+    a_valid: bool
+    b_valid: bool
+    a_finish_reason: str | None
+    b_finish_reason: str | None
+
+
+def extract_audit(result: ExtractionResult) -> ExtractAudit:
+    return ExtractAudit(
+        disputed=tuple(f.value for f in sorted(result.disputed)),
+        has_arbiter=result.arbiter is not None,
+        a_valid=result.a.valid_json,
+        b_valid=result.b.valid_json,
+        a_finish_reason=result.a.finish_reason,
+        b_finish_reason=result.b.finish_reason,
+    )
+
+
 def _activity_event(step: str, invoice_id: str, payload: dict[str, JsonValue]) -> AuditEvent:
     return AuditEvent(
         actor="workflow",
@@ -261,11 +285,8 @@ class DefaultInvoiceActivities:
     async def extract(self, parsed: ParsedDocumentRef) -> ExtractionResult:
         document = await self._load_parsed(parsed)
         result = await self._deps.extraction.run(document)
-        disputed: list[JsonValue] = [f.value for f in sorted(result.disputed)]
         await self._audit(
-            "extract",
-            document.document_sha256,
-            {"disputed": disputed, "has_arbiter": result.arbiter is not None},
+            "extract", document.document_sha256, extract_audit(result).model_dump(mode="json")
         )
         return result
 

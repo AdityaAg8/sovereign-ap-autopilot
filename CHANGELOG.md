@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `activity:extract` audit payload is typed (`ExtractAudit`) and records `a_valid`, `b_valid` and each extractor's finish reason (`ExtractorOutput.finish_reason`), so an invalid Extractor B output and its cause (for example a `length` cut) show in the audit trail.
+- The e2e driver reviews a refused approval like a reviewer: on a 422 naming fields it patches the invoice kind and the named lines' VAT category and rate from what is printed on the document (each with a reason), notes `corrected: ...` and retries the approval once. The supplier TRN, amounts and missing lines are never corrected, so those refusals stand.
 - Reduced GPU plan (ADR-0018): the default `make gpu-queue` runs parse-cache test and cal, the A test rows, the A cal rows, champion-only trust calibration, eval-b and the attack suite in sequence; the bake-off, cal-rows-b, gates-b and the B retrain are deferred, with the commands to run them later. `gpu_queue.sh` accepts `a|b` groups that run concurrently (e15c9a0, 381fccc).
 - Champion-only trust calibration (`calibrate --extractors a`, ADR-0018 amendment 1): the artifact records `extractor_b: null` and keeps the same alpha, delta, grid, `LTT_MIN_ACCEPTED` and ≤1% test gate. It is never auto-activated and refuses to REVIEW if made active. Missing B rows without the flag still raise `TrustRowsError` (e15c9a0).
 - `make archive-stale-rows` moves row files written by another parser build to `logs/archive/` and never deletes them (e15c9a0).
@@ -30,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Scan strip re-read lost a table row and emitted rows bottom-up with cells right to left (invoice 165d017b0a90 page 2). Merged strip zones are now put in geometric reading order (rows top to bottom, cells in the row's reading direction), and a strip that does not finish is re-read as two half-bands inside the same 90 s page deadline; pages whose first pass finishes are unchanged (`SERVICE_PARSER_VERSION` 4, ADR-0013 amendment 4; GPU validation pending).
 - PaddleOCR-VL looped on 16 of 16 Arabic-first scans and spent the whole 3072-token page budget. A loop or budget stop now re-reads the page as 4 overlapping strips with a loop breaker, and pages that finish are unchanged (`SERVICE_PARSER_VERSION` 3, ADR-0013 amendment 2; 1ec8d8c).
 - M11 pass-2 findings (1ec8d8c): a review signal that arrives before the review wait is buffered, with pre-fix histories replay-tested (N-01). Reject re-sends like approve (N-02). The audit row is written in the same transaction (N-07). `review_hold` never reopens (N-09). Raster errors are non-retryable (N-11). A stale approval ends FAILED with a typed reason (N-13).
 - The parse client timed out at 120 s on a dense non-looping scan page that needed 125 s, which also stopped eval-b. The timeout is now 240 s (dffe210).

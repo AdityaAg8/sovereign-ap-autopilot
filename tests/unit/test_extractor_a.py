@@ -259,7 +259,7 @@ async def test_extractor_returns_fields_and_confidence() -> None:
     )
     output = await extractor.extract(_document([["Invoice", "No", "INV-7"]]))
     await client.aclose()
-    assert output.valid_json
+    assert output.valid_json and output.finish_reason == "stop"
     values = {f.name: f.value for f in output.fields}
     assert values[FieldName.INVOICE_NUMBER] == "INV-7"
     assert output.logprobs[FieldName.INVOICE_NUMBER].min == -3.0
@@ -284,6 +284,7 @@ async def test_non_schema_output_is_reported_invalid_not_repaired(
     await client.aclose()
     assert not output.valid_json
     assert all(f.value is None for f in output.fields) and output.logprobs == {}
+    assert output.finish_reason == finish  # audited: a budget cut shows as `length`
 
 
 def test_prompt_is_tool_free_fenced_and_budgeted() -> None:

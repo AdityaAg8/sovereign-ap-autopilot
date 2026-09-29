@@ -157,7 +157,9 @@ def _parse_payload(
     return fields, None if type_code is None else InvoiceTypeCode(type_code), tuple(line_items)
 
 
-def invalid_output(extractor: ExtractorId, model: str) -> ExtractorOutput:
+def invalid_output(
+    extractor: ExtractorId, model: str, finish_reason: str | None = None
+) -> ExtractorOutput:
     return ExtractorOutput(
         extractor=extractor,
         model=model,
@@ -165,6 +167,7 @@ def invalid_output(extractor: ExtractorId, model: str) -> ExtractorOutput:
         line_items=(),
         logprobs={},
         valid_json=False,
+        finish_reason=finish_reason,
     )
 
 
@@ -191,8 +194,9 @@ class LlmExtractor:
         result = await self._client.complete_structured(request)
         self.last_latency_ms = result.latency_ms
         parsed = _parse_payload(result.content) if result.finish_reason != "length" else None
+        finish_reason = result.finish_reason or None
         if parsed is None:
-            return invalid_output(self._extractor, result.model)
+            return invalid_output(self._extractor, result.model, finish_reason)
         fields, type_code, line_items = parsed
         spans = top_level_value_spans(result.content)
         return ExtractorOutput(
@@ -203,4 +207,5 @@ class LlmExtractor:
             logprobs=field_logprobs(result.content, spans, result.token_logprobs),
             valid_json=True,
             invoice_type_code=type_code,
+            finish_reason=finish_reason,
         )
