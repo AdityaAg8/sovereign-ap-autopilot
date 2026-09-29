@@ -1,7 +1,8 @@
 """Strict readers for the measured reports the PRD §5 scoreboard draws on (ADR-0005: numbers are
 never hand-written): the chat_evals, attacks_e2e, trust_gate, extractor_b_gates and bakeoff JSON
-evidence plus the generated extraction_a, gold_xml, fraud, guard, smoke, e2e_pipeline, parse,
-factory_selfcheck and extractor_b markdown reports. Every
+evidence, the real-data track's JSON reports (ADR-0019), plus the generated extraction_a,
+gold_xml, fraud, guard, smoke, e2e_pipeline, parse, factory_selfcheck and extractor_b markdown
+reports. Every
 parser is pure text-in, typed-values-out and raises `ReportFormatError` on any format drift
 rather than guessing; evals/scoreboard.py turns these values into scoreboard rows."""
 
@@ -15,6 +16,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
+
+from pydantic import ValidationError as PydanticValidationError
+
+from evals.real.models import BeforeAfterReport, RealEvalReport
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPORTS_DIR = REPO_ROOT / "reports"
@@ -814,6 +819,31 @@ def parse_bakeoff(text: str, source: str = "reports/bakeoff.json") -> BakeoffRep
     if status != "PENDING" and report.champion_arm is None:
         raise ReportFormatError(source, f"champion {report.champion!r} is not an arm")
     return report
+
+
+# --- real-data track (ADR-0019 §6) --------------------------------------------------------------
+
+
+def parse_real_eval(text: str, source: str) -> RealEvalReport:
+    """One `reports/real_<set>.<extractor>-<version>.json` (`evals.real.run.report_all`)."""
+    try:
+        return RealEvalReport.model_validate_json(text)
+    except PydanticValidationError as exc:
+        raise ReportFormatError(
+            source, f"not a RealEvalReport: {exc.error_count()} error(s)"
+        ) from exc
+
+
+def parse_real_before_after(text: str, source: str) -> tuple[BeforeAfterReport, ...]:
+    """`reports/real_before_after.json`: the paired B comparisons, one per set and split."""
+    data = _load_json(source, text)
+    entries = _get(source, data, "comparisons", list)
+    try:
+        return tuple(BeforeAfterReport.model_validate(entry) for entry in entries)
+    except PydanticValidationError as exc:
+        raise ReportFormatError(
+            source, f"not a BeforeAfterReport list: {exc.error_count()}"
+        ) from exc
 
 
 # --- source loading ---------------------------------------------------------------------------

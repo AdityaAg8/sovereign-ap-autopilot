@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypeVar, cast
 
+from evals.real.models import BeforeAfterReport, RealEvalReport
 from evals.run import RUNS_DIR, RunReport, SetName, SetOutcome, gate_status, summarize_outcome
 from evals.run import _render_table as render_table
 from evals.scoreboard_sources import (
@@ -50,6 +51,8 @@ from evals.scoreboard_sources import (
     parse_gold_xml,
     parse_guard,
     parse_parse,
+    parse_real_before_after,
+    parse_real_eval,
     parse_selfcheck,
     parse_smoke,
     parse_trust_gate,
@@ -176,6 +179,18 @@ class Inputs:
 
     def bakeoff(self) -> tuple[BakeoffReport, SourceStamp] | None:
         return self.report("bakeoff.json", parse_bakeoff, lambda b: b.generated_at)
+
+    def real(self, set_name: str) -> list[tuple[RealEvalReport, SourceStamp]]:
+        """Every `reports/real_<set>.<extractor>-<version>.json` of one real set (ADR-0019 §6)."""
+        found = []
+        for path in sorted(self.reader.reports_dir.glob(f"real_{set_name}.*.json")):
+            loaded = self.report(path.name, parse_real_eval, lambda r: r.generated_at)
+            if loaded is not None:
+                found.append(loaded)
+        return found
+
+    def real_before_after(self) -> tuple[tuple[BeforeAfterReport, ...], SourceStamp] | None:
+        return self.report(f"{REAL_BEFORE_AFTER}.json", parse_real_before_after)
 
     def e2e(self) -> list[tuple[E2eReport, SourceStamp]]:
         found = (self.report(name, parse_e2e) for name in E2E_REPORTS)
@@ -661,6 +676,97 @@ def _bakeoff_row(inputs: Inputs) -> list[str]:
     ]
 
 
+# --- real-data track (ADR-0019 §6; report-only rows, none gated) -------------------------------
+
+REAL_BEFORE_AFTER = "real_before_after"
+
+
+def _metric_text(report: RealEvalReport, name: str) -> str | None:
+    metric = report.metric(name)
+    if metric is None:
+        return None
+    return (
+        f"{metric.value:.2%} (95% CI {metric.ci.low:.2%}-{metric.ci.high:.2%}, n={metric.n_docs})"
+    )
+
+
+def _arm_label(report: RealEvalReport) -> str:
+    return f"{report.extractor.upper()} {report.model_version}, {report.distribution}"
+
+
+def _real_row(
+    name: str,
+    loaded: list[tuple[RealEvalReport, SourceStamp]],
+    metrics: tuple[str, ...],
+    missing: str,
+) -> list[str]:
+    if not loaded:
+        return [name, "pending", "Report", f"PENDING: {missing}", "-"]
+    parts = []
+    for report, _ in sorted(loaded, key=lambda item: (item[0].extractor, item[0].model_version)):
+        texts = [f"{m} {t}" for m in metrics if (t := _metric_text(report, m)) is not None]
+        parts.append(
+            f"{_arm_label(report)}: {'; '.join(texts)}; valid JSON "
+            f"{report.valid_json_rate.value:.2%}"
+        )
+    sources = "; ".join(stamp.render() for _, stamp in loaded)
+    return [name, " / ".join(parts), "Report", "REPORTED", sources]
+
+
+def real_rows(inputs: Inputs) -> list[list[str]]:
+    """The ADR-0019 §6 rows. They are not PRD §5 rows until the PRD table lists them."""
+    rows = [
+        _real_row(
+            "ExtractBench short value / grounding F1 (real 245, then all 252)",
+            inputs.real("extractbench"),
+            ("value_f1.real", "grounding_f1.real", "value_f1.all", "grounding_f1.all"),
+            "`make real-extractbench` not run yet",
+        ),
+        _real_row(
+            "CORD v2 test field F1 / nTED accuracy (A, B)",
+            [(r, s) for r, s in inputs.real("cord") if r.split == "test"],
+            ("field_f1", "nted_accuracy"),
+            "`make real-cord SPLIT=test` / `real-cord-b` not run yet",
+        ),
+        _real_row(
+            "DocILE val field F1, text-only (KILE / LIR)",
+            inputs.real("docile"),
+            ("kile_f1", "lir_f1"),
+            "DocILE needs DOCILE_TOKEN (BLOCKED `[dataset:docile]`), then `make real-docile`",
+        ),
+    ]
+    name = "Extractor B before → after on real hold-outs (paired)"
+    loaded = inputs.real_before_after()
+    if loaded is None:
+        rows.append([name, "pending", "Report", "PENDING: no retrained B (R1) yet", "-"])
+    else:
+        comparisons, stamp = loaded
+        parts = [
+            f"{c.set} {c.split}: "
+            + "; ".join(
+                f"{d.name} {d.value:+.2%} (95% CI {d.ci.low:+.2%} to {d.ci.high:+.2%}, "
+                f"n={d.n_docs})"
+                for d in c.deltas
+            )
+            for c in comparisons
+        ]
+        rows.append(
+            [name, " / ".join(parts) or "no paired metric", "Report", "REPORTED", stamp.render()]
+        )
+    reality = inputs.real("reality")
+    reality_name = "Reality set field accuracy (owner-labelled UAE)"
+    if reality:
+        row = _real_row(reality_name, reality, ("field_accuracy",), "")
+        if any(r.n_docs < 30 for r, _ in reality):
+            row[1] = f"anecdotal (n < 30): {row[1]}"
+        rows.append(row)
+    else:
+        rows.append(
+            [reality_name, "pending", "Report", "PENDING: no verified reality documents yet", "-"]
+        )
+    return rows
+
+
 # --- rendering --------------------------------------------------------------------------------
 
 
@@ -759,6 +865,14 @@ def render_scoreboard(
         render_table(
             ["Measurement", "Value", "Gate", "Status", "Source"], supplementary_rows(inputs)
         ),
+        "",
+        "## Real-data track (ADR-0019; report-only, never gated)",
+        "",
+        "Public real documents and the owner's reality set. Each value names its arm, whether it",
+        "is zero-shot or in-distribution, n and a 95% CI; failed documents count in every",
+        "denominator. Published baselines and their caveats are in each `reports/real_<set>.md`.",
+        "",
+        render_table(["Measurement", "Value", "Gate", "Status", "Source"], real_rows(inputs)),
         "",
         *_harness_section(harness_runs),
         "_PASS/FAIL judge a measured value against its PRD §5 gate; REPORTED rows have no",

@@ -284,14 +284,24 @@ def test_scoreboard_markdown_tables_are_pipe_aligned(tmp_path: Path) -> None:
     """Every data row of each table renders to the same line length -- the column padding
     `_render_table` is meant to produce (design bar: aligned tables)."""
     markdown = render_scoreboard([], reader=_reader(tmp_path), now=NOW)
-    for n_pipes in (7, 6):  # §5 table (6 columns), supplementary table (5 columns)
-        lines = [
-            line
-            for line in markdown.splitlines()
-            if line.startswith("|") and line.count("|") == n_pipes
-        ]
-        assert lines
-        assert len({len(line) for line in lines}) == 1
+    tables = _tables(markdown)
+    # §5 table (6 columns), supplementary table and the ADR-0019 real-data table (5 columns).
+    assert [t[0].count("|") for t in tables] == [7, 6, 6]
+    for table in tables:
+        assert len({len(line) for line in table}) == 1
+
+
+def _tables(markdown: str) -> list[list[str]]:
+    """Each markdown table as its consecutive `|` lines (header, rule and rows)."""
+    tables: list[list[str]] = []
+    current: list[str] = []
+    for line in [*markdown.splitlines(), ""]:
+        if line.startswith("|"):
+            current.append(line)
+        elif current:
+            tables.append(current)
+            current = []
+    return tables
 
 
 # --- JSON evidence: attacks_e2e, trust_gate, extractor_b_gates, bakeoff -----------------------
@@ -424,13 +434,10 @@ def test_guard_row_names_the_best_baseline_next_to_ours(tmp_path: Path) -> None:
 def test_all_evidence_counts_and_tables_stay_aligned(tmp_path: Path) -> None:
     markdown = _render(tmp_path, _with())
     assert "- PRD §5 rows: 4 PASS, 1 FAIL, 4 REPORTED, 4 PENDING" in markdown
-    for n_pipes in (7, 6):
-        lines = [
-            line
-            for line in markdown.splitlines()
-            if line.startswith("|") and line.count("|") == n_pipes
-        ]
-        assert len({len(line) for line in lines}) == 1
+    tables = _tables(markdown)
+    assert len(tables) == 3
+    for table in tables:
+        assert len({len(line) for line in table}) == 1
 
 
 def test_drifted_json_evidence_raises(tmp_path: Path) -> None:
