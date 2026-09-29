@@ -1,5 +1,6 @@
 """Label mappings from each Extractor B training source to the extraction target JSON
-(ADR-0009 §1.3-1.4): UAE factory labels, DocILE KILE/LIR and FATURA boxes. Every source label is
+(ADR-0009 §1.3-1.4): UAE factory labels, DocILE KILE/LIR, FATURA boxes and CORD v2 keys
+(ADR-0019 §2, which also scores the real-data track through them). Every source label is
 either mapped or explicitly ignored; an unknown label raises, so a mapping gap never trains.
 Classified targets (BT-3 type code, line VAT category) come from what the source knows for
 certain, never from a guess (ADR-0012 §1.3)."""
@@ -186,6 +187,53 @@ def docile_target(annotation: Mapping[str, Any]) -> dict[str, Any]:
         _line_item({k: " ".join(v) for k, v in lines[i].items()}) for i in sorted(lines)
     ]
     return target
+
+
+# ---------------------------------------------------------------------------------------------
+# CORD v2 (`ground_truth.gt_parse`, dotted leaf keys; ADR-0019 §2). Evaluation maps predictions
+# to these keys; phase-2 training uses the same table the other way.
+# ---------------------------------------------------------------------------------------------
+
+CORD_FIELDS: Final[Mapping[str, str]] = {
+    "menu.nm": "line_items[].description",
+    "menu.cnt": "line_items[].quantity",
+    "menu.unitprice": "line_items[].unit_price",
+    "menu.price": "line_items[].net_amount",
+    "sub_total.subtotal_price": "subtotal",
+    "sub_total.tax_price": "vat_total",
+    "total.total_price": "total",
+}
+# ADR-0019 §2's ignored list, plus `menu.itemsubtotal` and `menu.vatyn`, which occur in the
+# pinned CORD revision (7 and 3 instances) but are not named in the ADR table.
+CORD_IGNORED: Final[frozenset[str]] = frozenset(
+    {
+        "menu.sub.nm", "menu.sub.cnt", "menu.sub.price", "menu.sub.unitprice",
+        "menu.sub.discountprice", "menu.sub.etc", "menu.num", "menu.discountprice", "menu.etc",
+        "menu.itemsubtotal", "menu.vatyn", "void_menu.nm", "void_menu.cnt", "void_menu.price",
+        "void_menu.unitprice", "void_menu.num", "void_menu.etc", "sub_total.discount_price",
+        "sub_total.service_price", "sub_total.othersvc_price", "sub_total.etc",
+        "total.cashprice", "total.changeprice", "total.creditcardprice", "total.emoneyprice",
+        "total.menutype_cnt", "total.menuqty_cnt", "total.total_etc",
+    }
+)  # fmt: skip
+
+
+def cord_leaves(node: Any, prefix: str = "") -> Iterable[tuple[str, str]]:
+    """(dotted key, value) for every string leaf of a CORD `gt_parse` tree, in document order;
+    a group given as one object or as a list of objects is walked the same way."""
+    if isinstance(node, list):
+        for item in node:
+            yield from cord_leaves(item, prefix)
+    elif isinstance(node, Mapping):
+        for key, value in node.items():
+            yield from cord_leaves(value, f"{prefix}.{key}" if prefix else str(key))
+    elif node is not None:
+        yield prefix, str(node)
+
+
+def unmapped_cord_keys(gt_parse: Mapping[str, Any]) -> list[str]:
+    """CORD keys in `gt_parse` that are neither mapped nor ignored (a mapping gap)."""
+    return unknown_labels((k for k, _ in cord_leaves(gt_parse)), {*CORD_FIELDS, *CORD_IGNORED})
 
 
 # ---------------------------------------------------------------------------------------------

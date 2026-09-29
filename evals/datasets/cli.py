@@ -1,6 +1,7 @@
 """CLI logic for `uv run python -m evals.datasets fetch [--set NAME]`: runs the DocILE,
-FATURA, ExtractBench, AgentDojo and prompt-injections fetchers and (re)writes
-data/manifest.json, one dataset entry per set, present or deferred (PRD §5 data table, §10 M1.1).
+FATURA, ExtractBench, AgentDojo, prompt-injections and CORD v2 fetchers and (re)writes
+data/manifest.json, one dataset entry per set, present or deferred (PRD §5 data table, §10 M1.1;
+ADR-0019 §8 for CORD's `--splits` and `--allow-large`).
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import structlog
 
 from evals.datasets import (
     agentdojo_fetcher,
+    cord_fetcher,
     docile_fetcher,
     extractbench_fetcher,
     fatura_fetcher,
@@ -34,7 +36,23 @@ FETCHERS: dict[str, Fetcher] = {
     "extractbench": extractbench_fetcher.fetch,
     "agentdojo": agentdojo_fetcher.fetch,
     "prompt_injections": prompt_injections_fetcher.fetch,
+    "cord": cord_fetcher.fetch,
 }
+
+
+def fetch_cord_splits(
+    splits: list[cord_fetcher.CordSplit], *, allow_large: bool, data_root: Path = DATA_ROOT
+) -> Manifest:
+    """`fetch --set cord --splits ...`: fetches those CORD splits into `data_root` and merges
+    them into `data_root/manifest.json`, keeping splits an earlier run fetched."""
+    manifest_path = data_root / "manifest.json"
+    manifest = load_manifest(manifest_path)
+    datasets = dict(manifest.datasets)
+    entry = cord_fetcher.fetch_cord(splits, allow_large=allow_large, data_root=data_root)
+    datasets["cord"] = cord_fetcher.merge_entry(datasets.get("cord"), entry)
+    result = Manifest(generated_at=datetime.now(UTC), datasets=datasets)
+    save_manifest(result, manifest_path)
+    return result
 
 
 def fetch_all(names: list[str] | None = None, *, data_root: Path = DATA_ROOT) -> Manifest:
@@ -51,6 +69,8 @@ def fetch_all(names: list[str] | None = None, *, data_root: Path = DATA_ROOT) ->
     for name in selected:
         log.info("dataset.fetch.start", dataset=name)
         entry = FETCHERS[name](data_root)
+        if name == "cord":
+            entry = cord_fetcher.merge_entry(datasets.get(name), entry)
         datasets[name] = entry
         log.info("dataset.fetch.done", dataset=name, status=entry.status.value)
 
@@ -72,8 +92,36 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Fetch only this dataset (default: all)",
     )
+    fetch_parser.add_argument(
+        "--splits", default=None, help="CORD only: comma-separated validation,test,train"
+    )
+    fetch_parser.add_argument(
+        "--allow-large",
+        action="store_true",
+        help="CORD only: allow the >1 GB train split (owner-approved download)",
+    )
+    fetch_parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=DATA_ROOT,
+        help="CORD only: data directory whose manifest.json is updated (default: repo data/)",
+    )
     args = parser.parse_args(argv)
 
+    if args.command == "fetch" and args.splits is not None:
+        if args.set_name != "cord":
+            parser.error("--splits applies to --set cord only")
+        wanted = {s.strip() for s in args.splits.split(",") if s.strip()}
+        bad = sorted(wanted - set(cord_fetcher.CORD_SPLITS))
+        if bad or not wanted:
+            parser.error(f"--splits needs CORD splits from {list(cord_fetcher.CORD_SPLITS)}")
+        manifest = fetch_cord_splits(
+            [s for s in cord_fetcher.CORD_SPLITS if s in wanted],
+            allow_large=args.allow_large,
+            data_root=args.data_root,
+        )
+        print(f"cord: {manifest.datasets['cord'].version}")
+        return 0
     if args.command == "fetch":
         names = [args.set_name] if args.set_name else None
         manifest = fetch_all(names)
