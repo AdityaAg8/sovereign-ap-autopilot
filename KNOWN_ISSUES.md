@@ -52,7 +52,21 @@ signal's corrections digest to it (else `review.signal_unbacked`, the workflow k
 An approval written before 0014 is checked against the corrections the current rows derive. A
 forged signal therefore cannot change what `apply_review` hands to `build_einvoice`.
 
-**Residual.** An execution that started before the patch and is still in its review wait keeps
-the old behaviour (its `confirm_review` is scheduled without the corrections). Drain or terminate
-such executions after deploying. A real signal dropped while a forged one was being checked is
-re-delivered by the worker's review-signal reconciler (`apx/workflows/reconciler.py`).
+**Residual.** All three are bounded to executions in flight at deploy time or fail closed:
+
+- An execution whose history already holds a pre-patch `confirm_review` (for example an unbacked
+  signal refused before the deploy) keeps the old behaviour for every later signal: `patched()`
+  is memoized False for that run, so its corrections are not checked. Drain or terminate
+  executions still in their review wait after deploying.
+- An approval written before migration 0014 has no recorded `corrections_digest`, so the
+  signal is checked against the corrections the current rows derive. A correction edited after
+  such an approval is therefore accepted without re-approval. This only affects invoices approved
+  before the migration and still waiting.
+- Editing a correction on an APPROVED invoice whose workflow has not yet confirmed succeeds at
+  the API, but it makes the approval stale, so the invoice ends FAILED (`review.approval_stale`)
+  and cannot be re-approved. This fails safe; a 409 on correction-changing edits in that window
+  is the better UX (open follow-up).
+
+A real signal dropped while a forged one was being checked, or lost to a Temporal outage, is
+re-delivered by the worker's review-signal reconciler (`apx/workflows/reconciler.py`). A workflow
+whose query keeps failing is audited and bounded by `max_resends`, and never stalls the pass.

@@ -311,36 +311,53 @@ class ReviewSignalReconciler:
         resent: list[InvoiceId] = []
         for candidate in todo:
             try:
-                state = await self._delivery.state(candidate.invoice_id)
+                if await self._reconcile(candidate):
+                    resent.append(candidate.invoice_id)
             except (RPCError, RuntimeError, OSError) as exc:
-                # One workflow Temporal cannot describe or query must not starve the others;
-                # the invoice stays a candidate for the next pass.
+                # Temporal or the network is unreachable: not this invoice's fault, so it is not
+                # counted against `max_resends` (an outage is what the reconciler exists for) and
+                # stays a candidate for the next pass.
+                log.warning("could not reconcile invoice %s: %s", candidate.invoice_id, exc)
+            except Exception as exc:
+                # Anything specific to this invoice (its query fails or is rejected, e.g. a
+                # workflow task stuck on nondeterminism; its rows cannot be read) is audited and
+                # counted, so it is bounded by `max_resends` and never aborts the pass for the
+                # others.
                 log.warning(
-                    "could not read the workflow of invoice %s: %s", candidate.invoice_id, exc
+                    "reconciling invoice %s failed: %s: %s",
+                    candidate.invoice_id,
+                    type(exc).__name__,
+                    exc,
                 )
-                continue
-            if state in (WorkflowReviewState.CLOSED, WorkflowReviewState.MISSING):
-                self._settle(candidate.invoice_id)
-                continue
-            if state is not WorkflowReviewState.WAITING:
-                continue
-            decision = await self._store.decision(candidate)
-            if decision is None:
-                continue
-            try:
-                await self._delivery.signal(candidate.invoice_id, decision)
-            except (RPCError, RuntimeError, OSError) as exc:
-                log.warning("re-send to invoice %s failed: %s", candidate.invoice_id, exc)
-                await self._store.record_resend(candidate, delivered=False, error=str(exc))
-                continue
-            await self._store.record_resend(candidate, delivered=True, error=None)
-            log.info(
-                "re-sent the %s decision to invoice %s",
-                "approve" if candidate.approved else "reject",
-                candidate.invoice_id,
-            )
-            resent.append(candidate.invoice_id)
+                await self._store.record_resend(
+                    candidate, delivered=False, error=f"{type(exc).__name__}: {exc}"
+                )
         return resent
+
+    async def _reconcile(self, candidate: Candidate) -> bool:
+        """Re-sends `candidate`'s decision if its workflow still waits in review; True if sent."""
+        state = await self._delivery.state(candidate.invoice_id)
+        if state in (WorkflowReviewState.CLOSED, WorkflowReviewState.MISSING):
+            self._settle(candidate.invoice_id)
+            return False
+        if state is not WorkflowReviewState.WAITING:
+            return False
+        decision = await self._store.decision(candidate)
+        if decision is None:
+            return False
+        try:
+            await self._delivery.signal(candidate.invoice_id, decision)
+        except (RPCError, RuntimeError, OSError) as exc:
+            log.warning("re-send to invoice %s failed: %s", candidate.invoice_id, exc)
+            await self._store.record_resend(candidate, delivered=False, error=str(exc))
+            return False
+        await self._store.record_resend(candidate, delivered=True, error=None)
+        log.info(
+            "re-sent the %s decision to invoice %s",
+            "approve" if candidate.approved else "reject",
+            candidate.invoice_id,
+        )
+        return True
 
     async def run(self) -> None:
         """Passes every `interval` until cancelled. A failed pass (Postgres or Temporal down) is

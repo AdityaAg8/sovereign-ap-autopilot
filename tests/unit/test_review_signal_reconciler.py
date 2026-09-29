@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 import pytest
+from temporalio.client import WorkflowQueryFailedError
 from temporalio.service import RPCError, RPCStatusCode
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -155,6 +156,37 @@ async def test_one_unreadable_workflow_does_not_starve_the_others() -> None:
     )
 
     assert await ReviewSignalReconciler(store, delivery).reconcile_once() == [B]
+
+
+async def test_a_workflow_whose_query_fails_is_audited_bounded_and_never_aborts_the_pass() -> None:
+    # A query that fails inside the workflow (e.g. a task stuck on nondeterminism) raises a
+    # TemporalError that is not an RPCError; it must not abort the pass, and since it is this
+    # invoice's own failure it counts against `max_resends`.
+    failure = WorkflowQueryFailedError("nondeterminism")
+    store = _Store([Candidate(A, True), Candidate(B, True)], {A: APPROVE, B: APPROVE})
+    delivery = _Delivery({A: failure, B: WorkflowReviewState.WAITING})
+    reconciler = ReviewSignalReconciler(store, delivery, ReconcilerSettings(max_resends=2))
+
+    assert await reconciler.reconcile_once() == [B]
+    delivery.described.clear()
+    for _ in range(3):
+        await reconciler.reconcile_once()
+
+    failed = [r for r in store.resends if r[0] == A]
+    assert failed == [(A, False, "WorkflowQueryFailedError: nondeterminism")] * 2
+    assert delivery.described.count(A) == 1  # bounded: not described after max_resends
+
+
+async def test_an_unreachable_temporal_does_not_use_up_the_resend_budget() -> None:
+    store = _Store([Candidate(A, True)], {A: APPROVE})
+    delivery = _Delivery({A: RPCError("unavailable", RPCStatusCode.UNAVAILABLE, b"")})
+    reconciler = ReviewSignalReconciler(store, delivery, ReconcilerSettings(max_resends=2))
+
+    for _ in range(4):
+        assert await reconciler.reconcile_once() == []
+
+    assert store.resends == []
+    assert delivery.described == [A] * 4
 
 
 async def test_a_pass_is_capped_at_the_batch_size() -> None:
