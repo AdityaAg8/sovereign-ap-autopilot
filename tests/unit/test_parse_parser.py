@@ -87,7 +87,7 @@ async def test_all_digital_pdf_never_calls_the_service() -> None:
     assert len(doc.pages) == 2
     assert [w.text for w in doc.pages[0].words] == ["Hello", "there", "world"]
     assert [w.text for w in doc.pages[1].words] == ["World", "says", "hello"]
-    assert doc.parser_version == "paddleocr-vl-1.6+pdfplumber/3"
+    assert doc.parser_version == "paddleocr-vl-1.6+pdfplumber/4"
 
 
 @pytest.mark.asyncio

@@ -373,16 +373,22 @@ def test_a_looping_page_is_reread_as_strips_and_is_complete_when_all_finish() ->
     assert stats.first_seconds == 5.0 and stats.seconds == 45.0
 
 
-def test_a_strip_that_did_not_finish_keeps_the_page_truncated() -> None:
+def test_a_strip_whose_half_bands_also_fail_keeps_what_they_read_and_the_page_truncated() -> None:
     clock = [0.0]
     first = app.Pass("", finished=False, tokens=3072, loops=0)
 
     def strip(k: int) -> Any:
-        return app.Pass(_zone(f"line {k}", 0.4, 0.5), finished=k != 2, tokens=1024, loops=0)
+        # Strip 2 does not finish; neither do its two half-band re-reads (calls 4 and 5).
+        return app.Pass(
+            _zone(f"line {k}", 0.4, 0.5), finished=k not in (2, 4, 5), tokens=1024, loops=0
+        )
 
-    spotting, _ = _spot(_FakeRun(first, strip, clock), clock)
+    run = _FakeRun(first, strip, clock)
+    spotting, stats = _spot(run, clock)
     assert spotting.hit_limit is True
-    assert len(app._parse_spotting_output(spotting.text)) == 4
+    texts = [t for t, _ in app._parse_spotting_output(spotting.text)]
+    assert sorted(texts) == [f"line {k}" for k in range(6)]
+    assert stats.strips_read == 4 and stats.halves_read == 2 and stats.halves_finished == 0
 
 
 def test_no_strip_pass_when_the_first_pass_used_up_the_deadline() -> None:
@@ -423,6 +429,125 @@ def test_an_unfinished_strip_pass_that_read_less_than_the_first_pass_is_discarde
     spotting, stats = _spot(run, clock)
     assert spotting.text == first_text and spotting.hit_limit is True
     assert stats.used == "first" and stats.strips_read == 4
+
+
+# ---- amendment 4: geometric reading order and half-band re-read -------------------------------
+
+
+def test_a_strip_emitted_bottom_up_and_right_to_left_merges_in_reading_order() -> None:
+    # The live 165d017b0a90 page-2 failure: within one strip, table rows came out bottom-up with
+    # their cells right to left. The merge must not trust the model's emission order.
+    band = app.Band(top=0, bottom=1000, core_top=-float("inf"), core_bottom=float("inf"))
+    rows = [(0.50, ["Widget A", "2", "100.00"]), (0.55, ["Widget B", "1", "50.00"])]
+    cells = [
+        (text, (0.1 + 0.3 * i, y, 0.3 + 0.3 * i, y + 0.02 + 0.002 * i))  # ragged cell heights
+        for y, row in rows
+        for i, text in enumerate(row)
+    ]
+    merged = app.merge_strips([(band, list(reversed(cells)))], 1000)
+    assert [t for t, _ in merged] == [t for t, _ in cells]
+
+
+def test_an_arabic_row_reads_right_to_left_and_an_english_row_left_to_right() -> None:
+    band = app.Band(top=0, bottom=1000, core_top=-float("inf"), core_bottom=float("inf"))
+    zones = [
+        ("Total", (0.1, 0.8, 0.2, 0.82)),
+        ("1,050.00", (0.7, 0.8, 0.9, 0.82)),
+        ("شركة", (0.1, 0.1, 0.3, 0.12)),
+        ("الإجمالي", (0.7, 0.1, 0.9, 0.12)),
+    ]
+    merged = app.merge_strips([(band, zones)], 1000)
+    assert [t for t, _ in merged] == ["الإجمالي", "شركة", "Total", "1,050.00"]
+
+
+_GRID = [
+    (f"r{r}c{c}", (0.1 + 0.3 * c, 0.1 * r, 0.3 + 0.3 * c, 0.1 * r + 0.03))
+    for r in range(3)
+    for c in range(3)
+]
+
+
+@given(st.permutations(list(range(len(_GRID)))))
+def test_reading_order_does_not_depend_on_emission_order(perm: list[int]) -> None:
+    assert app.reading_order([_GRID[i] for i in perm]) == _GRID
+
+
+@given(st.integers(min_value=256, max_value=4000))
+def test_half_bands_split_the_strip_core_and_read_every_kept_line_whole(height: int) -> None:
+    reach = round(height * app.STRIP_OVERLAP_FRAC) / 2
+    for band in app.strip_bands(height):
+        upper, lower = app.half_bands(band, height)
+        assert (upper.top, lower.bottom) == (band.top, band.bottom)
+        assert (upper.core_top, upper.core_bottom) == (band.core_top, lower.core_top)
+        assert lower.core_bottom == band.core_bottom
+        # A line up to one overlap tall whose centre a half keeps lies wholly inside its crop.
+        assert upper.bottom >= upper.core_bottom + reach
+        assert lower.top <= lower.core_top - reach
+
+
+def test_an_unfinished_strip_is_reread_as_two_half_bands_that_complete_the_page() -> None:
+    clock = [0.0]
+    first = app.Pass("", finished=False, tokens=3072, loops=1)
+    upper, lower = app.half_bands(app.strip_bands(1683)[2], 1683)
+
+    def strip(k: int) -> Any:
+        if k == 2:  # strip 2 stops early and lost the row in the middle of the strip
+            return app.Pass(_zone("row top", 0.2, 0.25), finished=False, tokens=1024, loops=5)
+        if k == 4:  # upper half-band of strip 2, emitted bottom-up
+            text = _zone("row mid", 0.6, 0.65) + _zone("row top", 0.3, 0.35)
+            return app.Pass(text, finished=True, tokens=300, loops=0)
+        if k == 5:
+            return app.Pass(_zone("row low", 0.6, 0.65), finished=True, tokens=200, loops=0)
+        return app.Pass(_zone(f"line {k}", 0.4, 0.5), finished=True, tokens=300, loops=0)
+
+    run = _FakeRun(first, strip, clock)
+    spotting, stats = _spot(run, clock)
+    assert [c[0] for c in run.calls[5:]] == [
+        (1190, upper.bottom - upper.top),
+        (1190, lower.bottom - lower.top),
+    ]
+    assert {c[1:3] for c in run.calls[5:]} == {(app.STRIP_MAX_NEW_TOKENS, "strip")}
+    assert [c[3] for c in run.calls[5:]] == [app.PAGE_DEADLINE_S - 45, app.PAGE_DEADLINE_S - 55]
+    texts = [t for t, _ in app._parse_spotting_output(spotting.text)]
+    assert texts == ["line 0", "line 1", "row top", "row mid", "row low", "line 3"]
+    assert spotting.hit_limit is False
+    assert stats.used == "strips" and stats.halves_read == 2 and stats.halves_finished == 2
+
+
+def test_the_deadline_bounds_the_half_band_reread() -> None:
+    clock = [0.0]
+    first = app.Pass("", finished=False, tokens=3072, loops=1)
+
+    def strip(k: int) -> Any:
+        if k < 4:
+            clock[0] += 7.0  # 5 + 4 x 17 = 73 s after the strips: room for one half only
+        finished = k not in (0, 3)
+        return app.Pass(_zone(f"line {k}", 0.4, 0.5), finished=finished, tokens=900, loops=0)
+
+    run = _FakeRun(first, strip, clock)
+    spotting, stats = _spot(run, clock)
+    halves = run.calls[5:]
+    assert len(halves) == 1 and halves[0][3] == app.PAGE_DEADLINE_S - 73
+    assert clock[0] <= app.PAGE_DEADLINE_S
+    assert spotting.hit_limit is True
+    assert stats.halves_read == 1 and stats.seconds == 83.0
+
+
+def test_a_finished_first_pass_never_reaches_the_strip_merge_or_reordering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbidden(*_: Any, **__: Any) -> Any:
+        raise AssertionError("a finished first pass must be returned untouched")
+
+    clock = [0.0]
+    # Emitted bottom-up on purpose: the first pass keeps the model's order byte for byte.
+    text = _zone("Total", 0.9, 0.92) + _zone("Header", 0.05, 0.07) + "odd\ttail"
+    for name in ("merge_strips", "reading_order", "half_bands", "strip_bands", "encode_zones"):
+        monkeypatch.setattr(app, name, forbidden)
+    run = _FakeRun(app.Pass(text, finished=True, tokens=900, loops=0), lambda k: None, clock)
+    spotting, stats = _spot(run, clock)
+    assert spotting.text == text and spotting.hit_limit is False
+    assert len(run.calls) == 1 and stats.halves_read == 0
 
 
 def test_loop_guard_and_strip_settings_match_adr_0013_amendment_2() -> None:

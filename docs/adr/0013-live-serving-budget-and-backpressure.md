@@ -434,3 +434,60 @@ then read more strips before 90 s, which can only recover more zones.
 - Rate: `nvidia-smi` shows the parse model process alone, the host is otherwise idle, and the
   page log's `first_tokens / first_seconds` on a dense English page is at least 50 tokens/s.
 - Then run the parse-cache fill alone and record seconds per scan from its log.
+
+## Amendment 4 (2026-09-29): strip merge in reading order, and half-band re-read of an unfinished strip
+
+**Problem.** The M5.6 e2e run parsed invoice 165d017b0a90 page 2 (1683 px) through the strip
+path (`parse_page_truncated page_index=1`). Strip 3's kept band (page y 0.5006 to 0.7359) lost a
+whole table row: nothing was parsed between y 0.492 and 0.612. The next two rows came out
+bottom-up, with their cells right to left. Two causes: `merge_strips` kept each strip's zones in
+the model's emission order, which a strip that loops and closes zones does not keep; and a strip
+that stopped on its loop limit or budget was accepted as it was, so the rows after its stop point
+were simply missing.
+
+**Decision.** In `infra/docker/parse/app.py`, strip path only:
+
+1. **Geometric reading order.** `merge_strips` returns its kept zones through `reading_order`:
+   zones are grouped into rows by vertical centre (a zone joins the row whose running mean centre
+   is within half the median zone height, like `apx.parse.digital._cluster_lines`), rows run top
+   to bottom, and a row runs left to right, or right to left when its text is right-to-left by
+   the digital path's rule (at least 30% Arabic-script letters). The model's emission order is
+   no longer trusted inside a strip or across strips.
+2. **Half-band re-read.** After all strips are read, each strip that did not end on EOS is read
+   again as two half-bands (`half_bands`): each crops half the strip plus half a strip overlap
+   past the midpoint, and their cores split the strip's core there, so a kept line lies wholly
+   inside the half that keeps it. Each half is a normal strip call (1024-token budget, closing
+   loop guard) and is only started with at least `MIN_STRIP_PASS_S` (10 s) left before
+   `PAGE_DEADLINE_S` (90 s), with `max_time` set to the time left, so the page's wall-clock bound
+   is unchanged. Strips are all read first so a slow strip cannot starve the strips below it.
+3. **Accepting the halves.** When both halves finish they replace the strip, and the strip counts
+   as finished. Otherwise the halves' zones and the strip's own zones are pooled (halves first, so
+   the dedupe keeps their reading of a line both read) and the page stays `truncated`, as before.
+4. **Unchanged.** A page whose first pass ends on EOS is returned byte-identical and never reaches
+   the merge, reordering or half-bands (pinned by a test that makes those functions raise). The
+   fallback to the first pass when an unfinished strip pass recovers fewer zones still applies.
+   The page log gains `halves_read` and `halves_finished`.
+5. `SERVICE_PARSER_VERSION` moves to `paddleocr-vl-1.6+pdfplumber/4`: scan parses that took the
+   strip path change. Stored parses keep loading (each ref carries its version), and
+   `evals.parse_cache` re-parses on the version and source hash.
+
+**Rejected.** Re-reading an unfinished strip immediately (before the strips below it): on a page
+with several looping strips it can spend the deadline on one strip and leave the page's lower half
+unread. Splitting into more than two halves: each extra call costs a model prefill and ~10 s of
+deadline, and two halves already cut the per-call zone count in half.
+
+**Proof (CPU).** `tests/unit/test_parse_loop_guard.py`: a strip emitted bottom-up with cells right
+to left merges in reading order; an Arabic row reads right to left and an English row left to
+right; reading order does not depend on emission order (property test); half-band geometry for
+any page height; an unfinished strip is re-read as two half-bands whose rows complete the page;
+half-bands that also fail keep what they read and the page truncated; the deadline admits only the
+halves that fit; the finished first pass never touches the new code.
+
+**Validation (GPU, pending).**
+
+- Re-parse invoice 165d017b0a90 (page 2 in particular): the row between y 0.492 and 0.612 is
+  present, rows run top to bottom with cells left to right, and the page log shows
+  `halves_read`/`halves_finished` and `seconds` under 90.
+- Re-parse the amendment-2 probe set (20 documents, 32 pages): the 4 English documents' first
+  passes stay byte-identical; for the looping pages, compare IBAN, total and zone recovery with
+  the amendment-2 run, and record how many pages now come back untruncated.

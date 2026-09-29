@@ -3,9 +3,11 @@ page image per POST /parse. The model lives in a child process that loads on the
 is stopped by POST /unload, which returns all of its GPU memory (CUDA context included) so the
 worker's GPU stage scheduler can hand the card to the extract models (ADR-0013). A page whose
 decoding loops or runs out of budget is re-read as overlapping horizontal strips with a loop guard
-(ADR-0013 amendment 2). Only the scan path calls this; born-digital PDFs are parsed host-side by
-apx.parse.digital (pdfplumber). Every route but /health needs the shared service token, browser
-requests are refused, and page images are pixel-capped before decoding (REVIEW N-06).
+(ADR-0013 amendment 2); an unfinished strip is re-read as two half-bands and the merged zones are
+put in geometric reading order (amendment 4). Only the scan path calls this; born-digital PDFs are
+parsed host-side by apx.parse.digital (pdfplumber). Every route but /health needs the shared
+service token, browser requests are refused, and page images are pixel-capped before decoding
+(REVIEW N-06).
 """
 
 from __future__ import annotations
@@ -91,7 +93,19 @@ PAGE_DEADLINE_S: Final[float] = 90.0
 """Wall-clock bound on one page's decoding, first pass plus strips, under the 120 s client
 timeout (apx.parse.config) with room for the ~12 s lazy model load on a cold first page."""
 MIN_STRIP_PASS_S: Final[float] = 10.0
-"""A strip pass that would start with less time than this left is not attempted."""
+"""A strip pass (or half-band re-read) that would start with less time than this left is not
+attempted."""
+
+# Arabic-script blocks and the RTL threshold, the same as apx.parse.digital's (this image does not
+# ship `apx`); used to order a merged row's zones in its reading direction (amendment 4).
+_ARABIC_BLOCKS: Final[tuple[tuple[int, int], ...]] = (
+    (0x0600, 0x06FF),
+    (0x0750, 0x077F),
+    (0x08A0, 0x08FF),
+    (0xFB50, 0xFDFF),
+    (0xFE70, 0xFEFF),
+)
+_RTL_LINE_THRESHOLD: Final[float] = 0.3
 
 # One recognized text zone is emitted as `<text><|LOC_a|><|LOC_b|><|LOC_c|><|LOC_d|><|LOC_e|>
 # <|LOC_f|><|LOC_g|><|LOC_h|>` -- four (x, y) corners of an axis-aligned box, clockwise from
@@ -595,10 +609,67 @@ def _same_zone(a: Zone, b: Zone) -> bool:
     return _iou(a[1], b[1]) >= 0.5 and (ta in tb or tb in ta)
 
 
+def half_bands(
+    band: Band, height: int, overlap_frac: float = STRIP_OVERLAP_FRAC
+) -> tuple[Band, Band]:
+    """The two halves an unfinished strip is re-read as (ADR-0013 amendment 4). Each crops half
+    the strip plus half a strip overlap past the split, and their cores split the strip's core
+    there, so together they keep exactly the lines the strip itself would have kept."""
+    mid = (band.top + band.bottom) / 2
+    reach = round(height * overlap_frac) / 2
+    split = min(max(mid, band.core_top), band.core_bottom)
+    upper = Band(band.top, min(band.bottom, math.ceil(mid + reach)), band.core_top, split)
+    lower = Band(max(band.top, math.floor(mid - reach)), band.bottom, split, band.core_bottom)
+    return upper, lower
+
+
+def _is_arabic(ch: str) -> bool:
+    code = ord(ch)
+    return any(lo <= code <= hi for lo, hi in _ARABIC_BLOCKS)
+
+
+def _rtl(text: str) -> bool:
+    """Right-to-left reading direction, by the same rule as apx.parse.digital.is_rtl_text (the
+    service image does not ship `apx`): at least 30% of the letters are Arabic-script."""
+    letters = [ch for ch in text if ch.isalpha()]
+    return bool(letters) and sum(map(_is_arabic, letters)) / len(letters) >= _RTL_LINE_THRESHOLD
+
+
+def reading_order(zones: Sequence[Zone]) -> list[Zone]:
+    """`zones` in geometric reading order (ADR-0013 amendment 4), never the model's emission
+    order: zones are grouped into rows by vertical centre (a zone joins the row whose running
+    mean centre is within half the median zone height), rows run top to bottom, and a row's zones
+    run left to right, or right to left when the row's text reads right to left."""
+    if not zones:
+        return []
+    heights = sorted(box[3] - box[1] for _, box in zones)
+    tolerance = heights[len(heights) // 2] / 2
+
+    def centre(zone: Zone) -> float:
+        return (zone[1][1] + zone[1][3]) / 2
+
+    rows: list[list[Zone]] = []
+    means: list[float] = []
+    for zone in sorted(zones, key=lambda z: (centre(z), z[1][0])):
+        if rows and abs(centre(zone) - means[-1]) <= tolerance:
+            rows[-1].append(zone)
+            means[-1] += (centre(zone) - means[-1]) / len(rows[-1])
+        else:
+            rows.append([zone])
+            means.append(centre(zone))
+    ordered: list[Zone] = []
+    for row in rows:
+        if _rtl(" ".join(text for text, _ in row)):
+            ordered.extend(sorted(row, key=lambda z: (-z[1][2], -z[1][0])))
+        else:
+            ordered.extend(sorted(row, key=lambda z: (z[1][0], z[1][2])))
+    return ordered
+
+
 def merge_strips(strips: Sequence[tuple[Band, Sequence[Zone]]], height: int) -> list[Zone]:
-    """Zones of every strip in page coordinates, strip by strip in reading order. A zone is kept
-    only from the strip whose core holds its centre, and a second reading of a kept zone (see
-    `_same_zone`) only replaces it when its text is longer."""
+    """Zones of every strip in page coordinates, in geometric reading order (`reading_order`).
+    A zone is kept only from the strip whose core holds its centre, and a second reading of a
+    kept zone (see `_same_zone`) only replaces it when its text is longer."""
     merged: list[Zone] = []
     for band, zones in strips:
         for text, box in zones:
@@ -612,7 +683,7 @@ def merge_strips(strips: Sequence[tuple[Band, Sequence[Zone]]], height: int) -> 
                 merged.append(zone)
             elif len(text) > len(merged[dup][0]):
                 merged[dup] = zone
-    return merged
+    return reading_order(merged)
 
 
 def encode_zones(zones: Sequence[Zone]) -> str:
@@ -642,6 +713,9 @@ class PageStats(NamedTuple):
     strips_finished: int
     strip_tokens: int
     strip_loops: int
+    halves_read: int
+    """Half-band re-reads of unfinished strips (ADR-0013 amendment 4)."""
+    halves_finished: int
     used: Literal["first", "strips"]
     seconds: float
 
@@ -661,11 +735,16 @@ def spot_page(
     as before; a page that ends on EOS is returned untouched. A page stopped by a loop or the
     budget is re-read as `strip_bands` strips, each with its own STRIP_MAX_NEW_TOKENS budget and
     a closing loop guard, inside PAGE_DEADLINE_S, and the merged strips replace the first pass.
-    `hit_limit` stays true unless every strip finished; an unfinished strip pass that recovered
-    fewer zones than the first pass returns the first pass instead."""
+    A strip that does not finish is then re-read as its two `half_bands`, still inside the
+    deadline (amendment 4): when both halves finish they replace the strip, otherwise the strip's
+    and the halves' zones are pooled (what is recoverable) and the page stays truncated.
+    `hit_limit` stays true unless every strip finished or was replaced by finished halves; an
+    unfinished strip pass that recovered fewer zones than the first pass returns the first pass
+    instead. The merged zones are in geometric reading order (`reading_order`)."""
     started = clock()
     first = run(image, budget, "first", None)
     first_seconds = round(clock() - started, 2)
+    halves: list[Pass] = []
 
     def stats(results: Sequence[Pass], used: Literal["first", "strips"]) -> PageStats:
         return PageStats(
@@ -677,6 +756,8 @@ def spot_page(
             strips_finished=sum(r.finished for r in results),
             strip_tokens=sum(r.tokens for r in results),
             strip_loops=sum(r.loops for r in results),
+            halves_read=len(halves),
+            halves_finished=sum(h.finished for h in halves),
             used=used,
             seconds=round(clock() - started, 2),
         )
@@ -695,11 +776,31 @@ def spot_page(
             break
         crop = image.crop((0, band.top, width, band.bottom))
         results.append(run(crop, STRIP_MAX_NEW_TOKENS, "strip", remaining))
-    complete = len(results) == len(bands) and all(r.finished for r in results)
-    zones = merge_strips(
-        [(band, _parse_spotting_output(r.text)) for band, r in zip(bands, results, strict=False)],
-        height,
-    )
+
+    reads: list[tuple[Band, Sequence[Zone]]] = []
+    resolved = 0
+    for band, strip in zip(bands, results, strict=False):
+        strip_zones = _parse_spotting_output(strip.text)
+        if strip.finished:
+            reads.append((band, strip_zones))
+            resolved += 1
+            continue
+        pair: list[tuple[Band, Pass]] = []
+        for half in half_bands(band, height):
+            remaining = PAGE_DEADLINE_S - (clock() - started)
+            if remaining < MIN_STRIP_PASS_S:
+                break
+            crop = image.crop((0, half.top, width, half.bottom))
+            pair.append((half, run(crop, STRIP_MAX_NEW_TOKENS, "strip", remaining)))
+        halves.extend(p for _, p in pair)
+        # Halves first, so the merge's dedupe keeps their reading of a line the strip also read.
+        reads.extend((half, _parse_spotting_output(p.text)) for half, p in pair)
+        if len(pair) == 2 and all(p.finished for _, p in pair):
+            resolved += 1
+        else:
+            reads.append((band, strip_zones))
+    complete = len(results) == len(bands) and resolved == len(bands)
+    zones = merge_strips(reads, height)
     if not complete and len(zones) < len(_parse_spotting_output(first.text)):
         return Spotting(first.text, hit_limit=True), stats(results, "first")
     return Spotting(encode_zones(zones), hit_limit=not complete), stats(results, "strips")
