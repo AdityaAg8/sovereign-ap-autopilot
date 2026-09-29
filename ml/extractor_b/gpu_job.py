@@ -40,11 +40,12 @@ from ml.extractor_b.loop import (
 from ml.extractor_b.prompting import (
     INSTRUCTION_PART,
     LINE_ITEMS_SUFFIX,
+    MASK_FIELDS_KEY,
     MASK_LINE_ITEMS_KEY,
     RESPONSE_PART,
     SAMPLE_IDS_KEY,
     LazyTrainingExamples,
-    mask_line_items_labels,
+    finalize_labels,
 )
 from ml.extractor_b.selection import select_best
 from ml.extractor_b.trainer import guarded_trainer_class, loop_callback_class
@@ -111,14 +112,23 @@ def _collator(model: Any, processor: Any) -> Any:
         instruction_part=INSTRUCTION_PART,
         response_part=RESPONSE_PART,
     )
-    suffix_ids = processor.tokenizer(LINE_ITEMS_SUFFIX, add_special_tokens=False)["input_ids"]
+    tokenizer = processor.tokenizer
+    suffix_ids = tokenizer(LINE_ITEMS_SUFFIX, add_special_tokens=False)["input_ids"]
+
+    def encode(text: str) -> tuple[list[int], list[tuple[int, int]]]:
+        enc = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+        return list(enc["input_ids"]), [(int(s), int(e)) for s, e in enc["offset_mapping"]]
 
     def collate(examples: list[dict[str, Any]]) -> dict[str, Any]:
         batch: dict[str, Any] = inner(examples)
-        for i, example in enumerate(examples):  # ADR-0012 §3: no loss on unlabelled line items
-            if example.get(MASK_LINE_ITEMS_KEY):
-                masked = mask_line_items_labels(
-                    batch["input_ids"][i].tolist(), batch["labels"][i].tolist(), suffix_ids
+        for i, example in enumerate(examples):  # ADR-0012 §3 and ADR-0019 §9.3 loss masks
+            if example.get(MASK_LINE_ITEMS_KEY) or example.get(MASK_FIELDS_KEY):
+                masked = finalize_labels(
+                    example,
+                    batch["input_ids"][i].tolist(),
+                    batch["labels"][i].tolist(),
+                    suffix_ids=suffix_ids,
+                    encode=encode,
                 )
                 batch["labels"][i] = torch.tensor(masked, dtype=batch["labels"].dtype)
         batch[SAMPLE_IDS_KEY] = [e[SAMPLE_IDS_KEY] for e in examples]

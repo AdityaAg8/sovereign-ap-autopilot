@@ -1,7 +1,8 @@
 """Extractor B registration, gate run and promotion (ADR-0009 §1.8 build item 10, ADR-0015 §5):
 `register` makes the export a version of MLflow model `extractor_b` with alias `challenger`;
 `eval-b` runs the Extractor A harness on UAE test through `extractor-b-challenger`; `gates`
-measures P1-P5; `promote` moves `champion` only when every gate passed, in a fixed order.
+measures P1-P5; `promote` moves `champion` only when every gate passed and the challenger's real
+hold-out reports exist (ADR-0019 §9.4), in a fixed order.
 
 Usage: python -m ml.extractor_b.promote {register,eval-b,gates,promote} [options]
 """
@@ -26,6 +27,7 @@ import httpx
 import yaml
 
 from apx.extract.interfaces import ExtractorId
+from evals.datasets.manifest import MANIFEST_PATH, DatasetStatus, load_manifest
 from evals.extraction_a import load_rows, prompt_builder_for, run_identity
 from evals.extraction_f1 import (
     RowsIncompleteError,
@@ -58,6 +60,8 @@ from ml.extractor_b.gates import (
     GateEvidenceError,
     Hygiene,
     LatencyRun,
+    RealHoldout,
+    RealHoldoutLoader,
     check_hygiene,
     evaluate_gates,
     evidence_sha256,
@@ -65,7 +69,9 @@ from ml.extractor_b.gates import (
     gate_tags,
     latency_subset,
     load_evidence,
+    load_real_eval_reports,
     render_markdown,
+    require_real_holdouts,
     write_evidence,
 )
 from ml.promotion.errors import ChampionChangedError, PromotionApplyError, PromotionError
@@ -466,6 +472,8 @@ class PromotionResult:
     champion_before: ModelVersion | None
     champion_after: ModelVersion
     applied: tuple[str, ...]
+    real_holdouts: tuple[RealHoldout, ...] = ()
+    """ADR-0019 §9.4: the challenger's real hold-out reports, for the record (never gating)."""
 
 
 def promote(
@@ -476,12 +484,16 @@ def promote(
     invalidator: CalibratorInvalidator,
     lock_writer: ModelsLockWriter,
     repointer: LlamaSwapRepointer,
+    real_reports_dir: Path,
+    docile_present: bool,
+    load_real: RealHoldoutLoader = load_real_eval_reports,
     verify: Callable[[Path], ExportManifest | None] = verify_export,
     models_root: Path = Path("models"),
     llama_swap_config: Path = LLAMA_SWAP_CONFIG,
 ) -> PromotionResult:
-    """Re-read and re-check the gate evidence, then (ADR-0015 §5 order, plus the serving
-    repoint before the alias commit): compare-and-set on `champion` → invalidate calibrator →
+    """Re-read and re-check the gate evidence and require the challenger's real hold-out
+    reports (ADR-0019 §9.4, fail closed), then (ADR-0015 §5 order, plus the serving repoint
+    before the alias commit): compare-and-set on `champion` → invalidate calibrator →
     models.lock entry → repoint llama-swap `extractor-b` → alias `champion`. A failure after
     the check raises `PromotionApplyError` with the steps already applied; the alias moves last,
     so it never points at a build that is not locked and served."""
@@ -513,6 +525,12 @@ def promote(
     current = registry.alias("champion")
     if current == challenger:
         return PromotionResult(current, challenger, ())  # already promoted, nothing to redo
+    holdouts = require_real_holdouts(
+        real_reports_dir,
+        gguf_sha256=evidence.gguf_sha256,
+        docile_present=docile_present,
+        load=load_real,
+    )
     if current != evidence.champion_at_measurement:
         raise ChampionChangedError(
             evaluated=evidence.champion_at_measurement or "<unset>", current=current or "<unset>"
@@ -564,7 +582,7 @@ def promote(
             applied=tuple(applied),
             cause=exc,
         ) from exc
-    return PromotionResult(current, challenger, tuple(applied))
+    return PromotionResult(current, challenger, tuple(applied), holdouts)
 
 
 # --- gates: evidence assembly ----------------------------------------------------------------
@@ -866,6 +884,15 @@ def run_gates(
 # --- CLI -------------------------------------------------------------------------------------
 
 
+def docile_present(manifest_path: Path) -> bool:
+    """DocILE counts as present when the data manifest lists it as fetched (ADR-0019 §9.4: its
+    val report is then required too). A missing manifest means nothing was fetched."""
+    if not manifest_path.exists():
+        return False
+    entry = load_manifest(manifest_path).datasets.get("docile")
+    return entry is not None and entry.status is DatasetStatus.PRESENT
+
+
 def _default_export_dir() -> Path:
     return latest_run_dir(DEFAULT_RUNS_DIR) / EXPORT_DIR_NAME
 
@@ -887,6 +914,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         cmd.add_argument("--b-rows", type=Path, default=DEFAULT_B_ROWS)
         cmd.add_argument("--evidence", type=Path, default=EVIDENCE_PATH)
         cmd.add_argument("--limit", type=int, default=0, help="eval-b only: smoke a few docs")
+        cmd.add_argument(
+            "--real-reports-dir", type=Path, default=Path("reports"), help="real_*.json reports"
+        )
+        cmd.add_argument("--manifest", type=Path, default=MANIFEST_PATH, help="data manifest")
     args = parser.parse_args(argv)
     if args.export_dir is None:
         args.export_dir = _default_export_dir()
@@ -936,7 +967,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             invalidator=FileCalibratorInvalidator(),
             lock_writer=JsonModelsLockWriter(),
             repointer=LlamaSwapRepointer(),
+            real_reports_dir=args.real_reports_dir,
+            docile_present=docile_present(args.manifest),
         )
+        for held in result.real_holdouts:
+            print(f"real hold-out {held.set}/{held.split}: n={held.n_docs} ({held.report_file})")
         if not result.applied:
             print(f"{REGISTERED_MODEL} v{result.champion_after} is already champion")
         else:

@@ -18,6 +18,7 @@ from evals.real.models import DatasetMissingError
 from ml.extractor_b.mappings import (
     CORD_FIELDS,
     CORD_IGNORED,
+    cord_label_known,
     cord_leaves,
     unmapped_cord_keys,
 )
@@ -57,8 +58,7 @@ PRED: dict[str, Any] = {
 
 
 def test_every_cord_key_is_mapped_or_ignored() -> None:
-    known = {*CORD_FIELDS, *CORD_IGNORED}
-    assert [k for k in CORD_KEYS_AT_REVISION if k not in known] == []
+    assert [k for k in CORD_KEYS_AT_REVISION if not cord_label_known(k)] == []
     assert not set(CORD_FIELDS) & CORD_IGNORED
 
 

@@ -174,6 +174,13 @@ class SampleSource(StrEnum):
     UAE = "uae"
     DOCILE = "docile"
     FATURA = "fatura"
+    CORD = "cord"
+    """CORD v2 train receipts (ADR-0019 §9): only 3 header totals and 4 line keys annotated."""
+
+
+class MixSourceMissingError(TrainingError):
+    """A source the chosen `REAL_MIX` round requires (ADR-0019 §9.2) has no rows; the round never
+    silently trains on a smaller mix."""
 
 
 LINE_ITEMS_UNLABELLED: frozenset[SampleSource] = frozenset({SampleSource.FATURA})
