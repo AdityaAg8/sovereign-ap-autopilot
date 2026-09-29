@@ -77,6 +77,7 @@ def _tables() -> list[Table]:
 _LATER_COLUMNS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
     ("invoices", "kind", ("ck_invoices_kind_known",), "0007_invoice_kind"),
     ("approvals", "invoice_digest", (), "0012_approval_digest"),
+    ("approvals", "corrections_digest", (), "0014_approval_corrections_digest"),
 )
 
 
