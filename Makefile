@@ -21,6 +21,8 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate archive-stale-rows \
         guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
+        real-fetch-cord real-parse-cord real-cord-dev real-cord real-cord-b real-extractbench \
+        real-docile real-reality-template real-reality real-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all ci-local
 
@@ -190,6 +192,53 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 SPLITS ?= test,cal
 REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-adr0012,cal-rows-a,+calibrate TRUST_EXTRACTORS=a,eval-b,eval-attacks
 QUEUE ?= $(REDUCED_GPU_QUEUE)
+# ADR-0019 real-data track. Phase 1: A zero-shot (and B v1 as the "before") on real documents,
+# CORD first, then ExtractBench. Phase 2 re-evaluates a retrained B on the same hold-outs.
+REAL_EVAL_QUEUE = real-parse-cord SPLIT=validation,real-cord-dev,real-parse-cord SPLIT=test,real-cord SPLIT=test,real-cord-b B_VERSION=v1,real-extractbench,+real-report
+REAL_B_EVAL_QUEUE = eval-b,gates-b,real-cord-b B_VERSION=r1,real-docile EXTRACTOR=b B_VERSION=r1,+real-report
+
+# --- ADR-0019 real-data evaluation (reports/real_*.md|json; scoreboard real-data section) ---
+real-fetch-cord:
+	@echo "==> fetch CORD v2 test+validation (naver-clova-ix/cord-v2, pinned revision) -> data/cord/"
+	uv run python -m evals.datasets fetch --set cord --splits test,validation
+
+real-parse-cord:
+	@echo "==> parse CORD $(or $(SPLIT),test) into the shared parse cache (parse service; resumable)"
+	$(HOST_PARSE) uv run python -m evals.real parse --set cord --split $(or $(SPLIT),test)
+
+real-cord-dev:
+	@echo "==> Extractor A on CORD validation (mapping/normaliser development only; never a result)"
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split validation --extractor a
+	uv run python -m evals.real dev-report
+
+real-cord:
+	@echo "==> Extractor A zero-shot on CORD $(or $(SPLIT),test)"
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split $(or $(SPLIT),test) --extractor a
+
+real-cord-b:
+	@echo "==> Extractor B $(or $(B_VERSION),v1) on CORD test"
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split test --extractor b --b-version $(or $(B_VERSION),v1)
+
+real-extractbench:
+	@echo "==> Extractor A on ExtractBench short (headline on the 245 source:real documents)"
+	$(HOST_PARSE) uv run python -m evals.real run --set extractbench --extractor a
+
+real-docile:
+	@echo "==> Extractor $(or $(EXTRACTOR),a) on DocILE val (needs the DocILE fetch; fails typed without it)"
+	$(HOST_PARSE) uv run python -m evals.real run --set docile --extractor $(or $(EXTRACTOR),a) --b-version $(or $(B_VERSION),v1)
+
+real-reality-template:
+	uv run python -m evals.real reality-template
+
+real-reality:
+	@echo "==> Extractor A on the owner's labelled reality set (data/real_uae/)"
+	$(HOST_PARSE) uv run python -m evals.real run --set reality --extractor a
+
+real-report:
+	@echo "==> real-data reports -> scoreboard -> README"
+	uv run python -m evals.real report
+	uv run python -m evals.scoreboard
+	uv run python scripts/sync_readme.py
 
 parse-cache:
 	@echo "==> parse UAE $(SPLITS) into the shared parse cache data/cache/parse/ (parse service; resumable)"
@@ -247,9 +296,11 @@ TRAINER_IMAGE := sovereign-ap/trainer:2026.9.28
 TRAINER_RUN = cd infra && TRAINER_IMAGE_DIGEST=$$(docker image inspect -f '{{.Id}}' $(TRAINER_IMAGE)) \
 	GIT_SHA=$$(git rev-parse HEAD) $(COMPOSE) --profile train run --rm --name extractor-b-trainer trainer
 
+# REAL_MIX=r1 adds CORD train, r2 also DocILE train (ADR-0019 §9.2); empty keeps the v1 mix.
+REAL_MIX ?=
 train-b-data:
-	@echo "==> Extractor B data prep + guards (CPU) -> data/ml/extractor_b/"
-	uv run python -m ml.extractor_b.data
+	@echo "==> Extractor B data prep + guards (CPU) -> data/ml/extractor_b/ (mix: $(or $(REAL_MIX),v1))"
+	uv run python -m ml.extractor_b.data $(if $(REAL_MIX),--real-mix $(REAL_MIX))
 
 train-b-probe: gpu-free
 	@echo "==> Extractor B VRAM probe (foreground) -> data/ml/extractor_b/probe.json"
