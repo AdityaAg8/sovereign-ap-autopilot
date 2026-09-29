@@ -1,7 +1,8 @@
 """Unit tests for Extractor B registration and promotion (`ml.extractor_b.promote`, ADR-0009
 §1.8, ADR-0015 §5) against an in-memory MLflow REST fake (httpx MockTransport), a real small
 export on disk, a temp models.lock and a copy of infra/llama-swap.yaml: idempotent register, gates
-evidence binding, the ordered side effects, compare-and-set, and fail-closed refusals."""
+evidence binding, the ordered side effects, compare-and-set, and fail-closed refusals, including
+a challenger without its ADR-0019 §9.4 real hold-out reports."""
 
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from ml.extractor_b.export import (
     digest_file,
     digest_tree,
 )
-from ml.extractor_b.gates import GateEvidenceError, Hygiene, LatencyRun
+from ml.extractor_b.gates import GateEvidenceError, Hygiene, LatencyRun, RealHoldoutsMissingError
 from ml.extractor_b.promote import (
     STAGE_LLAMA_SWAP,
     ChampionMovedDuringApplyError,
@@ -46,6 +47,7 @@ from ml.extractor_b.promote import (
     UaeScores,
     assemble_evidence,
     container_path,
+    docile_present,
     eval_b_argv,
     expected_identities,
     parse_args,
@@ -64,6 +66,7 @@ from ml.promotion.retrain import (
     ModelVersion,
 )
 from tests.unit.ml.conftest import sha
+from tests.unit.ml.test_real_holdouts import load_fake_reports, write_real_report
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUN_ID = "b-20260923T2025-eb0aea7d"
@@ -281,10 +284,22 @@ def gated(env: Env, *, b_overall: float = 0.90, b_p50: float = 10.0) -> ModelVer
     return version
 
 
+def challenger_gguf(env: Env) -> str:
+    return manifest_of(env.export_dir).artifact(Q4_NAME).sha256
+
+
 def run_promote(
-    env: Env, *, lock_fail: bool = False, repointer: LlamaSwapRepointer | None = None
+    env: Env,
+    *,
+    lock_fail: bool = False,
+    repointer: LlamaSwapRepointer | None = None,
+    real_reports: bool = True,
+    docile: bool = False,
 ) -> Any:
     events = env.server.events
+    reports_dir = env.root / "real_reports"
+    if real_reports:
+        write_real_report(reports_dir, "cord", "test", gguf=challenger_gguf(env))
     return promote(
         evidence_path=env.evidence_path,
         export_dir=env.export_dir,
@@ -294,6 +309,9 @@ def run_promote(
         repointer=repointer or RecordingRepointer(env.swap, events),
         models_root=env.root / "models",
         llama_swap_config=env.swap,
+        real_reports_dir=reports_dir,
+        docile_present=docile,
+        load_real=load_fake_reports,
     )
 
 
@@ -661,3 +679,48 @@ def test_expected_identities_use_the_served_a_gguf_and_the_export(env: Env) -> N
     assert a_id.model == "extractor-a" and a_id.gguf_sha256 == gguf["sha256"]
     assert b_id.gguf_sha256 == manifest_of(env.export_dir).artifact(Q4_NAME).sha256
     assert a_id.prompt_version != b_id.prompt_version
+
+
+# --- ADR-0019 §9.4: real hold-out reports ------------------------------------------------------
+
+
+def test_missing_real_holdouts_block_every_side_effect(env: Env) -> None:
+    gated(env)
+    lock_before, swap_before = env.lock.read_bytes(), env.swap.read_bytes()
+    env.server.events.clear()
+    with pytest.raises(RealHoldoutsMissingError, match="cord/test"):
+        run_promote(env, real_reports=False)
+    assert env.server.events == []
+    assert env.lock.read_bytes() == lock_before and env.swap.read_bytes() == swap_before
+    assert "champion" not in env.server.models["extractor_b"]
+
+
+def test_docile_val_is_required_once_docile_is_fetched(env: Env) -> None:
+    gated(env)
+    env.server.events.clear()
+    with pytest.raises(RealHoldoutsMissingError, match="docile/val"):
+        run_promote(env, docile=True)
+    assert env.server.events == []
+    write_real_report(env.root / "real_reports", "docile", "val", gguf=challenger_gguf(env))
+    result = run_promote(env, docile=True)
+    assert [(h.set, h.split) for h in result.real_holdouts] == [("cord", "test"), ("docile", "val")]
+    assert result.applied[-1] == STAGE_ALIAS
+
+
+def test_promotion_records_the_real_holdouts_without_judging_them(env: Env) -> None:
+    gated(env)
+    result = run_promote(env)
+    assert [(h.set, h.split, h.n_docs) for h in result.real_holdouts] == [("cord", "test", 100)]
+
+
+def test_docile_present_reads_the_manifest(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    assert docile_present(manifest) is False
+    entry = {"source": "s", "version": "v", "license": "l", "files": []}
+    body = {"generated_at": "2026-09-29T00:00:00Z", "datasets": {}}
+    body["datasets"] = {"docile": {**entry, "status": "deferred", "blocked": "token"}}
+    manifest.write_text(json.dumps(body), encoding="utf-8")
+    assert docile_present(manifest) is False
+    body["datasets"] = {"docile": {**entry, "status": "present"}}
+    manifest.write_text(json.dumps(body), encoding="utf-8")
+    assert docile_present(manifest) is True
