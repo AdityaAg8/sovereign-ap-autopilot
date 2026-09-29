@@ -52,6 +52,7 @@ from apx.audit.interfaces import AuditEvent
 from apx.common.errors import (
     InvoiceStateConflictError,
     PolicyDeniedError,
+    ProposalInvoiceMismatchError,
     ProposalNotExecutableError,
 )
 from apx.common.master import BankDetailChange, User
@@ -585,6 +586,13 @@ class DbInvoiceService:
         refuse_totals_mismatch(route_reasons)
         return corrections_for_rows(rows)
 
+    async def _proposal_invoice(self, proposal_id: str) -> InvoiceId | None:
+        """The invoice a proposal of any kind names, else None (none named, or no such
+        proposal: `_execute_proposal` then answers 404)."""
+        async with get_session() as session:
+            row = await session.get(ProposalRow, proposal_id)
+        return InvoiceId(row.invoice_id) if row is not None and row.invoice_id else None
+
     async def _approving_proposal_invoice(self, proposal_id: str) -> InvoiceId | None:
         """The invoice an approve_payment proposal would approve, else None."""
         async with get_session() as session:
@@ -602,6 +610,14 @@ class DbInvoiceService:
         elif request.action == "execute_proposal":
             if not request.proposal_id:
                 raise PolicyDeniedError("execute_proposal requires proposal_id")
+            # P3-02: the proposal must be for the invoice in the path, so the approval, its
+            # audit entry and the review signal all name the same invoice.
+            proposed_for = await self._proposal_invoice(request.proposal_id)
+            if proposed_for is not None and proposed_for != invoice_id:
+                raise ProposalInvoiceMismatchError(
+                    f"proposal {request.proposal_id} is for invoice {proposed_for}, "
+                    f"not {invoice_id}"
+                )
             target = await self._approving_proposal_invoice(request.proposal_id)
             if target is not None:
                 corrections = await self._review_corrections(target)

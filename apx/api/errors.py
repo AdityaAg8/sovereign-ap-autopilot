@@ -16,6 +16,7 @@ from apx.common.errors import (
     ConfigError,
     InvoiceStateConflictError,
     PolicyDeniedError,
+    ProposalInvoiceMismatchError,
     ProposalNotExecutableError,
     SegregationOfDutiesError,
 )
@@ -54,6 +55,12 @@ def install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(InvoiceStateConflictError)
     async def _state_conflict(_request: Request, exc: InvoiceStateConflictError) -> JSONResponse:
+        return _error_response(status.HTTP_409_CONFLICT, str(exc))
+
+    @app.exception_handler(ProposalInvoiceMismatchError)
+    async def _proposal_mismatch(
+        _request: Request, exc: ProposalInvoiceMismatchError
+    ) -> JSONResponse:
         return _error_response(status.HTTP_409_CONFLICT, str(exc))
 
     @app.exception_handler(ProposalNotExecutableError)
