@@ -532,6 +532,12 @@ class Approval(Base):
     """`apx.policy.writer.approval_digest` of the invoice and vendor payee at approval time. The
     workflow re-derives it before paying and holds when it does not match (REVIEW.md C-03);
     NULL only on rows written before migration 0012, which the workflow treats as unbacked."""
+    corrections_digest: Mapped[str | None] = mapped_column(String(64))
+    """`apx.review.corrections.corrections_digest` of the review corrections the approver
+    approved. The workflow acts on a `review` signal only when its corrections digest to this and
+    the invoice's current `fields` rows still do (REVIEW.md N-03); NULL on rows written before
+    migration 0014 or by a caller that passed none, and the check then compares the signal with
+    the current rows."""
 
 
 class Proposal(Base):

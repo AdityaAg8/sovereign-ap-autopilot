@@ -91,13 +91,9 @@ from apx.policy.writer import (
     load_vendor,
     proposal_model,
 )
+from apx.review.corrections import corrections_digest, corrections_for_rows
 from apx.validate.interfaces import ViolationCode
-from apx.workflows.corrections import (
-    SUPPLIER_ADDRESS_FIELD,
-    ReviewCorrections,
-    TotalsMismatchError,
-    corrections_from_fields,
-)
+from apx.workflows.corrections import ReviewCorrections, TotalsMismatchError
 from apx.workflows.interfaces import InvoiceStatus
 
 _TERMINAL_STATUSES = frozenset(
@@ -184,28 +180,6 @@ def _to_field_view(field: FieldRow, *, mask_iban: bool) -> InvoiceFieldView:
         boxes=boxes,
         source=field.source,
     )
-
-
-def corrections_for_rows(rows: Sequence[FieldRow]) -> ReviewCorrections:
-    """`corrections_from_fields` over an invoice's field rows in id order: the latest value of
-    each field with a reviewer's row winning, plus the latest model-sourced values, which are
-    what the workflow's `Invoice` was built from (a human row never reaches it). Those are the
-    normalized values, as `GroundedInvoiceBuilder` reads supplier TRN and currency, except the
-    supplier address, which it reads raw (so an unedited address is never a "correction")."""
-    latest: dict[str, str | None] = {}
-    extracted: dict[str, str | None] = {}
-    human: set[str] = set()
-    for row in rows:
-        is_human = row.source is FieldSource.HUMAN
-        raw_read = row.name == SUPPLIER_ADDRESS_FIELD
-        if not is_human:
-            extracted[row.name] = row.value if raw_read else row.normalized_value
-        if row.name in human and not is_human:
-            continue
-        latest[row.name] = row.value if raw_read else (row.normalized_value or row.value)
-        if is_human:
-            human.add(row.name)
-    return corrections_from_fields(latest, extracted=extracted)
 
 
 _CORRECTABLE_TOTALS = frozenset({"vat_total"})
@@ -402,7 +376,11 @@ class DbInvoiceService:
         `labels` row that snapshots the *previous* value/box/source/model-revision alongside
         the correction, then audits both the before and after value (PRD §10 M10.1: every
         correction is a complete, self-contained record -- invoice, field, before/after value,
-        box, reviewer, timestamp and the model/revision that produced the original)."""
+        box, reviewer, timestamp and the model/revision that produced the original).
+        An edit is accepted in any status (it is also a training label), but one that changes
+        the review corrections of an approved invoice the workflow has not yet confirmed
+        invalidates that approval: `confirm_review` finds the rows no longer match the
+        approval's `corrections_digest` and ends the invoice FAILED (REVIEW.md N-03)."""
         async with get_session() as session:
             previous = await self._write_field_edit(session, invoice_id, edit, user)
             await self._audit_field_edit(session, invoice_id, edit, user, previous)
@@ -556,7 +534,11 @@ class DbInvoiceService:
         # After authorization, before anything is recorded: an approval without every ADR-0012
         # value is a 422 and never reaches the payment state or the workflow.
         corrections = await self._review_corrections(invoice_id)
-        await self._writer.record_approval(invoice_id, grant)
+        # N-03: the approval records exactly the corrections the signal below carries, and the
+        # workflow's `confirm_review` acts on the signal only if the two digests agree.
+        await self._writer.record_approval(
+            invoice_id, grant, corrections_digest=corrections_digest(corrections)
+        )
         async with get_session() as session:
             if not already_approved:
                 session.add(
@@ -624,7 +606,10 @@ class DbInvoiceService:
             if target is not None:
                 corrections = await self._review_corrections(target)
             kind, _ = await self._execute_proposal(
-                request.proposal_id, user, _decision_event(invoice_id, request, user, corrections)
+                request.proposal_id,
+                user,
+                _decision_event(invoice_id, request, user, corrections),
+                corrections=corrections,
             )
             signal = True if kind is ProposalKind.APPROVE_PAYMENT else None
         else:
@@ -693,7 +678,12 @@ class DbInvoiceService:
             )
 
     async def _execute_proposal(
-        self, proposal_id: str, user: User, event: AuditEvent
+        self,
+        proposal_id: str,
+        user: User,
+        event: AuditEvent,
+        *,
+        corrections: ReviewCorrections | None = None,
     ) -> tuple[ProposalKind, InvoiceId | None]:
         """P5/K4: authorizes EXECUTE_PROPOSAL (plus the kind's capability) through
         `PolicyGuard`. Payment-affecting kinds (approve_payment, change_bank) are applied only
@@ -701,7 +691,9 @@ class DbInvoiceService:
         the same path as a direct field edit, in the transaction that marks it executed. `route`
         and `request_info` have no executable effect here and are refused (M-06), so nothing is
         ever marked executed without having happened. `event` (the caller's audit entry for the
-        execution) commits with the `decisions` row, and an edit's rows with their own entry."""
+        execution) commits with the `decisions` row, and an edit's rows with their own entry.
+        `corrections` (an approve_payment proposal's, which the caller then signals) are recorded
+        with the approval as their digest (REVIEW.md N-03)."""
         async with get_session() as session:
             row = await session.get(ProposalRow, proposal_id)
             if row is None:
@@ -752,7 +744,13 @@ class DbInvoiceService:
             raise ProposalNotExecutableError(f"edit_field proposal {proposal_id} names no invoice")
         if edit is None:
             # The writer commits the payment-state change with its own `payment_state:*` entry.
-            await self._writer.execute_proposal(proposal_id, grant)
+            await self._writer.execute_proposal(
+                proposal_id,
+                grant,
+                corrections_digest=(
+                    None if corrections is None else corrections_digest(corrections)
+                ),
+            )
         async with get_session() as session:
             if edit is not None and invoice_id is not None:
                 locked = await session.get(ProposalRow, proposal_id, with_for_update=True)
@@ -799,6 +797,7 @@ class DbInvoiceService:
                     ),
                 },
             ),
+            corrections=corrections,
         )
         if kind is ProposalKind.APPROVE_PAYMENT and invoice_id is not None:
             await self._signaller.signal_review(invoice_id, approved=True, corrections=corrections)

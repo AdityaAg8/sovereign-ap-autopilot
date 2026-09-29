@@ -276,7 +276,17 @@ class PaymentStateWriter(Protocol):
     subject digest from current state in the same transaction and raises PolicyDeniedError
     (rule STALE_GRANT) on mismatch. Must not be imported by apx.agent (ADR-0008)."""
 
-    async def record_approval(self, invoice_id: InvoiceId, grant: Grant) -> None: ...
+    async def record_approval(
+        self,
+        invoice_id: InvoiceId,
+        grant: Grant,
+        *,
+        corrections_digest: Sha256Hex | None = None,
+    ) -> None:
+        """Record the approval (idempotent once the invoice is APPROVED). `corrections_digest`
+        is `apx.review.corrections.corrections_digest` of the review corrections approved with
+        it, stored on the approval so the workflow can check a `review` signal (REVIEW N-03)."""
+        ...
 
     async def record_bank_change(self, change: BankDetailChange, grant: Grant) -> None:
         """Store the change as an unverified account (P1) and start the P2 window."""
@@ -290,7 +300,12 @@ class PaymentStateWriter(Protocol):
         SegregationOfDutiesError if the verifier is the account's changer (REVIEW.md M-01)."""
         ...
 
-    async def execute_proposal(self, proposal_id: str, grant: Grant) -> None: ...
+    async def execute_proposal(
+        self, proposal_id: str, grant: Grant, *, corrections_digest: Sha256Hex | None = None
+    ) -> None:
+        """Apply a pending payment-affecting proposal; an approve_payment one records its
+        approval with `corrections_digest`, as `record_approval` does."""
+        ...
 
 
 class ProposalSink(Protocol):

@@ -8,9 +8,11 @@ stands in for the Temporal server; the units under test are real.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from temporalio.client import WorkflowExecutionStatus
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
@@ -20,6 +22,7 @@ from apx.api.settings import ApiSettings
 from apx.api.signals import (
     TemporalReviewSignaller,
     UnconfiguredReviewSignaller,
+    WorkflowAlreadyCompletedError,
     WorkflowSignalError,
 )
 from apx.common.errors import ConfigError
@@ -43,6 +46,11 @@ class _Handle:
             raise self._client.signal_error
         self._client.signals.append((self._workflow_id, arg))
 
+    async def describe(self) -> SimpleNamespace:
+        if self._client.closed_status is None:
+            raise RPCError("workflow not found", RPCStatusCode.NOT_FOUND, b"")
+        return SimpleNamespace(status=self._client.closed_status)
+
 
 class _StubClient:
     def __init__(self) -> None:
@@ -51,6 +59,8 @@ class _StubClient:
         self.start_error: Exception | None = None
         self.reuse_policies: list[WorkflowIDReusePolicy] = []
         self.signal_error: Exception | None = None
+        self.closed_status: WorkflowExecutionStatus | None = None
+        """None: no such workflow (describe answers NOT_FOUND); else its execution status."""
 
     async def start_workflow(
         self,
@@ -145,6 +155,31 @@ async def test_signaller_raises_a_typed_error_when_delivery_fails() -> None:
     signaller = TemporalReviewSignaller(_StubLazyClient(stub))
 
     with pytest.raises(WorkflowSignalError, match="workflow not found"):
+        await signaller.signal_review(InvoiceId(SHA), approved=True)
+
+
+async def test_a_signal_to_a_finished_workflow_is_a_typed_conflict() -> None:
+    """Temporal answers NOT_FOUND for a closed workflow too; a describe tells it from a missing
+    one, so a repeated decision for an invoice whose workflow already ended is a 409, not a
+    503 that invites endless retries."""
+    stub = _StubClient()
+    stub.signal_error = RPCError(
+        "workflow execution already completed", RPCStatusCode.NOT_FOUND, b""
+    )
+    stub.closed_status = WorkflowExecutionStatus.COMPLETED
+    signaller = TemporalReviewSignaller(_StubLazyClient(stub))
+
+    with pytest.raises(WorkflowAlreadyCompletedError, match="already finished"):
+        await signaller.signal_review(InvoiceId(SHA), approved=False)
+
+
+async def test_a_signal_error_on_a_running_workflow_stays_retryable() -> None:
+    stub = _StubClient()
+    stub.signal_error = RPCError("not found", RPCStatusCode.NOT_FOUND, b"")
+    stub.closed_status = WorkflowExecutionStatus.RUNNING
+    signaller = TemporalReviewSignaller(_StubLazyClient(stub))
+
+    with pytest.raises(WorkflowSignalError):
         await signaller.signal_review(InvoiceId(SHA), approved=True)
 
 

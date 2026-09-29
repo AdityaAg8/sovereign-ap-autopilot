@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 from PIL import Image
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from temporalio.client import Client
 
 from apx.agent.dispatch import PgToolDispatcher
 from apx.agent.interfaces import AgentConfig
@@ -86,6 +88,12 @@ from apx.workflows.gpu_stage import (
     SerialStageGate,
     StagedLlmClient,
 )
+from apx.workflows.reconciler import (
+    PgReviewDecisionStore,
+    ReconcilerSettings,
+    ReviewSignalReconciler,
+    TemporalReviewDelivery,
+)
 from apx.workflows.sql import PgInvoiceHistory, PgVendorDirectory, SqlInvoiceRecords
 from apx.workflows.starter import LazyTemporalClient, TemporalWorkflowStarter
 from apx.workflows.worker import (
@@ -130,6 +138,14 @@ class WorkerSettings(BaseSettings):
     review_notes: bool = True
     """Write the exception agent's cited review note on REVIEW-routed invoices (M9.3)."""
     watch_inbox: bool = True
+    review_reconciler: bool = True
+    """Re-send review decisions whose signal was lost (`apx.workflows.reconciler`, REVIEW N-02):
+    APPROVED or rejected-BLOCKED invoices whose workflow still waits in review."""
+    reconcile_interval_s: float = Field(default=60.0, gt=0)
+    reconcile_grace_s: float = Field(default=120.0, ge=0)
+    """A decision younger than this is left to the API's own signal."""
+    reconcile_batch: int = Field(default=50, ge=1)
+    reconcile_max_resends: int = Field(default=5, ge=1)
     fraud_review: float = Field(default=0.5, ge=0, le=1)
     scan_review: float = Field(default=0.5, ge=0, le=1)
     attack_block: float = Field(default=0.9, ge=0, le=1)
@@ -373,6 +389,8 @@ async def run(settings: WorkerSettings) -> None:
     async with asyncio.TaskGroup() as group:
         group.create_task(worker.run())
         group.create_task(llm_worker.run())
+        if settings.review_reconciler:
+            group.create_task(build_reconciler(settings, deps, client).run())
         if settings.watch_inbox:
             ingest = IngestSettings()
             ingest.inbox_dir.mkdir(parents=True, exist_ok=True)
@@ -383,6 +401,22 @@ async def run(settings: WorkerSettings) -> None:
             )
             group.create_task(watch_inbox(ingest.inbox_dir, Ingestor(deps.documents, starter)))
             log.info("watching %s", ingest.inbox_dir)
+
+
+def build_reconciler(
+    settings: WorkerSettings, deps: InvoiceActivityDeps, client: Client
+) -> ReviewSignalReconciler:
+    """The lost-signal reconciler over the worker's own database session and Temporal client."""
+    return ReviewSignalReconciler(
+        PgReviewDecisionStore(deps.session_factory, deps.audit),
+        TemporalReviewDelivery(client),
+        ReconcilerSettings(
+            interval=timedelta(seconds=settings.reconcile_interval_s),
+            grace=timedelta(seconds=settings.reconcile_grace_s),
+            batch=settings.reconcile_batch,
+            max_resends=settings.reconcile_max_resends,
+        ),
+    )
 
 
 def startup_checks() -> None:

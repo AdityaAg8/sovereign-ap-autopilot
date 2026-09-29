@@ -16,7 +16,6 @@ from temporalio.exceptions import ApplicationError
 
 from apx.agent.interfaces import AgentContext
 from apx.agent.prompts import DefaultAgentPromptBuilder
-from apx.api.service import corrections_for_rows
 from apx.audit.interfaces import AuditEvent
 from apx.common.errors import ConfigError, PayeeChangedError, PayeeRefusal
 from apx.common.invoice import Invoice, InvoiceKind, InvoiceLine, Party, VatCategory
@@ -39,6 +38,7 @@ from apx.policy.interfaces import (
     routing_record,
     select_payee,
 )
+from apx.review.corrections import corrections_for_rows
 from apx.trust.interfaces import TrustDecision
 from apx.validate.interfaces import InvoiceValidator, ViolationCode, validate_invoice
 from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps

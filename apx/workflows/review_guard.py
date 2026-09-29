@@ -3,12 +3,14 @@ turns an AUTO route into REVIEW when a reviewer sent the invoice to review befor
 `confirm_review` checks that a `review` signal is backed by the database before the workflow acts
 on it (an approval row whose digest matches the current invoice, or a recorded rejection). A raw
 Temporal signal with no such record never leads to payment: it is audited and the workflow keeps
-waiting (REVIEW.md C-03, H-01, H-02). A recorded approval that went stale fails the invoice
-instead (`StaleApprovalError`, N-13)."""
+waiting (REVIEW.md C-03, H-01, H-02). The corrections inside an approval signal must digest to
+the ones recorded with the approval, or it is unbacked too (N-03). A recorded approval that went
+stale (payee, invoice digest, or corrections edited since) fails the invoice instead
+(`StaleApprovalError`, N-13)."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 
 from pydantic import JsonValue
@@ -23,8 +25,11 @@ from apx.common.types import Route
 from apx.db.enums import DbInvoiceStatus, DecisionAction
 from apx.db.models import Approval as ApprovalRow
 from apx.db.models import Decision as DecisionRow
+from apx.db.models import Field as FieldRow
 from apx.db.models import Invoice as InvoiceRow
 from apx.policy.writer import approval_digest, invoice_for_digest, load_vendor
+from apx.review.corrections import corrections_digest, corrections_for_rows
+from apx.workflows.corrections import MissingCorrectionsError, ReviewCorrections
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
@@ -37,7 +42,7 @@ class StaleApprovalError(ApxError):
     again (an APPROVED invoice can be neither rejected nor re-approved; REVIEW.md N-13)."""
 
 
-class _Stale:
+class StaleVerdict:
     """`_refusal`'s verdict for an approval the API did record but that no longer holds."""
 
     def __init__(self, reason: str) -> None:
@@ -109,17 +114,34 @@ class ReviewGuardActivities:
         return Route.REVIEW
 
     @activity.defn(name="confirm_review")
-    async def confirm_review(self, invoice_id: str, approved: bool) -> bool:
+    async def confirm_review(
+        self,
+        invoice_id: str,
+        approved: bool,
+        corrections: ReviewCorrections | None = None,
+        check_corrections: bool = False,
+    ) -> bool:
         """True when the `review` signal is backed: for an approval, the invoice is APPROVED,
         was never rejected, and its newest `approvals` row carries the `approval_digest` of the
         invoice and vendor payee as they are now; for a rejection, a REJECT decision exists (the
         status is then made BLOCKED if the API's write has not landed). Otherwise the signal is
         audited as `review.signal_unbacked` and False returned, and the workflow keeps waiting.
         An approval the API recorded (with a digest) that no longer matches the invoice or payee
-        is audited as `review.approval_stale` and raises `StaleApprovalError` (N-13)."""
+        is audited as `review.approval_stale` and raises `StaleApprovalError` (N-13).
+
+        With `check_corrections` (every workflow run carrying the `m11-review-signal-corrections`
+        patch), an approval is also checked against the review corrections (N-03, KI-02): the
+        corrections derived from the invoice's current `fields` rows must digest to the
+        approval's `corrections_digest` (an edit since the approval makes it stale, as above),
+        and the signal's `corrections` must digest to it too (else unbacked). An approval row
+        written before migration 0014 has no corrections digest; the current rows stand in for
+        it. Without `check_corrections` (an activity scheduled by a pre-patch history) the
+        corrections are not compared, as before."""
         async with self._session_factory() as session:
             refusal = await self._refusal(session, invoice_id, approved=approved)
-            if isinstance(refusal, _Stale):
+            if refusal is None and approved and check_corrections:
+                refusal = await self._corrections_refusal(session, invoice_id, corrections)
+            if isinstance(refusal, StaleVerdict):
                 await self._record(
                     session, "review.approval_stale", invoice_id, {"reason": refusal.reason}
                 )
@@ -132,7 +154,7 @@ class ReviewGuardActivities:
                 )
         # Raised after the session committed the audit entry (an exception inside would roll it
         # back); the workflow's failure path then writes FAILED with this reason.
-        if isinstance(refusal, _Stale):
+        if isinstance(refusal, StaleVerdict):
             raise StaleApprovalError(
                 f"invoice {invoice_id}: the recorded approval no longer holds: {refusal.reason}"
             )
@@ -140,7 +162,7 @@ class ReviewGuardActivities:
 
     async def _refusal(
         self, session: AsyncSession, invoice_id: str, *, approved: bool
-    ) -> str | _Stale | None:
+    ) -> str | StaleVerdict | None:
         row = await session.get(InvoiceRow, invoice_id, with_for_update=True)
         if row is None:
             return "no invoice row"
@@ -177,7 +199,50 @@ class ReviewGuardActivities:
                 invoice_for_digest(row), await load_vendor(session, row.vendor_id)
             )
         except PayeeRefusedError as exc:
-            return _Stale(f"payee refused: {exc.refusal.value}")
+            return StaleVerdict(f"payee refused: {exc.refusal.value}")
         if approval.invoice_digest != current:
-            return _Stale("approval digest does not match the current invoice or payee")
+            return StaleVerdict("approval digest does not match the current invoice or payee")
         return None
+
+    async def _corrections_refusal(
+        self, session: AsyncSession, invoice_id: str, corrections: ReviewCorrections | None
+    ) -> str | StaleVerdict | None:
+        """N-03: why an otherwise backed approval signal must not be acted on because of its
+        corrections, else None. Runs after `_refusal` found a digest-matched approval."""
+        recorded = await session.scalar(
+            select(ApprovalRow.corrections_digest)
+            .where(ApprovalRow.invoice_id == invoice_id)
+            .order_by(ApprovalRow.id.desc())
+            .limit(1)
+        )
+        rows = (
+            await session.scalars(
+                select(FieldRow).where(FieldRow.invoice_id == invoice_id).order_by(FieldRow.id)
+            )
+        ).all()
+        return corrections_refusal(recorded, rows, corrections)
+
+
+def corrections_refusal(
+    recorded: str | None, rows: Sequence[FieldRow], signalled: ReviewCorrections | None
+) -> str | StaleVerdict | None:
+    """N-03 (KI-02), over data already read: `recorded` is the newest approval's
+    `corrections_digest`, `rows` the invoice's `fields` rows in id order, `signalled` the
+    corrections the `review` signal carries (which `apply_review` would apply next). None when
+    the signal carries exactly the approved corrections and the rows still derive them; a
+    `StaleVerdict` when the rows changed since the approval; else the reason the signal is
+    unbacked. An approval written before migration 0014 (`recorded` None) is checked against the
+    corrections the current rows derive, so a raw signal can never substitute its own."""
+    try:
+        current = corrections_digest(corrections_for_rows(rows))
+    except MissingCorrectionsError as exc:
+        # The approval was recorded with complete corrections (the API refuses otherwise), so an
+        # edit since has emptied or broken one: the approval no longer holds.
+        return StaleVerdict(f"the invoice's corrections changed since the approval: {exc}")
+    if recorded is None:
+        recorded = current  # approval written before migration 0014
+    elif current != recorded:
+        return StaleVerdict("the invoice's corrections were edited after the approval")
+    if signalled is None or corrections_digest(signalled) != recorded:
+        return "the signal's corrections do not match the approved corrections"
+    return None

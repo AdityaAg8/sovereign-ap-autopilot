@@ -182,7 +182,13 @@ class SqlPaymentStateWriter:
             AuditEvent(actor=str(actor), action=action, entity=entity, payload=payload),
         )
 
-    async def record_approval(self, invoice_id: InvoiceId, grant: Grant) -> None:
+    async def record_approval(
+        self,
+        invoice_id: InvoiceId,
+        grant: Grant,
+        *,
+        corrections_digest: Sha256Hex | None = None,
+    ) -> None:
         request = ActionRequest(
             actor=_PLACEHOLDER, action=grant.action, invoice=None, vendor=None, at=grant.issued_at
         )
@@ -191,7 +197,9 @@ class SqlPaymentStateWriter:
                 f"record_approval requires an approval grant, got {grant.action.value}"
             )
         async with self._session_factory() as session:
-            await self._apply_approval(session, invoice_id, grant, grant.action)
+            await self._apply_approval(
+                session, invoice_id, grant, grant.action, corrections_digest=corrections_digest
+            )
 
     async def _apply_approval(
         self,
@@ -200,6 +208,8 @@ class SqlPaymentStateWriter:
         grant: Grant,
         capability: Capability,
         proposal: ProposalModel | None = None,
+        *,
+        corrections_digest: Sha256Hex | None = None,
     ) -> None:
         # Row lock: two concurrent approvals of the same invoice serialise here, so the second
         # sees APPROVED and becomes an idempotent no-op instead of a duplicate approval row.
@@ -249,6 +259,7 @@ class SqlPaymentStateWriter:
                 amount=invoice.total.amount,
                 currency=invoice.total.currency,
                 invoice_digest=approval_digest(invoice, vendor),
+                corrections_digest=corrections_digest,
             )
         )
         await session.execute(
@@ -420,7 +431,9 @@ class SqlPaymentStateWriter:
                 {"iban": iban, "method": method, "reference": reference},
             )
 
-    async def execute_proposal(self, proposal_id: str, grant: Grant) -> None:
+    async def execute_proposal(
+        self, proposal_id: str, grant: Grant, *, corrections_digest: Sha256Hex | None = None
+    ) -> None:
         if grant.action is not Capability.EXECUTE_PROPOSAL:
             raise PolicyDeniedError(
                 f"execute_proposal requires EXECUTE_PROPOSAL, got {grant.action.value}"
@@ -448,6 +461,7 @@ class SqlPaymentStateWriter:
                     grant,
                     Capability.APPROVE_PAYMENT,
                     proposal=model,
+                    corrections_digest=corrections_digest,
                 )
             elif proposal.kind.value == "change_bank":
                 change = bank_change_from_payload(proposal.payload, grant.actor)
