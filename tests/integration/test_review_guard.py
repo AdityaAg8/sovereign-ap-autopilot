@@ -41,7 +41,7 @@ from apx.db.session import get_session
 from apx.ingest.settings import get_ingest_settings
 from apx.policy.writer import SqlPaymentStateWriter
 from apx.review.corrections import corrections_digest
-from apx.workflows.reconciler import Candidate, PgReviewDecisionStore
+from apx.workflows.reconciler import Candidate, PgReviewDecisionStore, Resend
 from apx.workflows.review_guard import ReviewGuardActivities, StaleApprovalError
 from apx.workflows.workflow import ReviewDecision
 from tests.integration.test_api_authz import (
@@ -432,13 +432,17 @@ async def _reconciler_scenario() -> None:
     found = await store.candidates(grace=timedelta(minutes=2), window=timedelta(days=7))
     assert set(found) == {Candidate(approved, True), Candidate(rejected, False)}
 
-    approval = await store.decision(Candidate(approved, True))
-    assert approval is not None and approval.approved
+    resend = await store.decision(Candidate(approved, True))
+    assert resend is not None and resend.stale is None
+    approval = resend.decision
+    assert approval.approved
     sent = dict(zip([i for i, _ in signaller.sent], signaller.corrections, strict=True))
     assert approval.corrections == sent[approved]
     guard = ReviewGuardActivities(get_session, PgAuditLog())
     assert await guard.confirm_review(approved, True, approval.corrections, True) is True
-    assert await store.decision(Candidate(rejected, False)) == ReviewDecision(approved=False)
+    assert await store.decision(Candidate(rejected, False)) == Resend(
+        ReviewDecision(approved=False)
+    )
     # A candidate the database does not back (never decided) yields no signal.
     assert await store.decision(Candidate(waiting, True)) is None
     assert await store.decision(Candidate(waiting, False)) is None
@@ -447,6 +451,18 @@ async def _reconciler_scenario() -> None:
     await store.record_resend(Candidate(approved, True), delivered=False, error="unreachable")
     counts = await store.resend_counts([approved, rejected], window=timedelta(days=7))
     assert counts == {approved: 2}
+
+    # P3-01: an approval gone stale (its digest no longer matches) is still re-sent, marked
+    # stale, so `confirm_review` fails the invoice instead of leaving it APPROVED forever.
+    async with get_session() as session:
+        await session.execute(
+            update(Approval).where(Approval.invoice_id == fresh).values(invoice_digest="0" * 64)
+        )
+    stale = await store.decision(Candidate(InvoiceId(fresh), True))
+    assert stale is not None and stale.decision.approved
+    assert stale.stale is not None and "does not match" in stale.stale
+    with pytest.raises(StaleApprovalError):
+        await guard.confirm_review(fresh, True, stale.decision.corrections, True)
     await db_session.get_engine().dispose()
 
 

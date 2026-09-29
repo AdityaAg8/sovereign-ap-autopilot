@@ -145,6 +145,9 @@ class WorkerSettings(BaseSettings):
     reconcile_grace_s: float = Field(default=120.0, ge=0)
     """A decision younger than this is left to the API's own signal."""
     reconcile_batch: int = Field(default=50, ge=1)
+    """Most re-sends per pass (only workflows found waiting in review count)."""
+    reconcile_max_describes: int = Field(default=500, ge=1)
+    """Most workflows described per pass; passes rotate through the candidates."""
     reconcile_max_resends: int = Field(default=5, ge=1)
     fraud_review: float = Field(default=0.5, ge=0, le=1)
     scan_review: float = Field(default=0.5, ge=0, le=1)
@@ -414,6 +417,7 @@ def build_reconciler(
             interval=timedelta(seconds=settings.reconcile_interval_s),
             grace=timedelta(seconds=settings.reconcile_grace_s),
             batch=settings.reconcile_batch,
+            max_describes=settings.reconcile_max_describes,
             max_resends=settings.reconcile_max_resends,
         ),
     )

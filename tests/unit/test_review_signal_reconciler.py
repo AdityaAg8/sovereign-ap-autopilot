@@ -16,15 +16,22 @@ from temporalio.service import RPCError, RPCStatusCode
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from apx.common.errors import PayeeRefusal, PayeeRefusedError
 from apx.common.types import InvoiceId, Route
+from apx.db.enums import FieldSource
+from apx.db.models import Field as FieldRow
 from apx.policy.interfaces import RoutingDecision
+from apx.review.corrections import corrections_for_rows
+from apx.workflows.corrections import SUPPLIER_ADDRESS_FIELD
 from apx.workflows.interfaces import InvoiceStatus
 from apx.workflows.reconciler import (
     Candidate,
     ReconcilerSettings,
+    Resend,
     ReviewSignalReconciler,
     TemporalReviewDelivery,
     WorkflowReviewState,
+    approval_resend,
 )
 from apx.workflows.workflow import InvoiceWorkflow, ReviewDecision
 from tests.unit.test_invoice_workflow import (
@@ -47,9 +54,10 @@ C = InvoiceId("c" * 64)
 @dataclass
 class _Store:
     found: list[Candidate]
-    decisions: dict[InvoiceId, ReviewDecision | None]
+    decisions: dict[InvoiceId, ReviewDecision | Resend | None]
     counts: dict[InvoiceId, int] = field(default_factory=dict)
     resends: list[tuple[InvoiceId, bool, str | None]] = field(default_factory=list)
+    stale: list[tuple[InvoiceId, str | None]] = field(default_factory=list)
 
     async def candidates(self, *, grace: timedelta, window: timedelta) -> Sequence[Candidate]:
         return self.found
@@ -59,13 +67,20 @@ class _Store:
     ) -> dict[InvoiceId, int]:
         return {i: self.counts[i] for i in invoice_ids if i in self.counts}
 
-    async def decision(self, candidate: Candidate) -> ReviewDecision | None:
-        return self.decisions.get(candidate.invoice_id)
+    async def decision(self, candidate: Candidate) -> Resend | None:
+        found = self.decisions.get(candidate.invoice_id)
+        return Resend(found) if isinstance(found, ReviewDecision) else found
 
     async def record_resend(
-        self, candidate: Candidate, *, delivered: bool, error: str | None
+        self,
+        candidate: Candidate,
+        *,
+        delivered: bool,
+        error: str | None,
+        stale: str | None = None,
     ) -> None:
         self.resends.append((candidate.invoice_id, delivered, error))
+        self.stale.append((candidate.invoice_id, stale))
         self.counts[candidate.invoice_id] = self.counts.get(candidate.invoice_id, 0) + 1
 
 
@@ -238,3 +253,116 @@ async def test_a_dropped_signal_is_redelivered_and_the_workflow_finishes(
         assert await delivery.state(invoice_id) is WorkflowReviewState.CLOSED
         assert await reconciler.reconcile_once() == []
         assert len(store.resends) == 1
+
+
+async def test_busy_workflows_never_crowd_a_lost_signal_out_of_the_batch() -> None:
+    """P3-01(b): candidates whose workflow is past its review wait (an approved invoice retrying
+    `send_to_asp`) are oldest-first but must not use up the batch: only WAITING ones count."""
+    store = _Store(
+        [Candidate(A, True), Candidate(B, True), Candidate(C, True)],
+        {A: APPROVE, B: APPROVE, C: APPROVE},
+    )
+    delivery = _Delivery(
+        {A: WorkflowReviewState.BUSY, B: WorkflowReviewState.BUSY, C: WorkflowReviewState.WAITING}
+    )
+
+    resent = await ReviewSignalReconciler(
+        store, delivery, ReconcilerSettings(batch=1)
+    ).reconcile_once()
+
+    assert resent == [C]
+
+
+async def test_passes_rotate_through_more_candidates_than_one_pass_describes() -> None:
+    """P3-01(b): describes per pass are capped, and the next pass starts where the last one
+    stopped, so busy workflows at the head of the list cannot hide a waiting one forever."""
+    store = _Store(
+        [Candidate(A, True), Candidate(B, True), Candidate(C, True)],
+        {A: APPROVE, B: APPROVE, C: APPROVE},
+    )
+    delivery = _Delivery(
+        {A: WorkflowReviewState.BUSY, B: WorkflowReviewState.BUSY, C: WorkflowReviewState.WAITING}
+    )
+    reconciler = ReviewSignalReconciler(store, delivery, ReconcilerSettings(max_describes=2))
+
+    assert await reconciler.reconcile_once() == []
+    assert delivery.described == [A, B]
+    assert await reconciler.reconcile_once() == [C]
+    assert delivery.described == [A, B, C, A]  # the second pass starts at C, then wraps
+
+
+def _rows() -> list[FieldRow]:
+    values = {
+        "invoice_type_code": "380",
+        "currency": "AED",
+        "supplier_trn": "100000000000003",
+        "line_items[1].vat_category": "S",
+        "line_items[1].vat_rate": "5",
+        SUPPLIER_ADDRESS_FIELD: "Office 12, Al Quoz, Dubai",
+    }
+    return [
+        FieldRow(
+            id=i,
+            invoice_id="inv",
+            name=name,
+            value=value,
+            normalized_value=value,
+            source=FieldSource.EXTRACTOR_A,
+        )
+        for i, (name, value) in enumerate(values.items(), start=1)
+    ]
+
+
+def test_a_matching_approval_is_resent_as_the_api_would_send_it() -> None:
+    rows = _rows()
+    resend = approval_resend("d" * 64, "d" * 64, rows)
+    assert resend == Resend(ReviewDecision(approved=True, corrections=corrections_for_rows(rows)))
+
+
+@pytest.mark.parametrize(
+    ("recorded", "current", "reason"),
+    [
+        ("d" * 64, "e" * 64, "approval digest does not match"),
+        (
+            "d" * 64,
+            PayeeRefusedError(PayeeRefusal.NO_VERIFIED_ACCOUNT, "no verified account"),
+            "payee refused",
+        ),
+    ],
+)
+def test_a_stale_approval_is_still_resent_so_the_workflow_can_fail_it(
+    recorded: str, current: str | PayeeRefusedError, reason: str
+) -> None:
+    """P3-01(a), N-13: withholding the signal would leave the invoice APPROVED and its workflow
+    waiting forever; sent, `confirm_review` raises `StaleApprovalError` and the run ends
+    FAILED. The re-send is audited as stale."""
+    resend = approval_resend(recorded, current, _rows())
+    assert resend.decision.approved is True
+    assert resend.stale is not None and reason in resend.stale
+
+
+def test_incomplete_corrections_are_resent_without_corrections_and_marked_stale() -> None:
+    rows = [
+        *_rows(),
+        FieldRow(
+            id=99,
+            invoice_id="inv",
+            name="currency",
+            value=None,
+            normalized_value=None,
+            source=FieldSource.HUMAN,
+        ),
+    ]
+    resend = approval_resend("d" * 64, "d" * 64, rows)
+    assert resend.decision == ReviewDecision(approved=True, corrections=None)
+    assert resend.stale is not None and "incomplete" in resend.stale
+
+
+async def test_a_stale_resend_is_delivered_and_audited_as_stale() -> None:
+    stale = Resend(APPROVE, stale="approval digest does not match the current invoice or payee")
+    store = _Store([Candidate(A, True)], {A: stale})
+    delivery = _Delivery({A: WorkflowReviewState.WAITING})
+
+    assert await ReviewSignalReconciler(store, delivery).reconcile_once() == [A]
+    assert delivery.signals == [(A, APPROVE)]
+    assert store.stale == [(A, stale.stale)]
