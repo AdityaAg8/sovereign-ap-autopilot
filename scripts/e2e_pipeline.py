@@ -3,8 +3,9 @@ PDFs) into the running stack's inbox, approves the ones routed to review through
 way a reviewer would, waits for each to settle, and writes `reports/e2e_pipeline.md` with every
 invoice's route, final status, timing and extracted-vs-truth check (header fields, seller address
 and line count). Like a reviewer, it corrects a misread seller address through the fields API
-before approving (ADR-0012 amendment 4); an accepted approval of values no correction reaches
-(the lines) is noted. Needs `make up` and
+before approving (ADR-0012 amendment 4), and when an approval is refused naming fields it fixes
+the ones printed on the page (invoice kind, line VAT category and rate) and retries once; an
+accepted approval of values no correction reaches (the lines) is noted. Needs `make up` and
 `make seed` first; talks to the API through the gateway only. Every API call is retried with
 backoff on timeouts, transport errors and 5xx (the API is shared with a GPU-bound worker under
 load); a call that still fails after the retries ends the run with that error. An expired access
@@ -26,6 +27,7 @@ import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +38,7 @@ if str(ROOT) not in sys.path:  # `uv run python scripts/e2e_pipeline.py` puts on
     sys.path.insert(0, str(ROOT))
 
 from evals.scan_input import scan_document  # noqa: E402  (needs ROOT on sys.path)
+from factory.gold_xml import TAX_CASE_VAT_CATEGORY  # noqa: E402
 
 SETTLED = {"blocked", "archived", "failed"}
 PICK = (  # (label, tax_case, has_scan, arabic_first, count): 18 factory invoices
@@ -208,6 +211,8 @@ def poll(client: httpx.Client, docs: list[Doc], timeout_s: float) -> None:
                     lambda url=url: client.post(f"{url}/decisions", json={"action": "approve"}),
                     f"approve {doc.sha[:12]}",
                 )
+                if decided.status_code == 422 and doc.truth is not None:
+                    decided = correct_refused(client, doc, url, decided)
                 doc.approved = decided.status_code == 204
                 if not doc.approved:
                     doc.notes.append(f"approve refused: {decided.status_code} {decided.text[:120]}")
@@ -247,6 +252,80 @@ def correct_address(client: httpx.Client, doc: Doc, url: str, wrong: list[str]) 
         return wrong
     doc.notes.append(f"corrected: {_ADDRESS_FIELD}")
     return [name for name in wrong if name != _ADDRESS_FIELD]
+
+
+_KIND_FIELD = "invoice_type_code"
+_FACTORY_KIND = "380"
+"""The factory issues invoices only (`factory.gold_xml`), printed as a tax invoice; the review
+kind field takes 380 (invoice) or 381 (credit note), `apx.workflows.corrections`."""
+_REFUSED = re.compile(r"correct these fields first: (.+)$", re.DOTALL)
+_LINE_VAT = re.compile(r"^line_items\[(\d+)\]\.(vat_category|vat_rate)$")
+
+
+def refused_fields(response: httpx.Response) -> list[str]:
+    """Field names a 422 approval refusal asks to correct (`MissingCorrectionsError`'s
+    "correct these fields first: a, b (why), ..."), each without its parenthetical reason.
+    Empty for any other refusal (no TRN, amounts that do not add up, a relabelled currency)."""
+    try:
+        detail = str(response.json().get("detail", ""))
+    except (ValueError, AttributeError):
+        return []
+    match = _REFUSED.search(detail)
+    if match is None:
+        return []
+    return [part.strip().split(" ", 1)[0] for part in match.group(1).split(", ") if part.strip()]
+
+
+def printed_corrections(names: list[str], truth: dict[str, Any]) -> list[tuple[str, str]]:
+    """(field, value) edits a reviewer makes from what is printed on the document, for the
+    refused `names`: the invoice kind, and each named line's VAT category and rate (both, since
+    a rate is refused against its category). Never the supplier TRN, the address (corrected
+    before approving), amounts, or a line the truth does not have: the review API cannot carry
+    those honestly, so they stay refused."""
+    context = truth["context"]
+    lines = {int(line["index"]): line for line in context.get("lines", []) if "index" in line}
+    category = TAX_CASE_VAT_CATEGORY.get(str(truth.get("tax_case", "")))
+    edits: list[tuple[str, str]] = []
+    for name in names:
+        if name == _KIND_FIELD:
+            edits.append((_KIND_FIELD, _FACTORY_KIND))
+            continue
+        match = _LINE_VAT.match(name)
+        if match is None or category is None:
+            continue
+        line = lines.get(int(match.group(1)))
+        if line is None or "vat_rate" not in line:
+            continue
+        index = int(match.group(1))
+        rate = format((Decimal(str(line["vat_rate"])) * 100).normalize(), "f")
+        edits.append((f"line_items[{index}].vat_category", category))
+        edits.append((f"line_items[{index}].vat_rate", rate))
+    return list(dict.fromkeys(edits))
+
+
+def correct_refused(
+    client: httpx.Client, doc: Doc, url: str, refused: httpx.Response
+) -> httpx.Response:
+    """A 422 approval refusal naming fields: PATCH the ones printed on the document
+    (`printed_corrections`) with a reason each, note `corrected: ...`, and retry the approval
+    once. Returns the retry's response, or `refused` when nothing could be corrected."""
+    assert doc.truth is not None
+    edits = printed_corrections(refused_fields(refused), doc.truth)
+    if not edits:
+        return refused
+    for name, value in edits:
+        edit = {"field": name, "value": value, "reason": "e2e reviewer: as printed on the document"}
+        fixed = call(
+            partial(client.patch, f"{url}/fields", json=edit), f"fix {name} {doc.sha[:12]}"
+        )
+        if fixed.status_code != 204:
+            doc.notes.append(f"{name} fix refused: {fixed.status_code} {fixed.text[:120]}")
+            return refused
+    doc.notes.append("corrected: " + ", ".join(name for name, _ in edits))
+    return call(
+        lambda: client.post(f"{url}/decisions", json={"action": "approve"}),
+        f"approve {doc.sha[:12]} (after corrections)",
+    )
 
 
 _LINE_FIELD = re.compile(r"^line_items\[(\d+)\]\.")
