@@ -95,6 +95,20 @@ start, so a pull that adds a migration is applied on the next `make up`. Migrati
 | `0009_invoice_kind_check_name` | Renames the `invoices.kind` check constraint on databases that ran the first 0007; a no-op on fresh databases |
 | `0010_page_embeddings` | pgvector page embeddings for vendor-scoped near-duplicate detection |
 | `0011_document_failure` | `ingested_documents.failed_at`/`failure`: a workflow that failed before its invoice row existed reads as `failed` in the API |
+| `0012_approval_digest` | `approvals.invoice_digest`: the workflow acts on a review signal only when a digest-matched approval backs it (REVIEW C-03) |
+| `0013_agent_ro_password` | Sets the `apx_agent_ro` password from `AGENT_RO_PASSWORD` instead of the old hardcoded default (REVIEW L-01) |
+| `0014_approval_corrections_digest` | `approvals.corrections_digest`: a review signal's corrections must match the approved ones (REVIEW N-03, KNOWN_ISSUES KI-02) |
+
+### After deploying a workflow patch
+
+A change guarded by `workflow.patched` (for example `m11-review-signal-corrections`) only
+applies to executions that reach the patched code after the deploy. An execution already waiting
+in review keeps the old behaviour for its review step. After such a deploy, drain those
+executions: let reviewers decide the invoices awaiting review, or, for any left over, terminate
+the execution (`temporal workflow terminate --workflow-id <invoice id>`) and re-drop the
+document so it starts again under the new code. The worker's review-signal reconciler
+(`apx/workflows/reconciler.py`) re-delivers decisions that were recorded but not delivered;
+it does not upgrade a pre-patch execution.
 
 ## Ops dashboard (development)
 

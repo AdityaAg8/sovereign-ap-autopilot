@@ -7,7 +7,7 @@ incomplete.
 | ID | Severity | Source | Status |
 |---|---|---|---|
 | KI-01 | Medium | REVIEW.md M-05 | Accepted, documented (history rewrite not allowed) |
-| KI-02 | Medium | M11 audit pass 1, open note; REVIEW.md N-03 | Closed (M11.4, migration 0014) |
+| KI-02 | Medium | M11 audit pass 1, open note; REVIEW.md N-03, P3-01, P3-06 | Mitigated (residual open) |
 
 ## KI-01: two blobs over 1 MB in git history (REVIEW.md M-05)
 
@@ -28,7 +28,7 @@ the project's git rules forbid, and every existing clone and PR would diverge.
 `models/`, `*.gguf` and `*.safetensors` are never committed). If the repository is ever
 re-created from scratch, move both files to Git LFS or fetch them at build time.
 
-## KI-02: corrections inside a review signal were not digest-checked (closed)
+## KI-02: corrections inside a review signal were not digest-checked (mitigated, residual open)
 
 Before M11.4, `confirm_review` (`apx/workflows/review_guard.py`, REVIEW C-03) acted on a `review` signal only
 when the database holds an approval whose `invoice_digest` matches the current invoice, or a
@@ -43,7 +43,7 @@ and whose invoice already has a matching approval could alter the ADR-0012 corre
 the e-invoice build. The payee is not affected: it is pinned at routing and re-selected at the
 build (ADR-0014 §7). Currency changes still go through the build-time checks (no AED relabel).
 
-**Fix (M11.4, closed).** An approval now records `approvals.corrections_digest` (migration
+**Mitigation (M11.4).** An approval now records `approvals.corrections_digest` (migration
 0014): the sha256 of the canonical JSON of the corrections the API derived from the `fields` rows
 and signalled (`apx.review.corrections`). Under the `m11-review-signal-corrections` patch the
 workflow passes the signal's corrections to `confirm_review`, which acts only when the rows still
@@ -52,7 +52,8 @@ signal's corrections digest to it (else `review.signal_unbacked`, the workflow k
 An approval written before 0014 is checked against the corrections the current rows derive. A
 forged signal therefore cannot change what `apply_review` hands to `build_einvoice`.
 
-**Residual.** All three are bounded to executions in flight at deploy time or fail closed:
+**Residual (open).** All three are bounded to executions in flight at deploy time or fail closed,
+but the second is an integrity gap, so the issue stays open until those invoices are drained:
 
 - An execution whose history already holds a pre-patch `confirm_review` (for example an unbacked
   signal refused before the deploy) keeps the old behaviour for every later signal: `patched()`
@@ -70,3 +71,17 @@ forged signal therefore cannot change what `apply_review` hands to `build_einvoi
 A real signal dropped while a forged one was being checked, or lost to a Temporal outage, is
 re-delivered by the worker's review-signal reconciler (`apx/workflows/reconciler.py`). A workflow
 whose query keeps failing is audited and bounded by `max_resends`, and never stalls the pass.
+Since REVIEW.md P3-01 it also re-sends an approval that went stale (audited with its `stale`
+reason), so `confirm_review` ends that invoice FAILED instead of leaving it APPROVED, and it fills
+each pass only from workflows actually waiting in review, rotating through the candidates.
+
+**Reconciler limits (P3-01, what remains).**
+
+- An approval written before migration 0012 has no `invoice_digest`. Its re-sent signal is
+  refused as unbacked, so after `max_resends` (default 5) re-sends within the 7-day window the
+  invoice stays APPROVED with its workflow waiting, visible only in the audit log
+  (`review.signal_resent`, `review.signal_unbacked`). Such invoices need a manual reject or a
+  terminated execution.
+- Decisions older than the window (default 7 days) are not reconsidered.
+- The reconciler reads each workflow's state through a Temporal query; a worker that is down
+  delays re-sends until it is back (the pass retries every interval).
