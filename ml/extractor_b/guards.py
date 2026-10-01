@@ -252,6 +252,11 @@ def _normalised_target(target_json: str) -> str:
     return json.dumps(norm(target), sort_keys=True, ensure_ascii=False)
 
 
+def normalised_target(target_json: str) -> str:
+    """The target compared for near-duplicates: text values `normalize_text`-ed, keys sorted."""
+    return _normalised_target(target_json)
+
+
 def _hamming(a: int, b: int) -> int:
     return (a ^ b).bit_count()
 

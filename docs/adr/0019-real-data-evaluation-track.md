@@ -560,3 +560,44 @@ dedup and length guards run afterwards, and the final mix counts are in PROGRESS
 `guard_report.json`. The four arithmetic forms accept only identities that receipts actually
 print. Accidental agreement within 0.5% stays possible, and that risk is accepted for a
 training-data filter.
+
+## Amendment 2 (2026-10-01): CORD photo copies (hold-out leakage and duplicates)
+
+**Problem.** The first R1 prep after amendment 1 stopped on `QuarantineRateError`, with CORD at
+67/798 (8.4%). Besides the 30 label failures, 34 rows were `duplicate_near` and 3 were
+`image_out_of_bounds`. Inspection showed that CORD v2 ships the same receipt photo more than
+once, with its anonymisation blur redone, so the files are byte-different. A page-1 pHash
+comparison on the original images (Hamming ≤ 4, the guards' `near_dup_hamming`) found three
+kinds of copy:
+- **Hold-out leakage**: 27 CORD train photos are copies of a CORD validation (13) or test (14)
+  photo. One was checked by eye: the same "A FUNG" receipt appears in both train and test. The
+  sha256 leakage check cannot see these copies, so training on them would put hold-out receipts
+  into R1 and inflate its CORD test score.
+- **Redundant copies**: 34 train photos repeat another train photo with the same label.
+- **Conflicting copies**: 14 pairs (28 photos) are one photo labelled twice, differently
+  (`5,264` vs `5.264`, a missing subtotal, `1.00xITEMS` vs `1.00x`). The data does not say
+  which label is right.
+
+**Decision.** `cord_docs` resolves copies when it loads CORD, keyed on the image alone. This is
+the same principle that already reduces the 800 rows to 798 distinct images.
+`cord_copy_exclusions` makes three cuts:
+- It drops every train photo within Hamming 4 of any CORD validation or test photo.
+- Among train copies of one photo with equal normalised targets, it keeps the smallest sha256.
+- It drops all copies whose targets disagree.
+
+Each dropped sha256 and its reason is printed to the prep log. CORD validation and test indexes
+are required: without them, prep stops (`TrainingError`) and never trains on unchecked CORD.
+The image-only key means a mapping bug cannot hide here: a mass-null mapping changes no image
+hash, and `label_empty` still catches it. The guards, `near_dup_hamming`, the tolerances and
+`max_quarantine_rate` (5%) are unchanged.
+
+**Measured.** 89 of 798 photos are dropped (27 hold-out copies, 34 redundant, 28 conflicting),
+leaving 709. The amendment-1 label checks then quarantine 30 of the 709 (4.2%). The final rate,
+including the image-size guard, is recorded in PROGRESS.md and `guard_report.json`.
+
+**Consequences.**
+- R1 trains on about 680 CORD receipts instead of §9.2's 800.
+- The CORD test score of any model trained on CORD is free of these 14 known copies.
+- A, v1, and every later round score CORD test on the same unchanged 100 documents.
+- Cross-split copies inside the CORD hold-outs (1 test-validation, 2 validation-validation pairs)
+  do not affect training. They are noted for the real-data report.

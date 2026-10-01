@@ -59,6 +59,10 @@ CORD_INDEX: Final[str] = "index.jsonl"
 """Each CORD split folder holds the images and `index.jsonl`, one line per receipt row with its
 `sha256` and HF `ground_truth` (with `gt_parse`): the `evals/datasets/cord_fetcher.py` layout.
 The manifest lists each image once (`doc_id` names its first row)."""
+CORD_HOLDOUT_SPLITS: Final[tuple[str, ...]] = ("validation", "test")
+CORD_COPY_HAMMING: Final[int] = 4
+"""Two CORD photos within this page-1 pHash distance are one photo (CORD re-releases a receipt
+photo with its anonymisation blur redone): the guards' `near_dup_hamming`, ADR-0019 amdt 2."""
 
 RealMix = Literal["v1", "r1", "r2"]
 REAL_MIXES: Final[tuple[RealMix, ...]] = ("v1", "r1", "r2")
@@ -268,9 +272,107 @@ def cord_trees(data_root: Path) -> dict[str, Any]:
     return _cord_index(data_root / CORD_DATASET / "train" / CORD_INDEX)
 
 
+@dataclass(frozen=True, slots=True)
+class CordCopies:
+    """What `cord_copy_exclusions` drops from CORD train, sha256 -> reason, with counts."""
+
+    excluded: dict[str, str]
+    holdout_copies: int
+    redundant_copies: int
+    conflicting_copies: int
+
+
+def _hamming(a: int, b: int) -> int:
+    return (a ^ b).bit_count()
+
+
+def cord_copy_exclusions(
+    train: Sequence[tuple[str, Path, str]],
+    holdout: Sequence[tuple[str, str, Path]],
+    *,
+    phash: Callable[[Path], int],
+    hamming: int = CORD_COPY_HAMMING,
+) -> CordCopies:
+    """CORD train photos that are copies of another photo (ADR-0019 amendment 2), keyed on the
+    image alone so a mapping bug can never hide behind it. `train` is (sha256, image, normalised
+    target); `holdout` is (split, sha256, image) for CORD validation and test.
+    - A train photo within `hamming` of any hold-out photo is dropped: it would put a hold-out
+      receipt into training (the sha256 leakage check cannot see a re-blurred copy).
+    - Train copies of one photo with identical normalised targets keep the smallest sha256.
+    - Train copies whose targets disagree are all dropped: nothing says which label is right."""
+    hashes = {sha: phash(image) for sha, image, _ in train}
+    held = [(split, sha, phash(image)) for split, sha, image in holdout]
+    excluded: dict[str, str] = {}
+    for sha in sorted(hashes):
+        match = next((h for h in held if _hamming(hashes[sha], h[2]) <= hamming), None)
+        if match is not None:
+            excluded[sha] = f"holdout_copy:{match[0]}:{match[1]}"
+    holdout_copies = len(excluded)
+    targets = {sha: target for sha, _, target in train}
+    remaining = sorted(sha for sha in hashes if sha not in excluded)
+    parent = {sha: sha for sha in remaining}
+
+    def root(sha: str) -> str:
+        while parent[sha] != sha:
+            parent[sha] = parent[parent[sha]]
+            sha = parent[sha]
+        return sha
+
+    for i, a in enumerate(remaining):
+        for b in remaining[i + 1 :]:
+            if _hamming(hashes[a], hashes[b]) <= hamming:
+                parent[root(b)] = root(a)
+    clusters: dict[str, list[str]] = defaultdict(list)
+    for sha in remaining:
+        clusters[root(sha)].append(sha)
+    redundant = conflicting = 0
+    for members in clusters.values():
+        if len(members) < 2:
+            continue
+        first, *rest = sorted(members)
+        if len({targets[m] for m in members}) == 1:
+            redundant += len(rest)
+            excluded.update({m: f"redundant_copy:{first}" for m in rest})
+        else:
+            conflicting += len(members)
+            excluded.update({m: "conflicting_copy" for m in members})
+    return CordCopies(
+        excluded=excluded,
+        holdout_copies=holdout_copies,
+        redundant_copies=redundant,
+        conflicting_copies=conflicting,
+    )
+
+
+def _cord_holdout_images(data_root: Path) -> list[tuple[str, str, Path]]:
+    """(split, sha256, image) of every CORD validation and test image. A missing hold-out index
+    stops prep: without it the hold-out copy check cannot run (fail closed)."""
+    out: list[tuple[str, str, Path]] = []
+    for split in CORD_HOLDOUT_SPLITS:
+        index = data_root / CORD_DATASET / split / CORD_INDEX
+        try:
+            records = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()
+                       if line.strip()]  # fmt: skip
+            images = {str(r["sha256"]): index.parent / str(r["image"]) for r in records}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise TrainingError(
+                f"CORD {split} index {index} is unreadable ({exc!r}); the hold-out copy check "
+                "needs it before CORD train can be used"
+            ) from exc
+        out.extend((split, sha, image) for sha, image in sorted(images.items()))
+    return out
+
+
+def _phash_file(path: Path) -> int:
+    from ml.extractor_b.guards import page1_phash_int
+
+    return page1_phash_int(path)
+
+
 def cord_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc]:
     """Every CORD v2 train image in the manifest (ADR-0019 §9.2: all 800 rows, 798 distinct
-    images, no sampling or upsampling) with its `gt_parse` target from the split's index. A
+    images, no sampling or upsampling) with its `gt_parse` target from the split's index, less
+    the photo copies `cord_copy_exclusions` drops (ADR-0019 amendment 2). A
     manifest train image off the `evals/splits.json` train split means the splits predate the
     CORD fetch, which stops prep (DataLeakError). Yields nothing while CORD is absent; the mix
     check then names the missing source."""
@@ -282,6 +384,7 @@ def cord_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc
             f"train split (first {stray[0]}); regenerate the splits after the CORD fetch"
         )
     indexes: dict[Path, dict[str, Any]] = {}
+    docs: list[tuple[str, Path, dict[str, Any]]] = []
     for doc_id, sha, rel in sorted(files):
         image = rel if rel.is_absolute() else data_root.parent / rel
         if image.parent not in indexes:
@@ -294,12 +397,33 @@ def cord_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc
             )
         if not isinstance(gt_parse, dict):
             raise TrainingError(f"CORD train doc {doc_id}: gt_parse is not an object")
+        docs.append((sha, image, cord_target(gt_parse)))
+    if not docs:
+        return
+    from ml.extractor_b.guards import normalised_target
+
+    copies = cord_copy_exclusions(
+        [(sha, image, normalised_target(target_json(t))) for sha, image, t in docs],
+        _cord_holdout_images(data_root),
+        phash=_phash_file,
+    )
+    print(
+        f"cord: {len(docs)} train photos, {len(copies.excluded)} copies dropped "
+        f"({copies.holdout_copies} of a hold-out photo, {copies.redundant_copies} redundant, "
+        f"{copies.conflicting_copies} with conflicting labels; ADR-0019 amendment 2)",
+        flush=True,
+    )
+    for sha, reason in sorted(copies.excluded.items()):
+        print(f"cord: drop {sha} {reason}", flush=True)
+    for sha, image, target in docs:
+        if sha in copies.excluded:
+            continue
         yield SourceDoc(
             source=SampleSource.CORD,
             document_sha256=sha,
             pages=_file_pages(image),
             n_pages=1,
-            target=cord_target(gt_parse),
+            target=target,
         )
 
 
