@@ -192,11 +192,14 @@ def _activities(fake: _Fakes, real: Any) -> Sequence[Callable[..., object]]:
         fake.validate,
         fake.fraud,
         fake.route,
+        fake.review_hold,
         fake.review_note,
+        fake.confirm_review,
         apply_review,
         build_einvoice,
         fake.send_to_asp,
         fake.archive,
+        fake.mark_failed,
     ]
 
 
@@ -253,12 +256,20 @@ async def test_approve_without_corrections_fails_once_non_retryably(
 
     assert fake.einvoice_attempts == 1  # EInvoiceError is non-retryable
     assert "send_to_asp" not in fake.calls
+    # A failed post-review build must not leave the invoice at APPROVED in the database.
+    assert fake.calls[-1] == "mark_failed"
 
 
 # --- pure corrections helpers ---------------------------------------------------------------
 
-_EXTRACTED: dict[str, str | None] = {"supplier_trn": "100000000000003", "currency": None}
-"""The model-sourced values the workflow's invoice was built from (supplier TRN present)."""
+_ADDRESS = "Al Quoz, Dubai"
+_EXTRACTED: dict[str, str | None] = {
+    "supplier_trn": "100000000000003",
+    "currency": None,
+    "supplier_address": _ADDRESS,
+}
+"""The model-sourced values the workflow's invoice was built from (supplier TRN present, and a
+supplier address naming an emirate)."""
 
 
 def test_corrections_from_fields_names_every_missing_value() -> None:
@@ -291,6 +302,7 @@ def test_corrections_from_fields_parses_a_complete_set() -> None:
             "currency": "aed",
             "line_items[1].vat_category": "AE",
             "line_items[1].vat_rate": "5%",
+            "supplier_address": _ADDRESS,
         },
         extracted=_EXTRACTED,
     )
@@ -299,6 +311,7 @@ def test_corrections_from_fields_parses_a_complete_set() -> None:
     assert corrections.lines == (
         LineCorrection(index=1, vat_category=VatCategory.REVERSE_CHARGE, vat_rate=Decimal("5")),
     )
+    assert corrections.supplier_address is None  # the extracted address is kept as is
 
 
 _COMPLETE_FIELDS: dict[str, str | None] = {
@@ -306,6 +319,7 @@ _COMPLETE_FIELDS: dict[str, str | None] = {
     "currency": "AED",
     "line_items[1].vat_category": "S",
     "line_items[1].vat_rate": "5",
+    "supplier_address": _ADDRESS,
 }
 
 

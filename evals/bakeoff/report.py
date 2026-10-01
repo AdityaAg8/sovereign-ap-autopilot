@@ -1,17 +1,21 @@
-"""reports/bakeoff.md and the ADR-0016 decision block from the M3.4 bake-off rows (PRD §10 M3.4):
+"""reports/bakeoff.md, its machine-readable twin reports/bakeoff.json (read by the scoreboard) and
+the ADR-0016 decision block from the M3.4 bake-off rows (PRD §10 M3.4):
 per arm UAE field F1 (EN/AR/pooled), valid JSON, p50/p95 latency, ExtractBench short value F1,
 probe and eval-run VRAM, then the PRD decision rule: Qwen3.5-9B stays unless a challenger beats
-it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists.
+it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists;
+a challenger the pre-registered futility rule stopped at an interim look loses (ADR-0016 amdt 1).
 
-Usage: python -m evals.bakeoff.report [--no-adr]
+Usage: python -m evals.bakeoff.report [--no-adr] [--json reports/bakeoff.json]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
@@ -31,10 +35,21 @@ from evals.bakeoff.arms import (
     BakeoffError,
 )
 from evals.bakeoff.probe import PROBE_PATH, ProbeResult, load_probe
+from evals.bakeoff.sequential import (
+    ASSUMED_SD_POINTS,
+    FALSE_STOP_BOUND,
+    OBF_C,
+    Futility,
+    LookResult,
+    futility,
+)
 from evals.bakeoff.subset import BAKEOFF_SUBSET_SIZE
 from evals.extraction_identity import require_identity
 
 REPORT_PATH: Final[Path] = Path("reports/bakeoff.md")
+JSON_PATH: Final[Path] = Path("reports/bakeoff.json")
+JSON_SCHEMA_VERSION: Final[int] = 1
+"""Contract read by `evals.scoreboard_sources.parse_bakeoff` (docs/evals.md); bump on any change."""
 ADR_PATH: Final[Path] = Path("docs/adr/0016-extractor-a-bakeoff.md")
 ADR_START: Final[str] = "<!-- BAKEOFF:DECISION:START -->"
 ADR_END: Final[str] = "<!-- BAKEOFF:DECISION:END -->"
@@ -57,6 +72,8 @@ class Outcome(StrEnum):
     DISQUALIFIED = "disqualified"
     PENDING = "pending"
     LATENCY_ARM = "latency arm"
+    STOPPED = "stopped (futility)"
+    """A challenger the pre-registered futility rule stopped at an interim look: it loses."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +97,16 @@ class ArmResult:
     eb_official: bool | None
     run_peak_gb: float | None
     run_vram_gaps: int
+    futility: Futility | None = None
+    """Interim looks against the baseline (challengers with baseline rows only)."""
+
+    @property
+    def stopped(self) -> LookResult | None:
+        """The look that stopped this arm; None when it was not stopped or has every UAE row
+        (a complete arm is always judged on the full evaluation)."""
+        if self.futility is None or self.uae_rows >= self.uae_expected:
+            return None
+        return self.futility.stopped
 
     @property
     def complete(self) -> bool:
@@ -137,6 +164,13 @@ def decide(baseline: ArmResult, result: ArmResult) -> Verdict:
             key,
             Outcome.DISQUALIFIED,
             (f"eval-run whole-card peak {result.run_peak_gb:.2f} GB > {WHOLE_CARD_BUDGET_GB} GB",),
+        )
+    stopped = result.stopped
+    if stopped is not None:
+        return Verdict(
+            key,
+            Outcome.STOPPED,
+            (f"look {stopped.look} (n={stopped.n}): " + "; ".join(stopped.reasons),),
         )
     if not (result.complete and baseline.complete):
         missing = [r.arm.key for r in (baseline, result) if not r.complete]
@@ -204,6 +238,77 @@ def _secs(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.1f}"
 
 
+def _look_row(key: str, look: LookResult, ran_in_full: bool) -> str:
+    ratio = "n/a" if look.ratio is None else f"{look.ratio:.2f}"
+    lower = "n/a" if look.ratio_lower is None else f"{look.ratio_lower:.2f}"
+    if not look.stop:
+        verdict = "continue"
+    elif ran_in_full:
+        verdict = "bound crossed; arm ran in full, full evaluation used"
+    else:
+        verdict = "**stop**: " + "; ".join(look.reasons)
+    return (
+        f"| `{key}` | {look.look} | {look.n} | {look.z:.2f} | {look.delta_points:+.2f} "
+        f"| {look.delta_se:.2f} | {look.delta_upper:+.2f} | {look.doc_sd_points:.1f} "
+        f"| {ratio} | {lower} | {look.invalid}/{look.max_invalid} | {verdict} |"
+    )
+
+
+def futility_section(results: Sequence[ArmResult]) -> list[str]:
+    """The interim-look table of every challenger, and which arms stopped where."""
+    rows = [
+        _look_row(r.arm.key, look, r.stopped is None)
+        for r in results
+        if r.futility is not None
+        for look in r.futility.looks
+    ]
+    stopped = [r for r in results if r.stopped is not None]
+    measured = (
+        ", ".join(
+            f"`{r.arm.key}` {r.futility.looks[0].doc_sd_points:.1f} pt"
+            for r in results
+            if r.futility is not None and r.futility.looks
+        )
+        or "not measured yet"
+    )
+    lines = [
+        "## Interim looks (futility rule, ADR-0016 amendment 1)",
+        "",
+        "A challenger is compared with the baseline on the same first n subset documents at "
+        "n = 1/4, 2/4 and 3/4 of the subset (paired bootstrap, "
+        f"O'Brien-Fleming z_k = {OBF_C}/sqrt(t_k)). It stops only when the upper bound of its "
+        "pooled ΔF1 is below +1.0 pt, the lower bound of its p50 ratio is above 1.5x, or it has "
+        "more invalid-JSON rows than the full subset may hold at ≥ 99% valid. Stated false-stop "
+        f"bound for an arm that truly meets the criteria: ≤ {100 * FALSE_STOP_BOUND:.1f}%. "
+        f"Assumed per-document SD of the paired F1 difference: {ASSUMED_SD_POINTS:.0f} pt; "
+        f"measured at the first look: {measured}.",
+        "",
+    ]
+    if rows:
+        lines += [
+            "| Arm | Look | n | z | ΔF1 pt | SE | Upper | Doc SD | p50 ratio | Lower "
+            "| Invalid | Verdict |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            *rows,
+            "",
+        ]
+    else:
+        lines += ["No interim look taken yet.", ""]
+    lines.append(
+        "Stopped: "
+        + (
+            "; ".join(
+                f"`{r.arm.key}` at look {look.look} (n={look.n})"
+                for r in stopped
+                if (look := r.stopped) is not None
+            )
+            or "none"
+        )
+        + "."
+    )
+    return lines
+
+
 def decision_block(results: Sequence[ArmResult], verdicts: Sequence[Verdict]) -> str:
     """The markdown that goes between the ADR markers and into the report."""
     decision = overall(results, verdicts)
@@ -213,6 +318,67 @@ def decision_block(results: Sequence[ArmResult], verdicts: Sequence[Verdict]) ->
         for v in verdicts
     ]
     return "\n".join(lines)
+
+
+def to_json(
+    results: Sequence[ArmResult], verdicts: Sequence[Verdict], *, generated_at: datetime
+) -> dict[str, Any]:
+    """reports/bakeoff.json: the decision and, per arm, its verdict and measured numbers. Rates
+    are in [0, 1]; a metric not measured yet is null, never 0 (the scoreboard shows pending)."""
+    if generated_at.tzinfo is None:
+        raise BakeoffError("bakeoff.json generated_at must be timezone-aware")
+    by_arm = {v.arm: v for v in verdicts}
+    decision = overall(results, verdicts)
+    arms: list[dict[str, Any]] = []
+    for r in results:
+        verdict = by_arm.get(r.arm.key)
+        if verdict is None:
+            raise BakeoffError(f"no verdict for arm `{r.arm.key}`")
+        en, ar, pooled = r.uae_f1 if r.uae_f1 is not None else (None, None, None)
+        stop = r.stopped
+        arms.append(
+            {
+                "arm": r.arm.key,
+                "alias": r.arm.alias,
+                "label": r.arm.label,
+                "kind": r.arm.kind.value,
+                "verdict": verdict.outcome.value,
+                "reasons": list(verdict.reasons),
+                "complete": r.complete,
+                "uae_rows": r.uae_rows,
+                "uae_expected": r.uae_expected,
+                "eb_rows": r.eb_rows,
+                "eb_expected": r.eb_expected,
+                "uae_f1_en": en,
+                "uae_f1_ar": ar,
+                "uae_f1_pooled": pooled,
+                "uae_valid_json": r.uae_valid_json,
+                "eb_value_f1": r.eb_value_f1,
+                "eb_valid_json": r.eb_valid_json,
+                "p50_s": r.p50_s,
+                "p95_s": r.p95_s,
+                "run_peak_gb": r.run_peak_gb,
+                "stopped_at_look": None if stop is None else stop.look,
+                "stopped_at_n": None if stop is None else stop.n,
+            }
+        )
+    return {
+        "schema_version": JSON_SCHEMA_VERSION,
+        "generated_at": generated_at.isoformat(),
+        "decision": {
+            "status": decision.status,
+            "champion": decision.champion,
+            "text": decision.text,
+        },
+        "arms": arms,
+    }
+
+
+def write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def render_report(
@@ -283,6 +449,8 @@ def render_report(
         "",
         "Arms: " + "; ".join(f"`{r.arm.key}` = {r.arm.label}" for r in results) + ".",
         "",
+        *futility_section(results),
+        "",
         "## MTP speculative decoding",
         "",
         MTP_FINDING,
@@ -319,8 +487,10 @@ def collect_arm(
     eb_records: Mapping[str, Mapping[str, Any]],
     eb_external_repo: Path,
     vram_sessions: Sequence[Mapping[str, Any]],
+    baseline_uae_rows: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ArmResult:
-    """Score one arm's rows over exactly the fixed selections (rows outside them are ignored)."""
+    """Score one arm's rows over exactly the fixed selections (rows outside them are ignored);
+    a challenger with `baseline_uae_rows` also gets its interim looks recomputed from rows."""
     from evals.bakeoff.extractbench import score_extractbench_rows
     from evals.extraction_f1 import score_rows, valid_json_rate
 
@@ -344,6 +514,11 @@ def collect_arm(
         eb_f1, official = score.value_f1.f1, score.used_official_framework
         eb_valid = sum(bool(eb_rows[d]["valid_json"]) for d in eb_ids) / len(eb_ids)
     peak, gaps = run_peak(vram_sessions)
+    looks = (
+        futility(arm.key, uae_rows, baseline_uae_rows, uae_data_dir, uae_shas)
+        if arm.kind is ArmKind.CHALLENGER and baseline_uae_rows is not None
+        else None
+    )
     return ArmResult(
         arm=arm,
         probe=probe,
@@ -361,6 +536,7 @@ def collect_arm(
         eb_official=official,
         run_peak_gb=peak,
         run_vram_gaps=gaps,
+        futility=looks,
     )
 
 
@@ -381,7 +557,8 @@ def _live(args: argparse.Namespace) -> int:  # pragma: no cover - reads local ro
     records, eb_shas, _ = extractbench_inputs(args.data_root, None)
     probe = load_probe(args.probe)
     results = []
-    for arm in ARMS:
+    baseline_rows: dict[str, dict[str, Any]] | None = None
+    for arm in ARMS:  # the baseline first: challengers' interim looks read its rows
         files = arm_files(args.rows_dir, arm)
         identities = arm_identities(
             arm,
@@ -404,8 +581,11 @@ def _live(args: argparse.Namespace) -> int:  # pragma: no cover - reads local ro
                 eb_records=records,
                 eb_external_repo=args.data_root / "external" / "ExtractBench",
                 vram_sessions=load_vram_sessions(files.vram),
+                baseline_uae_rows=baseline_rows,
             )
         )
+        if arm.kind is ArmKind.BASELINE:
+            baseline_rows = uae_rows
     baseline = results[0]
     verdicts = [decide(baseline, r) for r in results]
     report = render_report(
@@ -416,6 +596,7 @@ def _live(args: argparse.Namespace) -> int:  # pragma: no cover - reads local ro
     )
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8", newline="\n")
+    write_json(args.json, to_json(results, verdicts, generated_at=datetime.now(UTC)))
     if args.adr:
         adr = args.adr_path.read_text(encoding="utf-8")
         args.adr_path.write_text(
@@ -432,6 +613,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wr
     parser.add_argument("--rows-dir", type=Path, default=Path("logs/bakeoff"))
     parser.add_argument("--probe", type=Path, default=PROBE_PATH)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
+    parser.add_argument("--json", type=Path, default=JSON_PATH)
     parser.add_argument("--adr-path", type=Path, default=ADR_PATH)
     parser.add_argument("--no-adr", dest="adr", action="store_false")
     parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))

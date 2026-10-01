@@ -365,6 +365,19 @@ Implementation decisions of M7.4/M7.5; none changes a feature, the fit, the grid
   `WORKER_LLAMA_SWAP_CONFIG`, `WORKER_MODELS_LOCK` and `WORKER_MODELS_ROOT` at them, so it can
   resolve the served identities (`tests/unit/test_worker_trust_mounts.py`).
 
+#### 5.B Amendment (2026-09-28): the champion-only calibrator (ADR-0018 §5)
+
+An explicit second artifact kind for when only Extractor A has rows. `evals.trust_gate calibrate
+--extractors a` (Makefile `TRUST_EXTRACTORS=a`) fits on A's cal rows with the B-absent encoding
+(`field_features(b=None)`: agreement 1.0, B logprobs 0.0, B never missing, nothing disputed; all
+constant, so only A's evidence moves P(correct)) and records `extractor_b = null`. Alpha, delta,
+the §6 grid, `LTT_MIN_ACCEPTED` and the §5.A test gate are unchanged; the test half needs A rows
+only. The default stays `a b`, and missing B rows without the flag still raise `TrustRowsError`.
+Such an artifact is **never activated**: the runtime pipeline serves B, whose features it never
+saw. If one is made active anyway, the runtime gate refuses every decision with the typed reason
+`calibrator_champion_only` (every field to REVIEW, audited). It never scores B-derived features
+with A's calibrator, and it never ignores B output.
+
 ### 6. Learn-then-Test (M7.5)
 
 The grid is `default_grid()`: λ₁ = 1.0, then λⱼ = 1 − 10^(−4 + 0.05(j−2)) for j = 2…76 (0.9999

@@ -2,7 +2,9 @@
 auto-completing or waiting for a human review signal based on `apx.policy`'s routing decision.
 Deterministic by construction: activities (in `apx.workflows.activities`) do every I/O call,
 external side effect and wall-clock read; this file only sequences them and holds in-memory
-state for the `status` query (PRD §3, §6.4, §10 M5.2)."""
+state for the `status` query (PRD §3, §6.4, §10 M5.2). A `review` signal is acted on only once
+`confirm_review` finds it backed by the database (REVIEW.md C-03); an unbacked one is ignored, and
+one that arrives before the review wait is buffered for it (REVIEW.md N-01)."""
 
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ from typing import Final
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError
+from temporalio.exceptions import ActivityError, FailureError
 
 with workflow.unsafe.imports_passed_through():
     # Every one of these is a Pydantic model with no I/O of its own; `execute_activity`'s
@@ -39,8 +41,8 @@ with workflow.unsafe.imports_passed_through():
     )
 
 NON_RETRYABLE_ERRORS: Final[Mapping[str, tuple[str, ...]]] = {
-    "scan": ("DocumentNotFoundError",),
-    "parse": ("DocumentNotFoundError", "GpuProbeError"),
+    "scan": ("DocumentNotFoundError", "RasterTooLargeError"),
+    "parse": ("DocumentNotFoundError", "GpuProbeError", "RasterTooLargeError"),
     "extract": (
         "DocumentNotFoundError",
         "ParsedArtifactIntegrityError",
@@ -48,7 +50,13 @@ NON_RETRYABLE_ERRORS: Final[Mapping[str, tuple[str, ...]]] = {
         "GpuProbeError",
     ),
     "trust_gate": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "TrustGateError"),
-    "fraud": ("DocumentNotFoundError", "ParsedArtifactIntegrityError", "FraudError"),
+    "fraud": (
+        "DocumentNotFoundError",
+        "ParsedArtifactIntegrityError",
+        "FraudError",
+        "RasterTooLargeError",
+    ),
+    "confirm_review": ("StaleApprovalError",),
     "apply_review": ("EInvoiceError", "MissingCorrectionsError"),
     "build_einvoice": (
         "EInvoiceError",
@@ -74,14 +82,53 @@ so exact-name matching retries it; the
 process may free memory) and keep the default retries."""
 
 
+_INITIAL_INTERVAL = timedelta(seconds=1)
+_BACKOFF = 2.0
+_MAX_INTERVAL = timedelta(seconds=60)
+OUTAGE_WINDOW: Final = timedelta(minutes=30)
+"""How long a dependency (Postgres, llama-swap, the ASP) may be down before a retrying activity
+gives up and the invoice is marked FAILED. The activities are idempotent (the ASP send and
+archive are keyed, the rest rewrite the same rows), so riding out an outage is safe."""
+
+
+def attempts_spanning(window: timedelta) -> int:
+    """The fewest attempts whose retry backoff (1 s doubling, capped at `_MAX_INTERVAL`) adds up
+    to at least `window`, not counting the attempts' own run time."""
+    attempts, waited, interval = 1, timedelta(0), _INITIAL_INTERVAL
+    while waited < window:
+        waited += interval
+        attempts += 1
+        interval = min(interval * _BACKOFF, _MAX_INTERVAL)
+    return attempts
+
+
+OUTAGE_ATTEMPTS: Final = attempts_spanning(OUTAGE_WINDOW)
+"""The default attempt cap: a transient failure keeps retrying for about `OUTAGE_WINDOW`, then
+fails the activity. Typed deterministic errors (`NON_RETRYABLE_ERRORS`) still fail at once."""
+_MAX_ATTEMPTS: Final[Mapping[str, int]] = {"mark_failed": 0}
+"""Per-activity attempt caps other than `OUTAGE_ATTEMPTS`; 0 is Temporal's "no limit"."""
+
+
 def _retry_policy(activity: str) -> RetryPolicy:
     return RetryPolicy(
-        initial_interval=timedelta(seconds=1),
-        backoff_coefficient=2.0,
-        maximum_interval=timedelta(seconds=30),
-        maximum_attempts=5,
+        initial_interval=_INITIAL_INTERVAL,
+        backoff_coefficient=_BACKOFF,
+        maximum_interval=_MAX_INTERVAL,
+        maximum_attempts=_MAX_ATTEMPTS.get(activity, OUTAGE_ATTEMPTS),
         non_retryable_error_types=list(NON_RETRYABLE_ERRORS.get(activity, ())),
     )
+
+
+def _failure_text(exc: BaseException) -> str:
+    """The failure and its cause chain, innermost last: an `ActivityError` only says "Activity
+    task failed"; the typed `apx` error (its `ApplicationError` type and message) is the cause."""
+    parts: list[str] = []
+    current: BaseException | None = exc
+    while current is not None and len(parts) < 5:
+        kind = getattr(current, "type", None) or type(current).__name__
+        parts.append(f"{kind}: {current}")
+        current = current.__cause__
+    return " <- ".join(parts)
 
 
 _ACTIVITY_TIMEOUT = timedelta(minutes=5)
@@ -100,9 +147,32 @@ REVIEW_CORRECTIONS_PATCH = "adr12-review-corrections"
 """`workflow.patched` id: histories recorded before ADR-0012 replay without apply_review."""
 REVIEW_NOTE_PATCH = "m9-review-note"
 """`workflow.patched` id: histories recorded before M9.3 replay without the review-note step."""
+FAILED_STATUS_PATCH = "p0-failed-status"
+"""`workflow.patched` id: histories recorded before Phase 0 replay a failure without the
+`mark_failed` activity that writes FAILED to `invoices.status`."""
 PAYEE_PIN_PATCH = "adr14-payee-pin"
 """`workflow.patched` id: histories recorded before ADR-0014 §7 replay `build_einvoice` with the
 invoice alone; new executions also pass the payee pinned at routing (`RoutingDecision.payee`)."""
+REVIEW_GUARD_PATCH = "m11-review-guard"
+"""`workflow.patched` id: histories recorded before M11.2 replay without `review_hold` after
+routing and without `confirm_review` after the review signal (REVIEW.md C-03, H-02)."""
+REVIEW_BUFFER_PATCH = "m11-review-signal-buffer"
+"""`workflow.patched` id: histories recorded before M11.3 replay a `review` signal that arrived
+before the review wait as dropped; new executions buffer it for the wait (REVIEW.md N-01)."""
+_BEFORE_REVIEW_WAIT: Final = frozenset(
+    {
+        InvoiceStatus.RECEIVED,
+        InvoiceStatus.SCANNED,
+        InvoiceStatus.PARSED,
+        InvoiceStatus.EXTRACTED,
+        InvoiceStatus.GATED,
+        InvoiceStatus.VALIDATED,
+        InvoiceStatus.FRAUD_CHECKED,
+    }
+)
+"""In-memory statuses before the workflow reaches (or skips) the review wait. The `route`
+activity has already written AWAITING_REVIEW to the database while this still says
+FRAUD_CHECKED, so the API can accept and signal a decision in that window."""
 
 
 class ReviewDecision(Frozen):
@@ -140,6 +210,25 @@ class InvoiceWorkflow:
             # workflow execution itself fails in Temporal (I4: nothing is silently dropped).
             self._status = InvoiceStatus.FAILED
             self._error = str(exc)
+            # Only a Temporal failure (activity retries exhausted, a non-retryable typed error)
+            # ends the execution; a workflow-code bug fails the *task*, which Temporal retries
+            # until the code is fixed, so writing FAILED for it would record a marker the fixed
+            # code then replays against.
+            if isinstance(exc, FailureError) and workflow.patched(FAILED_STATUS_PATCH):
+                # The API and the reviewer read `invoices.status`, not this query: without the
+                # write, an invoice whose post-review build failed sat at APPROVED forever.
+                # Retried without limit (`_MAX_ATTEMPTS`): the write is cheap and idempotent,
+                # and until it lands the execution stays Running, which is visible, rather
+                # than failing with the row still showing its last in-flight status.
+                try:
+                    await workflow.execute_activity(
+                        "mark_failed",
+                        args=[inp.invoice_id, _failure_text(exc)],
+                        start_to_close_timeout=_ACTIVITY_TIMEOUT,
+                        retry_policy=_retry_policy("mark_failed"),
+                    )
+                except ActivityError:
+                    workflow.logger.error("could not record FAILED for invoice %s", inp.invoice_id)
             raise
         return self._snapshot()
 
@@ -221,14 +310,24 @@ class InvoiceWorkflow:
             start_to_close_timeout=_ACTIVITY_TIMEOUT,
             retry_policy=_retry_policy("route"),
         )
-        self._route = routing.route
+        route = routing.route
+        if workflow.patched(REVIEW_GUARD_PATCH):
+            # H-02: a reviewer's pre-route "send to review" turns AUTO into REVIEW.
+            route = await workflow.execute_activity(
+                "review_hold",
+                args=[inp.invoice_id, route],
+                result_type=Route,
+                start_to_close_timeout=_ACTIVITY_TIMEOUT,
+                retry_policy=_retry_policy("review_hold"),
+            )
+        self._route = route
 
-        if routing.route is Route.BLOCK:
+        if route is Route.BLOCK:
             # K7: BLOCK has no override; the invoice can only be rejected (ADR-0008).
             self._status = InvoiceStatus.BLOCKED
             return
 
-        if routing.route is Route.REVIEW:
+        if route is Route.REVIEW:
             self._status = InvoiceStatus.AWAITING_REVIEW
             if workflow.patched(REVIEW_NOTE_PATCH):
                 try:
@@ -244,14 +343,13 @@ class InvoiceWorkflow:
                     # The note is advisory: a failed attempt is in the workflow history and the
                     # worker log, and the invoice still waits for its human reviewer.
                     workflow.logger.warning("review note failed for invoice %s", invoice.id)
-            await workflow.wait_condition(lambda: self._review is not None)
-            assert self._review is not None  # narrows for type-checking; set by wait_condition
-            if not self._review.approved:
+            decision = await self._await_backed_review(inp.invoice_id)
+            if not decision.approved:
                 # No REJECTED status exists (apx.workflows.interfaces.InvoiceStatus): a
                 # rejected review, like BLOCK, ends the invoice without payment.
                 self._status = InvoiceStatus.BLOCKED
                 return
-            corrections = self._review.corrections
+            corrections = decision.corrections
             if corrections is not None and workflow.patched(REVIEW_CORRECTIONS_PATCH):
                 invoice = await workflow.execute_activity(
                     "apply_review",
@@ -296,12 +394,50 @@ class InvoiceWorkflow:
         )
         self._status = InvoiceStatus.ARCHIVED
 
+    async def _await_backed_review(self, invoice_id: InvoiceId) -> ReviewDecision:
+        """Waits for a `review` signal the database backs. C-03: the signal alone is not
+        authority (anyone who can reach Temporal can send one), so before the workflow builds or
+        sends anything, `confirm_review` must find the approval row with a digest matching the
+        current invoice (or the recorded rejection). An unbacked signal is audited there and
+        dropped, and the invoice stays awaiting review for a real decision. An approval the API
+        did record but whose digest or payee has since moved raises `StaleApprovalError`
+        (non-retryable), so the run ends FAILED with that reason instead of waiting forever for
+        a decision nobody can send again (N-13)."""
+        guarded = workflow.patched(REVIEW_GUARD_PATCH)
+        while True:
+            await workflow.wait_condition(lambda: self._review is not None)
+            decision = self._review
+            assert decision is not None  # narrows for type-checking; set by wait_condition
+            if not guarded:
+                return decision
+            backed: bool = await workflow.execute_activity(
+                "confirm_review",
+                args=[invoice_id, decision.approved],
+                result_type=bool,
+                start_to_close_timeout=_ACTIVITY_TIMEOUT,
+                retry_policy=_retry_policy("confirm_review"),
+            )
+            if backed:
+                return decision
+            workflow.logger.warning("unbacked review signal ignored for invoice %s", invoice_id)
+            self._review = None
+
     @workflow.signal
     def review(self, decision: ReviewDecision) -> None:
-        """Delivered once a human reviewer decides a REVIEW-routed invoice (M5.3). Ignored
-        outside the review wait or once a decision was already recorded, so a duplicate or
-        stray signal cannot flip an already-decided invoice."""
-        if self._status is InvoiceStatus.AWAITING_REVIEW and self._review is None:
+        """Delivered once a human reviewer decides a REVIEW-routed invoice (M5.3). Kept while
+        the workflow waits for review, or buffered for that wait when it arrives earlier: the
+        `route` activity commits AWAITING_REVIEW before this workflow's own status says so, and
+        the API may already have approved and signalled (N-01). Buffering is safe because
+        `confirm_review` still refuses anything the database does not back; if the route turns
+        out AUTO or BLOCK the buffered decision is never read. Ignored once a decision is held
+        or after the review point, so a duplicate or stray signal cannot flip a decided invoice."""
+        if self._review is not None:
+            return
+        if self._status is InvoiceStatus.AWAITING_REVIEW:
+            self._review = decision
+        elif self._status in _BEFORE_REVIEW_WAIT and workflow.patched(REVIEW_BUFFER_PATCH):
+            # Patched only on this branch: histories where the signal met the wait replay with
+            # no marker, and pre-M11.3 histories replay an early signal as dropped.
             self._review = decision
 
     @workflow.query

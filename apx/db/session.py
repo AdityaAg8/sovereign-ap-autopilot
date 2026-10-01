@@ -18,16 +18,19 @@ from sqlalchemy.ext.asyncio import (
 
 from apx.common.errors import ConfigError
 
-DEFAULT_DATABASE_URL = "postgresql+asyncpg://apx:apx-dev-only@localhost:5432/apx"
-"""Matches the local Compose `postgres` service's default `POSTGRES_PASSWORD`
-(infra/compose.yaml); overridden in every other environment by the `DATABASE_URL` env var."""
+MISSING_URL_MESSAGE = (
+    "no database configured: set DATABASE_URL (postgresql+asyncpg://...) or POSTGRES_PASSWORD "
+    "(generated into .env by `make env`); there is no built-in default password"
+)
 
 
 def get_database_url() -> str:
-    """Reads `DATABASE_URL` from the environment, falling back to the local Compose default.
+    """Reads `DATABASE_URL` from the environment, else builds it from the Compose `POSTGRES_*`
+    settings. There is no baked-in default credential (REVIEW C-02).
 
-    Raises `apx.common.errors.ConfigError` if the URL is set but does not use the `asyncpg`
-    driver (psycopg is blocked on this host; the async engine requires an async driver).
+    Raises `apx.common.errors.ConfigError` when neither `DATABASE_URL` nor `POSTGRES_PASSWORD`
+    is set, or when the URL does not use the `asyncpg` driver (psycopg is blocked on this host;
+    the async engine requires an async driver).
     """
     url = os.environ.get("DATABASE_URL") or _compose_url()
     if not url.startswith("postgresql+asyncpg://"):
@@ -41,7 +44,7 @@ def _compose_url() -> str:
     actually created. `POSTGRES_HOST` is `postgres` inside the `app` network; on the host it
     defaults to localhost (the gateway's passthrough)."""
     if not os.environ.get("POSTGRES_PASSWORD"):
-        return DEFAULT_DATABASE_URL
+        raise ConfigError(MISSING_URL_MESSAGE)
     user = quote(os.environ.get("POSTGRES_USER") or "apx", safe="")
     password = quote(os.environ["POSTGRES_PASSWORD"], safe="")
     database = quote(os.environ.get("POSTGRES_DB") or "apx", safe="")

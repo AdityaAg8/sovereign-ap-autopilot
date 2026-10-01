@@ -54,6 +54,109 @@ champion that breaks it would fail M3.3, so this adds no new bar. Among several 
 highest pooled F1 wins (ties: lower p50). The MTP arm is reported with its speed-up and F1 delta;
 adopting it as the serving configuration of the same weights would be its own change.
 
+## Amendment 1 (2026-09-27): futility stopping, arm a reuse, bounded ExtractBench requests
+
+Pre-registered before any bake-off eval row exists. Implemented in `evals/bakeoff/sequential.py`
+(rule), `evals/bakeoff/run.py` (runner) and `evals/bakeoff/report.py` (the report recomputes every
+look from the rows). The decision rule above is unchanged; this only decides when a challenger may
+stop spending GPU hours.
+
+### 1. Group-sequential futility stopping
+
+- Looks: after the first n = 50, 100 and 150 subset documents (information fraction t = 1/4, 2/4,
+  3/4, in the subset's fixed sorted order); n = 200 is the full evaluation. Only `challenger`
+  arms are tested. The baseline and the MTP latency arm always run in full.
+- Statistics at look k, paired over the same first n documents against the baseline's rows:
+  - ΔF1: the pooled micro header-field F1 difference in points, from per-document (tp, fp, fn),
+    which sum exactly to the pooled scorer's counts. Its SE is the paired bootstrap SE (2000
+    replicates, seeded by arm and look), floored at 4 / sqrt(n) points.
+  - Latency: the ratio of p50s over documents where both arms have a latency, with the bootstrap
+    SE of its log.
+- Bound: O'Brien-Fleming, z_k = 2.024 / sqrt(t_k) = 4.05, 2.86, 2.34 (K = 4, one-sided 0.025).
+- Stop when any of these holds:
+  1. The upper bound ΔF1 + z_k·SE is below +1.0 point.
+  2. The lower bound exp(log r − z_k·SE) of the p50 ratio is above 1.5x.
+  3. The arm already has more than 2 invalid-JSON rows. At n = 200, valid JSON ≥ 99% allows at
+     most 2, so this criterion is exact, not statistical.
+- A stopped arm is reported as `stopped (futility)` with its look and reasons, and loses. It runs
+  no further UAE or ExtractBench documents. An arm that is not stopped runs all 200 documents and
+  is judged by the unchanged rule. So whenever an arm is not stopped, its decision is the same as
+  under full evaluation. An arm with all 200 rows is always judged on the full evaluation, even if
+  a recomputed look would have crossed a bound (for example, it ran before the baseline's rows
+  existed).
+- False-stop bound: stopping at look k needs a z_k-sigma deviation against any arm whose true
+  gain is at least +1.0 point, so P(stop) ≤ Σ Φ(−z_k) = 0.0000 + 0.0021 + 0.0097 = 1.2% per
+  criterion, and ≤ 2.4% (stated bound 2.5%) for an arm that truly meets both. The SE floor only
+  widens the bound. `tests/unit/test_bakeoff_sequential.py` checks this in simulation, including a
+  hypothesis property over true gains from +1.0 to +4.0 points and p50 ratios from 0.5x to 1.5x.
+- Power, with the per-document SD of the paired F1 difference assumed at σ = 12 points before any
+  look (the SD measured at the first look is printed in the report next to it):
+  - At n = 200, SE = 12 / sqrt(200) = 0.85 points.
+  - The rule's power is P(Δ̂ ≥ 1.0 | true Δ) = Φ((Δ − 1.0) / 0.85): 0.72 at Δ = +1.5, 0.88 at
+    +2.0 and 0.96 at +2.5.
+  - At σ = 4, the planning figure, SE is 0.28 and the power is 0.96 at +1.5.
+  - Futility costs at most the 1.2% false-stop probability of the F1 criterion.
+- Expected saving: a challenger that is clearly slower (for example 27B IQ2_XXS at 2x or more
+  p50) stops at n = 50. One that is clearly worse on F1 usually stops at n = 100 or 150.
+- Determinism and resume: rows are written in subset order, and the bootstrap is seeded by
+  (arm, n). A resumed run re-derives the same stop from the existing `logs/bakeoff/` rows before
+  it calls the model. The VRAM session records `stopped_at_look`.
+
+### 2. Arm a reuses the A test rows
+
+`python -m evals.bakeoff.run --reuse-a-rows <evals.extraction_a rows>` imports the A test run's rows
+for the 200 subset documents into `logs/bakeoff/a.uae.jsonl`, tagged `reused_from`. Import is all
+or nothing, and only when both of these hold:
+
+- Every row in that file carries exactly arm a's identity: every `IDENTITY_KEYS` field, which is
+  alias, served GGUF sha256 and prompt version, plus the serving-args hash once the identity
+  carries it.
+- Every row has the current row schema.
+
+Otherwise nothing is imported and arm a runs. The rows do not record client concurrency, so the
+operator passes the flag only for an A test run made alone on the card at `--concurrency 1`.
+Latency is a decision input, and it must be measured the way the challengers are. The ExtractBench
+half of arm a still runs, and the gates' P2 keeps its own same-session A reference (ADR-0015).
+
+### 3. Bounded ExtractBench requests
+
+A huge ExtractBench schema could make llama-server answer 5xx or stall, which ended or hung the run.
+Now:
+
+- Each ExtractBench request has a 300 s wall-clock bound (`--request-timeout-s`), long enough to
+  include a cold load.
+- A timeout, read timeout or HTTP 5xx on one document becomes a recorded row, with
+  `valid_json: false` and `error_kind` set to `timeout` or `server_error`. It is scored as misses
+  against the arm, never skipped. The model is then unloaded so that a stalled slot cannot delay
+  the next document.
+- Three such rows in a row end the run with a typed `BakeoffError` naming the documents, since the
+  server is then the likely cause.
+- An unreachable server, or one still busy after the client's backoff, ends the run as before.
+- UAE requests are unchanged: any serving failure other than a 400 rejection ends the run.
+
+## Amendment 2 (2026-09-28): one parse cache, and arm a reuse checked, not trusted
+
+**Problem.** The bake-off kept its own parse cache (`data/bakeoff/parsed/`), so after
+`make parse-cache` it OCRed the 70 scanned documents of the 200 subset a second time (about
+95 s each on the card, some 1.8 h). Worse, arm a's reused rows were extracted from the shared
+cache's parses and the challengers from the bake-off's own, so a paired comparison could rest on
+two different OCR passes. And amendment 1 left the concurrency condition to the operator.
+
+**Decision.** No sample size, look, bound, decision rule or error guarantee changes.
+
+1. `evals.bakeoff.run` reads and fills the shared `evals.parse_cache` (`data/cache/parse/<parser
+   identity>/`). Keys are the same (sha256 of the runtime input bytes; scan PDFs are
+   byte-deterministic), so the subset is a cache hit and every arm reads the same parse.
+   Scan inputs are written under `data/bakeoff/scan_inputs/`.
+2. `evals.extraction_a` records `client_concurrency` on every row, and `make extraction-a-adr0012`
+   runs at `--concurrency 1` (extractor-a has one slot, ADR-0013 amdt 1, so a second request only
+   queued and inflated its latency).
+3. Arm a reuse is all or nothing, as before, and now also requires every row to carry the
+   serving identity the challengers are compared under (extractor-a's llama-swap args hash and
+   the parser identity of the cache the bake-off reads) and `client_concurrency == 1`. Any
+   mismatch, or a row without the fields, logs why and arm a runs. `make bakeoff` passes the A
+   test rows by default (`BAKEOFF_REUSE_A`, empty to disable), since the check is now mechanical.
+
 ## Decision outcome
 
 <!-- BAKEOFF:DECISION:START -->

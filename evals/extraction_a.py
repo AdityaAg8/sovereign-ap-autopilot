@@ -3,8 +3,12 @@
 the parse words and writes `reports/extraction_a.md`: valid-JSON rate (gate ≥ 99%), grounding
 rate, field accuracy against the factory labels, box agreement and latency. Per-document rows go
 to a resumable JSONL under logs/ so an interrupted GPU run continues where it stopped; each row
-carries the run identity (alias, served GGUF sha256, prompt version) and a resume refuses a file
-written by another build or prompt.
+carries the run identity (alias, served GGUF sha256, prompt version) and the serving identity
+(llama-swap args of the alias, parser build), and a resume refuses a file written by another
+build, prompt, server config or parser. Rows also record the client concurrency they were run at,
+so a consumer of their latency (the M3.4 bake-off's arm a reuse) can check it was measured one
+request at a time. Parses come from the shared `evals.parse_cache`
+(`--no-parse-cache` parses inline), so a resume or a later eval never re-OCRs a scan.
 `--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
 llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
 `--split cal` runs the same harness over the UAE cal split for the M7.4 trust calibration; every
@@ -12,9 +16,14 @@ row also records what the trust features need (mean/min logprob, final value, OC
 A `has_scan` document is fed as its runtime scan form (evals.scan_input: the scan PNGs as an
 image-only PDF, parsed by the OCR service like any scanned upload); every row records its
 `input_kind` and the report splits every metric by input kind and Arabic-first layout.
+Every row (A and B) is scored on the parse words (grounding, box IoU, OCR support for the trust
+features), so B runs the full parse too. A transient parse-service failure is retried with backoff
+(`evals.parse_cache.retrying`); a document that still fails gets no row, is appended to
+`<rows>.parse_failures.jsonl`, counted in the report and fails the run (exit 1); a resume
+retries it.
 
 Usage: python -m evals.extraction_a --data-dir <factory out>/test [--limit N] [--base-url URL]
-       [--extractor a|b] [--model ALIAS] [--split test|cal]
+       [--extractor a|b] [--model ALIAS] [--split test|cal] [--parse-cache DIR | --no-parse-cache]
 """
 
 from __future__ import annotations
@@ -30,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
+from apx.common.errors import ApxError, ParseError
 from apx.common.types import BBox, FieldValue
 from apx.extract.extractor import LlmExtractor
 from apx.extract.grounding import WordGrounder
@@ -43,10 +53,15 @@ from apx.parse.parser import PaddleOcrDocumentParser
 from apx.trust.features import final_value_of, ocr_support
 from evals.extraction_identity import (
     RowIdentity,
+    ServingIdentity,
     prompt_version,
     require_identity,
+    require_serving,
     served_gguf_sha256,
+    serving_args_sha256,
 )
+from evals.parse_cache import DEFAULT_ROOT as DEFAULT_PARSE_CACHE
+from evals.parse_cache import PARSE_RETRY_BACKOFF_S, ParseCache, parser_identity, retrying
 from evals.scan_input import INPUT_KINDS, InputKind, document_input, load_truth
 from evals.splits import load_splits
 
@@ -64,6 +79,34 @@ documents are fed as their scan (earlier rows read the born-digital PDF for them
 `input_kind` and `arabic_first`. A resume re-runs documents whose row is older, and the trust job
 refuses them."""
 SPLITS: tuple[str, ...] = ("test", "cal")
+CLIENT_CONCURRENCY_KEY = "client_concurrency"
+"""Row field: how many documents the harness had in flight (`--concurrency`) when it wrote the
+row. Metadata, not identity: a resume may change it, and a latency consumer checks every row."""
+
+
+class DocumentParseFailedError(ApxError):
+    """A document's parse failed after the bounded retries; the harness records it (no row, a
+    failure record, a report count, exit 1) instead of dying or skipping it silently."""
+
+    def __init__(self, sha: str, kind: InputKind, cause: ParseError) -> None:
+        super().__init__(f"{sha[:12]} ({kind}) could not be parsed: {cause}")
+        self.sha = sha
+        self.kind = kind
+        self.cause = cause
+
+    def record(self) -> dict[str, Any]:
+        """The failure's JSONL record (`<rows>.parse_failures.jsonl`)."""
+        return {
+            "sha": self.sha,
+            "input_kind": self.kind,
+            "error_type": type(self.cause).__name__,
+            "error": str(self.cause),
+        }
+
+
+def failures_path(rows_path: Path) -> Path:
+    """Where a run appends its parse failures, next to its rows."""
+    return rows_path.with_name(rows_path.stem + ".parse_failures.jsonl")
 
 
 def prompt_builder_for(extractor: ExtractorId) -> PromptBuilder:
@@ -94,6 +137,25 @@ def run_identity(
         ),
         prompt_version=prompt_version(prompt_builder_for(extractor)),
     )
+
+
+def run_serving(model: str, *, llama_swap_config: Path, parser_id: str) -> ServingIdentity:
+    """Serving identity stamped on every row: the alias's llama-swap args and the parser build."""
+    return ServingIdentity(
+        serving_args_sha256=serving_args_sha256(model, llama_swap_config=llama_swap_config),
+        parser_identity=parser_id,
+    )
+
+
+def row_stamp(identity: RowIdentity, serving: ServingIdentity, concurrency: int) -> dict[str, Any]:
+    """The fields every row of a run carries besides its own results: the run and serving
+    identity, and the client concurrency (a row's latency is a per-request wall time, so above
+    the server's `--parallel` it includes queueing behind the other requests in flight)."""
+    return {
+        **identity.as_row_fields(),
+        **serving.as_row_fields(),
+        CLIENT_CONCURRENCY_KEY: concurrency,
+    }
 
 
 def _norm(name: FieldName, value: str | None) -> str | None:
@@ -174,13 +236,37 @@ def field_cells(
     return fields
 
 
+async def parse_input(
+    data: bytes,
+    parser: PaddleOcrDocumentParser,
+    cache: ParseCache | None,
+    backoff_s: Sequence[float] = PARSE_RETRY_BACKOFF_S,
+) -> ParsedDocument:
+    """Parse one runtime input the way the runtime keys it (the sha256 of its uploaded bytes,
+    the scan's for a scan), through the parse cache when one is given; transient parse-service
+    failures are retried after each wait in `backoff_s`."""
+    document_sha256 = hashlib.sha256(data).hexdigest()
+    parse = retrying(parser.parse, backoff_s=backoff_s)
+    if cache is None:
+        return await parse(document_sha256, data)
+    return await cache.parse(document_sha256, data, parse)
+
+
 async def _run_one(
-    sha: str, data_dir: Path, extractor: LlmExtractor, parser: PaddleOcrDocumentParser
+    sha: str,
+    data_dir: Path,
+    extractor: LlmExtractor,
+    parser: PaddleOcrDocumentParser,
+    cache: ParseCache | None = None,
+    backoff_s: Sequence[float] = PARSE_RETRY_BACKOFF_S,
 ) -> dict[str, Any]:
+    """One row; a parse that still fails after the retries raises `DocumentParseFailedError`."""
     truth = load_truth(data_dir, sha)
     kind, data = document_input(data_dir, sha, truth)
-    # The runtime keys a document by the sha256 of its uploaded bytes (the scan's, for a scan).
-    document = await parser.parse(hashlib.sha256(data).hexdigest(), data)
+    try:
+        document = await parse_input(data, parser, cache, backoff_s)
+    except ParseError as exc:
+        raise DocumentParseFailedError(sha, kind, exc) from exc
     return await extract_row(sha, document, data_dir, extractor, kind)
 
 
@@ -301,7 +387,10 @@ def _latency(metrics: SliceMetrics) -> str:
 
 
 def render_report(
-    rows: list[dict[str, Any]], model: str, extractor: ExtractorId = ExtractorId.A
+    rows: list[dict[str, Any]],
+    model: str,
+    extractor: ExtractorId = ExtractorId.A,
+    failures: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     slices = report_slices(rows)
     overall = slice_metrics(rows)
@@ -319,6 +408,12 @@ def render_report(
         "",
         "Scanned documents are fed as the runtime receives a scan: their Augraphy page images as "
         "an image-only PDF, parsed by the OCR service; born-digital ones as their PDF.",
+        "",
+        f"Parse failures (no row, after retries; the run fails): {len(failures)}.",
+        *(
+            f"- `{f['sha'][:12]}` ({f['input_kind']}): {f['error_type']}: {f['error']}"
+            for f in failures
+        ),
         "",
         "| Metric | Value | Gate |",
         "|---|---:|---|",
@@ -408,6 +503,14 @@ async def run(args: argparse.Namespace) -> int:
         models_root=args.models_root,
     )
     require_identity(rows, identity, rows_path)  # never mix builds or prompts in one file
+    cache = None if args.no_parse_cache else ParseCache(args.parse_cache)
+    serving = run_serving(
+        model,
+        llama_swap_config=args.llama_swap_config,
+        parser_id=cache.parser_id if cache is not None else parser_identity(),
+    )
+    require_serving(rows, serving, rows_path)  # nor server configs or parser builds
+    stamp = row_stamp(identity, serving, args.concurrency)
     # Offline tooling names its one alias explicitly (apx.llm.client LlmSettings.allowed_models).
     client = LlamaSwapClient(LlmSettings(base_url=args.base_url, allowed_models=frozenset({model})))
     parser = PaddleOcrDocumentParser()
@@ -417,7 +520,9 @@ async def run(args: argparse.Namespace) -> int:
         queue.put_nowait(sha)
     done = len(available) - len(pending)
 
-    async def worker(sink: TextIO) -> None:
+    failures: dict[str, dict[str, Any]] = {}
+
+    async def worker(sink: TextIO, failure_sink: TextIO) -> None:
         nonlocal done
         # One extractor per worker: `last_latency_ms` is per-call state.
         extractor = LlmExtractor(
@@ -425,7 +530,14 @@ async def run(args: argparse.Namespace) -> int:
         )
         while not queue.empty():
             sha = queue.get_nowait()
-            row = {**await _run_one(sha, data_dir, extractor, parser), **identity.as_row_fields()}
+            try:
+                row = {**await _run_one(sha, data_dir, extractor, parser, cache), **stamp}
+            except DocumentParseFailedError as exc:
+                failures[sha] = exc.record()
+                failure_sink.write(json.dumps(failures[sha], ensure_ascii=False) + "\n")
+                failure_sink.flush()
+                print(f"[parse failed] {exc}", file=sys.stderr, flush=True)
+                continue
             rows[sha] = row
             sink.write(json.dumps(row, ensure_ascii=False) + "\n")
             sink.flush()
@@ -437,19 +549,26 @@ async def run(args: argparse.Namespace) -> int:
             )
 
     try:
-        with rows_path.open("a", encoding="utf-8") as sink:
-            await asyncio.gather(*(worker(sink) for _ in range(args.concurrency)))
+        with (
+            rows_path.open("a", encoding="utf-8") as sink,
+            failures_path(rows_path).open("a", encoding="utf-8") as failure_sink,
+        ):
+            await asyncio.gather(*(worker(sink, failure_sink) for _ in range(args.concurrency)))
     finally:
         if not queue.empty():
             pass  # interrupted: keep the model warm for the resume
         else:
             await client.unload()  # stage done: free the GPU now, not after the idle TTL
         await client.aclose()
-    selected = [rows[sha] for sha in available]
-    report = render_report(selected, model, extractor_id)
+    selected = [rows[sha] for sha in available if sha in rows]
+    failed = [failures[sha] for sha in available if sha in failures]
+    report = render_report(selected, model, extractor_id, failed)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8", newline="\n")
     print(report)
+    if failed or not selected:
+        print(f"{len(failed)} document(s) failed to parse; rerun to retry them", file=sys.stderr)
+        return 1
     valid_rate = sum(row["valid_json"] for row in selected) / len(selected)
     return 0 if valid_rate >= VALID_JSON_GATE else 1
 
@@ -468,6 +587,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))
     parser.add_argument("--models-lock", type=Path, default=Path("infra/models.lock.json"))
     parser.add_argument("--models-root", type=Path, default=Path("models"))
+    parser.add_argument("--parse-cache", type=Path, default=DEFAULT_PARSE_CACHE)
+    parser.add_argument("--no-parse-cache", action="store_true", help="parse every input inline")
     return asyncio.run(run(parser.parse_args(argv)))
 
 

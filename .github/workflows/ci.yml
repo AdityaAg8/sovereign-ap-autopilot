@@ -48,8 +48,10 @@ jobs:
       - name: fetch pinned PINT AE/SchXslt bundles
         run: uv run python -m evals.pint_ae.fetch
 
+      # Appends to the unit step's coverage data: the 85% bar (REVIEW M-04) is checked on all the
+      # tests CI ran, never on this 35-test slice alone.
       - name: "pytest (artifacts: pinned PINT AE/SchXslt bundles)"
-        run: uv run pytest -m artifacts
+        run: uv run pytest -m artifacts --cov-append
 
   web:
     name: web

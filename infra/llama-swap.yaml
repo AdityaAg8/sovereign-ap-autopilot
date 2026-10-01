@@ -37,19 +37,21 @@ models:
   extractor-a:
     name: "Extractor A (Qwen3.5-9B)"
     description: "PRD §4: extraction, exception agent and ops chat (extract/agent stages)."
-    # 2 slots of 12288 tokens (3 crashed under load). Prompt caching is off: Qwen3.5 is a hybrid
-    # recurrent model and partial prefix reuse across slots killed llama-server; every invoice
-    # prompt is unique, so the cache bought nothing anyway.
+    # ONE slot of 12288 tokens (ADR-0013 amendment 1): with 2 slots decoding at once this build
+    # degraded A's output (every line quantity "" and a lost IBAN on an AR-first invoice that
+    # one request alone reads correctly, 3/3 runs), so requests are served one at a time. Prompt
+    # caching is off: Qwen3.5 is a hybrid recurrent model and partial prefix reuse across slots
+    # killed llama-server; every invoice prompt is unique, so the cache bought nothing anyway.
     # ADR-0013 (measured 2026-09-23, 5-page invoices): prompt max 7226 tokens + completion max
-    # 2712 = 9938 < 12288 per slot. Resident ~6.35 GB alone (weights dominate: q8_0 KV, image
-    # token caps and -ub 256 each moved the total by < 0.2 GB, within desktop noise).
+    # 2712 = 9938 < 12288 per slot, unchanged. Half the context of the old 2 x 12288 means half
+    # the KV cache, so A's ~6.35 GB resident can only go down.
     # --parallel must equal WORKER_EXTRACTOR_A_SLOTS (apx.workflows.main).
     cmd: |
       ${llama-server}
       --model /models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-UD-Q4_K_XL.gguf
       --mmproj /models/unsloth/Qwen3.5-9B-GGUF/mmproj-F16.gguf
-      --ctx-size 24576
-      --parallel 2
+      --ctx-size 12288
+      --parallel 1
       --no-cache-prompt
       --cache-ram 0
     aliases: ["exception-agent", "ops-chat"]
@@ -78,6 +80,19 @@ models:
     description: "ADR-0009 §1.7-1.8: the exported Q4_K_M of run b-20260923T2025-eb0aea7d for the export smoke and the P1-P5 gate runs. Not a runtime alias (apx.llm.client), so the pipeline never calls it; promotion is a separate, gated change to extractor-b."
     # Same flags as extractor-b so gate measurements compare like with like. The mmproj is the
     # exported one, which `make export-b` proved tensor-equal to the upstream mmproj-F16.gguf.
+    cmd: |
+      ${llama-server}
+      --model /models/extractor_b/b-20260923T2025-eb0aea7d/export/extractor-b-Q4_K_M.gguf
+      --mmproj /models/extractor_b/b-20260923T2025-eb0aea7d/export/mmproj-F16.gguf
+      --ctx-size 16384
+      --parallel 2
+    checkEndpoint: /health
+    ttl: 600
+
+  extractor-b-v1:
+    name: "Extractor B v1 (fine-tuned, not served)"
+    description: "ADR-0019 §9.4: B v1 (run b-20260923T2025-eb0aea7d) pinned for the real-data before/after, so `evals.real --b-version v1` keeps scoring v1 after extractor-b-challenger moves to a later round. Not a runtime alias."
+    # Same flags as extractor-b-challenger; never repointed.
     cmd: |
       ${llama-server}
       --model /models/extractor_b/b-20260923T2025-eb0aea7d/export/extractor-b-Q4_K_M.gguf
@@ -175,7 +190,7 @@ routing:
         extract:
           swap: true
           exclusive: true
-          members: [extractor-a, extractor-b, extractor-b-challenger]
+          members: [extractor-a, extractor-b, extractor-b-challenger, extractor-b-v1]
         arbitrate:
           swap: true
           exclusive: true

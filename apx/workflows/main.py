@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from decimal import Decimal
 from pathlib import Path
 
+from PIL import Image
 from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,7 +24,8 @@ from apx.asp_mock.repository import SqliteAspRepository
 from apx.asp_mock.service import MockAsp
 from apx.audit.chain import PgAuditLog
 from apx.common.errors import ConfigError
-from apx.common.types import Money, Stage
+from apx.common.raster import MAX_IMAGE_PIXELS
+from apx.common.types import Stage
 from apx.db.session import get_session
 from apx.einvoice.interfaces import DocumentTypeCode
 from apx.einvoice.schematron import PintAeSchematronValidator
@@ -47,6 +48,7 @@ from apx.ingest.ingestor import Ingestor
 from apx.ingest.settings import IngestSettings
 from apx.ingest.store import FileDocumentStore
 from apx.ingest.watcher import watch_inbox
+from apx.learning.splits import require_splits
 from apx.llm.client import LlamaSwapClient
 from apx.llm.embedding import HttpPageEmbedder
 from apx.llm.interfaces import LlmClient
@@ -55,6 +57,7 @@ from apx.observability.llm_calls import PgLlmCallRecorder, RecordingLlmClient
 from apx.parse.client import ParseServiceClient
 from apx.parse.parser import PaddleOcrDocumentParser
 from apx.parse.store import FileParsedDocumentStore
+from apx.policy.approval_limit import load_approval_limit
 from apx.policy.engine import DefaultPolicyEngine
 from apx.policy.interfaces import PolicyThresholds
 from apx.policy.proposals import DefaultProposalSink, PgProposalStore
@@ -108,9 +111,10 @@ class WorkerSettings(BaseSettings):
     llm_task_queue: str = LLM_TASK_QUEUE
     llm_activity_slots: int = Field(default=6, ge=1)
     """Concurrent extract/review_note activities (ADR-0013): the batch each GPU stage serves
-    before the next swap, i.e. 3 rounds of Extractor A's 2 slots per A<->B swap."""
-    extractor_a_slots: int = Field(default=2, ge=1)
-    """Must equal `--parallel` of extractor-a in infra/llama-swap.yaml."""
+    before the next swap, i.e. 6 calls through Extractor A's single slot (3 rounds of B's 2)."""
+    extractor_a_slots: int = Field(default=1, ge=1)
+    """Must equal `--parallel` of extractor-a in infra/llama-swap.yaml: 1 (ADR-0013 amendment 1;
+    concurrent decoding on that server degraded A's output)."""
     extractor_b_slots: int = Field(default=2, ge=1)
     """Must equal `--parallel` of extractor-b in infra/llama-swap.yaml."""
     gpu_stage_max_hold_s: float = Field(default=300.0, gt=0)
@@ -126,7 +130,6 @@ class WorkerSettings(BaseSettings):
     review_notes: bool = True
     """Write the exception agent's cited review note on REVIEW-routed invoices (M9.3)."""
     watch_inbox: bool = True
-    approval_limit: Decimal = Decimal("10000.00")
     fraud_review: float = Field(default=0.5, ge=0, le=1)
     scan_review: float = Field(default=0.5, ge=0, le=1)
     attack_block: float = Field(default=0.9, ge=0, le=1)
@@ -226,7 +229,7 @@ class GpuServing:
 def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> InvoiceActivityDeps:
     gpu = gpu or GpuServing(settings)
     ingest = IngestSettings()
-    limit = Money(amount=settings.approval_limit, currency="AED")
+    limit = load_approval_limit()
     audit = PgAuditLog()
     vendors = PgVendorDirectory(get_session, window_days=settings.sod_cooldown_days)
     recorder = PgLlmCallRecorder()
@@ -382,8 +385,19 @@ async def run(settings: WorkerSettings) -> None:
             log.info("watching %s", ingest.inbox_dir)
 
 
+def startup_checks() -> None:
+    """Process-wide guards that must hold before any activity runs: PIL refuses to decode an
+    image over the raster cap (REVIEW H-03), the learning splits file is readable (H-04) and the
+    shared approval limit parses and agrees with any legacy setting (L-03). A failure raises a
+    typed `ConfigError` and the worker does not start."""
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+    require_splits()
+    load_approval_limit()
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    startup_checks()
     asyncio.run(run(load_worker_settings()))
 
 

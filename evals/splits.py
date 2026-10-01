@@ -1,5 +1,5 @@
 """Fixed evaluation/training splits keyed by document sha256, written to the committed
-evals/splits.json (PRD §5, §6.2 I5, ADR-0005). Builds the fatura/extractbench/docile groups
+evals/splits.json (PRD §5, §6.2 I5, ADR-0005). Builds the fatura/extractbench/docile/cord groups
 deterministically from data/manifest.json, and exposes `register_documents` so a later
 milestone (e.g. M2's UAE factory) can add newly generated documents to `uae`/`attacks`
 without ever reshuffling a sha256 that was already assigned.
@@ -23,7 +23,7 @@ from evals.datasets.manifest import Manifest, load_manifest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SPLITS_PATH = REPO_ROOT / "evals" / "splits.json"
 
-SetName = Literal["uae", "docile", "fatura", "extractbench", "attacks"]
+SetName = Literal["uae", "docile", "fatura", "extractbench", "attacks", "cord"]
 
 # The split names each set is allowed to use, in the fixed order evals/splits.json writes
 # them (so regenerating the file never reorders unrelated keys).
@@ -33,17 +33,20 @@ SET_SPLIT_NAMES: dict[SetName, tuple[str, ...]] = {
     "fatura": ("train", "test"),
     "extractbench": ("eval",),
     "attacks": ("eval",),
+    "cord": ("train", "val", "test"),
 }
 
 # Which (set, split) pairs pool into each leakage-check bucket (PRD §6.2 I5: eval, cal and
 # test data must never reach training). Every named split feeds exactly one pool.
 POOL_MEMBERS: dict[str, tuple[tuple[SetName, str], ...]] = {
-    "train": (("uae", "train"), ("docile", "train"), ("fatura", "train")),
+    "train": (("uae", "train"), ("docile", "train"), ("fatura", "train"), ("cord", "train")),
     "cal": (("uae", "cal"),),
     "test": (("uae", "test"), ("fatura", "test")),
     "docile_val": (("docile", "val"),),
     "extractbench_eval": (("extractbench", "eval"),),
     "attacks_eval": (("attacks", "eval"),),
+    "cord_val": (("cord", "val"),),
+    "cord_test": (("cord", "test"),),
 }
 
 SplitGroups = dict[str, list[Sha256Hex]]
@@ -134,8 +137,22 @@ def _docile_groups(manifest: Manifest) -> SplitGroups:
     return groups
 
 
+def _cord_groups(manifest: Manifest) -> SplitGroups:
+    """CORD v2 receipts by image sha256 (ADR-0019 §4.5): train is a train set, val and test are
+    external hold-outs; the parquet shards themselves (doc_id None) are not documents."""
+    groups: SplitGroups = {split: [] for split in SET_SPLIT_NAMES["cord"]}
+    entry = manifest.datasets.get("cord")
+    if entry is None:
+        return groups
+    for file in entry.files:
+        if file.doc_id is None or file.split not in groups:
+            continue
+        groups[file.split].append(file.sha256)
+    return groups
+
+
 def build_from_manifest(manifest: Manifest, existing: SplitsFile | None = None) -> SplitsFile:
-    """Recomputes fatura/extractbench/docile fully from data/manifest.json (a pure function of
+    """Recomputes fatura/extractbench/docile/cord fully from data/manifest.json (a pure function of
     each document's own sha256 and split, so re-running reproduces the same output), while
     leaving `uae` and `attacks` exactly as `existing` had them: those two are populated later
     via `register_documents`, never re-derived from the manifest."""
@@ -148,6 +165,7 @@ def build_from_manifest(manifest: Manifest, existing: SplitsFile | None = None) 
         "docile": _docile_groups(manifest),
         "fatura": _fatura_groups(manifest),
         "extractbench": _extractbench_groups(manifest),
+        "cord": _cord_groups(manifest),
     }
     return SplitsFile(generated_at=datetime.now(UTC), sets=sets)
 
@@ -224,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m evals.splits")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser(
-        "build", help="Rebuild evals/splits.json's fatura/extractbench/docile groups"
+        "build", help="Rebuild evals/splits.json's fatura/extractbench/docile/cord groups"
     )
     args = parser.parse_args(argv)
 

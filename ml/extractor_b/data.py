@@ -1,8 +1,9 @@
-"""Extractor B data prep (ADR-0009 §1.2-1.4, design §2): turns the train-split UAE factory,
-DocILE and FATURA documents into `raw_train.jsonl` / `raw_dev.jsonl` plus page JPEGs resized by
-the serving function, then runs the pre-run guards. CPU only.
+"""Extractor B data prep (ADR-0009 §1.2-1.4, ADR-0019 §9.2, design §2): turns the train-split
+UAE factory, DocILE, FATURA and CORD v2 documents of the chosen mix (`REAL_MIX` v1|r1|r2) into
+`raw_train.jsonl` / `raw_dev.jsonl` plus page JPEGs resized by the serving function, then runs the
+pre-run guards. CPU only.
 
-Usage: python -m ml.extractor_b.data [--data-root data] [--config ml/extractor_b/config.yaml]
+Usage: python -m ml.extractor_b.data [--data-root data] [--config ...] [--real-mix v1|r1|r2]
 """
 
 from __future__ import annotations
@@ -30,12 +31,19 @@ from ml.extractor_b.config import DEFAULT_CONFIG_PATH, RUNGS, check_serving_rung
 from ml.extractor_b.guards import manifest_line
 from ml.extractor_b.interfaces import (
     DataLeakError,
+    MixSourceMissingError,
     SampleSource,
     TrainConfig,
     TrainingError,
     TrainingSample,
 )
-from ml.extractor_b.mappings import docile_target, fatura_eligible, fatura_target, uae_target
+from ml.extractor_b.mappings import (
+    cord_target,
+    docile_target,
+    fatura_eligible,
+    fatura_target,
+    uae_target,
+)
 from ml.extractor_b.tokens import QwenTokenCounter, TokenCounter
 
 DEV_SALT: Final[str] = "extractor-b-dev-v1"
@@ -46,6 +54,33 @@ DOCILE_CAP: Final[int] = 2500
 SAMPLE_SEED: Final[int] = 3407
 UAE_MIN_SHARE: Final[float] = 0.45
 FATURA_ANNOTATIONS: Final[str] = "fatura/invoices_dataset_final/Annotations/Original_Format"
+CORD_DATASET: Final[str] = "cord"
+CORD_INDEX: Final[str] = "index.jsonl"
+"""Each CORD split folder holds the images and `index.jsonl`, one line per receipt row with its
+`sha256` and HF `ground_truth` (with `gt_parse`): the `evals/datasets/cord_fetcher.py` layout.
+The manifest lists each image once (`doc_id` names its first row)."""
+CORD_HOLDOUT_SPLITS: Final[tuple[str, ...]] = ("validation", "test")
+CORD_COPY_HAMMING: Final[int] = 4
+"""Two CORD photos within this page-1 pHash distance are one photo (CORD re-releases a receipt
+photo with its anonymisation blur redone): the guards' `near_dup_hamming`, ADR-0019 amdt 2."""
+
+RealMix = Literal["v1", "r1", "r2"]
+REAL_MIXES: Final[tuple[RealMix, ...]] = ("v1", "r1", "r2")
+MIX_SOURCES: Final[dict[RealMix, frozenset[SampleSource]]] = {
+    "v1": frozenset({SampleSource.UAE, SampleSource.DOCILE, SampleSource.FATURA}),
+    "r1": frozenset({SampleSource.UAE, SampleSource.FATURA, SampleSource.CORD}),
+    "r2": frozenset(
+        {SampleSource.UAE, SampleSource.FATURA, SampleSource.CORD, SampleSource.DOCILE}
+    ),
+}
+"""ADR-0019 §9.2: which sources each round reads. v1 is the pre-ADR-0019 mix (DocILE only when
+fetched); R1 leaves DocILE out even when present; R2 adds it."""
+MIX_REQUIRED: Final[dict[RealMix, frozenset[SampleSource]]] = {
+    "v1": frozenset({SampleSource.UAE}),
+    "r1": MIX_SOURCES["r1"],
+    "r2": MIX_SOURCES["r2"],
+}
+"""Sources that must have train rows: a real-data round never silently trains on less."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +244,189 @@ def docile_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceD
         )
 
 
+def _manifest_cord_train(data_root: Path) -> list[tuple[str, str, Path]]:
+    manifest = load_manifest(data_root / "manifest.json")
+    entry = manifest.datasets.get(CORD_DATASET)
+    files = entry.files if entry is not None else []
+    return [(f.doc_id, f.sha256, Path(f.path)) for f in files if f.doc_id and f.split == "train"]
+
+
+def _cord_index(path: Path) -> dict[str, Any]:
+    """`gt_parse` per image sha256 from a split's `index.jsonl`; the first row of a duplicated
+    image wins (as in `evals.real.cord.unique_docs`). A missing or unreadable index raises."""
+    by_sha: dict[str, Any] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            if line.strip():
+                record = json.loads(line)
+                by_sha.setdefault(str(record["sha256"]), record["ground_truth"]["gt_parse"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise TrainingError(f"unreadable CORD index {path}: {exc!r}") from exc
+    return by_sha
+
+
+def cord_trees(data_root: Path) -> dict[str, Any]:
+    """Raw `gt_parse` per CORD train image sha256, for the CORD label guard (ADR-0019
+    amendment 1): the same index `cord_docs` builds the targets from."""
+    return _cord_index(data_root / CORD_DATASET / "train" / CORD_INDEX)
+
+
+@dataclass(frozen=True, slots=True)
+class CordCopies:
+    """What `cord_copy_exclusions` drops from CORD train, sha256 -> reason, with counts."""
+
+    excluded: dict[str, str]
+    holdout_copies: int
+    redundant_copies: int
+    conflicting_copies: int
+
+
+def _hamming(a: int, b: int) -> int:
+    return (a ^ b).bit_count()
+
+
+def cord_copy_exclusions(
+    train: Sequence[tuple[str, Path, str]],
+    holdout: Sequence[tuple[str, str, Path]],
+    *,
+    phash: Callable[[Path], int],
+    hamming: int = CORD_COPY_HAMMING,
+) -> CordCopies:
+    """CORD train photos that are copies of another photo (ADR-0019 amendment 2), keyed on the
+    image alone so a mapping bug can never hide behind it. `train` is (sha256, image, normalised
+    target); `holdout` is (split, sha256, image) for CORD validation and test.
+    - A train photo within `hamming` of any hold-out photo is dropped: it would put a hold-out
+      receipt into training (the sha256 leakage check cannot see a re-blurred copy).
+    - Train copies of one photo with identical normalised targets keep the smallest sha256.
+    - Train copies whose targets disagree are all dropped: nothing says which label is right."""
+    hashes = {sha: phash(image) for sha, image, _ in train}
+    held = [(split, sha, phash(image)) for split, sha, image in holdout]
+    excluded: dict[str, str] = {}
+    for sha in sorted(hashes):
+        match = next((h for h in held if _hamming(hashes[sha], h[2]) <= hamming), None)
+        if match is not None:
+            excluded[sha] = f"holdout_copy:{match[0]}:{match[1]}"
+    holdout_copies = len(excluded)
+    targets = {sha: target for sha, _, target in train}
+    remaining = sorted(sha for sha in hashes if sha not in excluded)
+    parent = {sha: sha for sha in remaining}
+
+    def root(sha: str) -> str:
+        while parent[sha] != sha:
+            parent[sha] = parent[parent[sha]]
+            sha = parent[sha]
+        return sha
+
+    for i, a in enumerate(remaining):
+        for b in remaining[i + 1 :]:
+            if _hamming(hashes[a], hashes[b]) <= hamming:
+                parent[root(b)] = root(a)
+    clusters: dict[str, list[str]] = defaultdict(list)
+    for sha in remaining:
+        clusters[root(sha)].append(sha)
+    redundant = conflicting = 0
+    for members in clusters.values():
+        if len(members) < 2:
+            continue
+        first, *rest = sorted(members)
+        if len({targets[m] for m in members}) == 1:
+            redundant += len(rest)
+            excluded.update({m: f"redundant_copy:{first}" for m in rest})
+        else:
+            conflicting += len(members)
+            excluded.update({m: "conflicting_copy" for m in members})
+    return CordCopies(
+        excluded=excluded,
+        holdout_copies=holdout_copies,
+        redundant_copies=redundant,
+        conflicting_copies=conflicting,
+    )
+
+
+def _cord_holdout_images(data_root: Path) -> list[tuple[str, str, Path]]:
+    """(split, sha256, image) of every CORD validation and test image. A missing hold-out index
+    stops prep: without it the hold-out copy check cannot run (fail closed)."""
+    out: list[tuple[str, str, Path]] = []
+    for split in CORD_HOLDOUT_SPLITS:
+        index = data_root / CORD_DATASET / split / CORD_INDEX
+        try:
+            records = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()
+                       if line.strip()]  # fmt: skip
+            images = {str(r["sha256"]): index.parent / str(r["image"]) for r in records}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise TrainingError(
+                f"CORD {split} index {index} is unreadable ({exc!r}); the hold-out copy check "
+                "needs it before CORD train can be used"
+            ) from exc
+        out.extend((split, sha, image) for sha, image in sorted(images.items()))
+    return out
+
+
+def _phash_file(path: Path) -> int:
+    from ml.extractor_b.guards import page1_phash_int
+
+    return page1_phash_int(path)
+
+
+def cord_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc]:
+    """Every CORD v2 train image in the manifest (ADR-0019 §9.2: all 800 rows, 798 distinct
+    images, no sampling or upsampling) with its `gt_parse` target from the split's index, less
+    the photo copies `cord_copy_exclusions` drops (ADR-0019 amendment 2). A
+    manifest train image off the `evals/splits.json` train split means the splits predate the
+    CORD fetch, which stops prep (DataLeakError). Yields nothing while CORD is absent; the mix
+    check then names the missing source."""
+    files = _manifest_cord_train(data_root)
+    stray = sorted(sha for _, sha, _ in files if sha not in train_shas)
+    if stray:
+        raise DataLeakError(
+            f"{len(stray)}/{len(files)} CORD train images are not on the evals/splits.json "
+            f"train split (first {stray[0]}); regenerate the splits after the CORD fetch"
+        )
+    indexes: dict[Path, dict[str, Any]] = {}
+    docs: list[tuple[str, Path, dict[str, Any]]] = []
+    for doc_id, sha, rel in sorted(files):
+        image = rel if rel.is_absolute() else data_root.parent / rel
+        if image.parent not in indexes:
+            indexes[image.parent] = _cord_index(image.parent / CORD_INDEX)
+        gt_parse = indexes[image.parent].get(sha)
+        if gt_parse is None:
+            raise TrainingError(
+                f"no gt_parse for CORD train doc {doc_id}: {sha} is not in "
+                f"{image.parent / CORD_INDEX}"
+            )
+        if not isinstance(gt_parse, dict):
+            raise TrainingError(f"CORD train doc {doc_id}: gt_parse is not an object")
+        docs.append((sha, image, cord_target(gt_parse)))
+    if not docs:
+        return
+    from ml.extractor_b.guards import normalised_target
+
+    copies = cord_copy_exclusions(
+        [(sha, image, normalised_target(target_json(t))) for sha, image, t in docs],
+        _cord_holdout_images(data_root),
+        phash=_phash_file,
+    )
+    print(
+        f"cord: {len(docs)} train photos, {len(copies.excluded)} copies dropped "
+        f"({copies.holdout_copies} of a hold-out photo, {copies.redundant_copies} redundant, "
+        f"{copies.conflicting_copies} with conflicting labels; ADR-0019 amendment 2)",
+        flush=True,
+    )
+    for sha, reason in sorted(copies.excluded.items()):
+        print(f"cord: drop {sha} {reason}", flush=True)
+    for sha, image, target in docs:
+        if sha in copies.excluded:
+            continue
+        yield SourceDoc(
+            source=SampleSource.CORD,
+            document_sha256=sha,
+            pages=_file_pages(image),
+            n_pages=1,
+            target=target,
+        )
+
+
 # ---- rows ------------------------------------------------------------------------------------
 
 
@@ -260,9 +478,18 @@ def rows_at_rung(rows: Sequence[TrainingSample], rung: str, data_dir: Path) -> l
     return out
 
 
-def check_mix(rows: Sequence[TrainingSample]) -> None:
-    """ADR-0009 §1.4: UAE stays >= 45% of the train rows (and there must be a UAE dev set)."""
+def check_mix(rows: Sequence[TrainingSample], mix: RealMix = "v1") -> None:
+    """ADR-0009 §1.4 / ADR-0019 §9.2: every source the mix requires has train rows, no source
+    outside the mix is present, UAE stays >= 45% of the train rows, and there is a UAE dev set."""
     train = [r for r in rows if r.role == "train"]
+    present = {r.source for r in train}
+    if missing := sorted(s.value for s in MIX_REQUIRED[mix] - present):
+        raise MixSourceMissingError(
+            f"REAL_MIX={mix} needs train rows from {', '.join(missing)}; fetch them first "
+            "(ADR-0019 §9.2), the round never trains on a smaller mix"
+        )
+    if extra := sorted(s.value for s in present - MIX_SOURCES[mix]):
+        raise TrainingError(f"REAL_MIX={mix} does not include {', '.join(extra)}")
     uae = sum(r.source is SampleSource.UAE for r in train)
     if not train or uae / len(train) < UAE_MIN_SHARE:
         raise TrainingError(
@@ -282,20 +509,48 @@ def write_raw(rows: Sequence[TrainingSample], out_dir: Path) -> tuple[Path, Path
     return paths
 
 
+SourceLoader = Callable[[Path, frozenset[str]], Iterator[SourceDoc]]
+
+
+def mix_docs(
+    data_root: Path, train_shas: frozenset[str], mix: RealMix
+) -> dict[SampleSource, list[SourceDoc]]:
+    """The mix's source documents (pages still unloaded), in the v1 source order. A required
+    source with no documents raises `MixSourceMissingError` here, before any page is rendered."""
+    loaders: dict[SampleSource, SourceLoader] = {
+        SampleSource.UAE: uae_docs,
+        SampleSource.DOCILE: docile_docs,
+        SampleSource.FATURA: fatura_docs,
+        SampleSource.CORD: cord_docs,
+    }
+    docs = {s: list(load(data_root, train_shas)) for s, load in loaders.items()
+            if s in MIX_SOURCES[mix]}  # fmt: skip
+    if missing := sorted(s.value for s in MIX_REQUIRED[mix] if not docs.get(s)):
+        raise MixSourceMissingError(
+            f"REAL_MIX={mix} needs {', '.join(missing)} but {data_root} has no train documents "
+            "for it (ADR-0019 §9.2); fetch it first, the round never trains on a smaller mix"
+        )
+    return docs
+
+
 def build_dataset(
-    cfg: TrainConfig, data_root: Path, *, train_shas: frozenset[str], counter: TokenCounter
+    cfg: TrainConfig,
+    data_root: Path,
+    *,
+    train_shas: frozenset[str],
+    counter: TokenCounter,
+    mix: RealMix = "v1",
 ) -> list[TrainingSample]:
-    """All sources → raw rows under `cfg.data_dir`, lengths counted by `counter` (the base's
-    tokenizer in `main`). Duplicate sample ids are a prep bug."""
+    """The mix's sources → raw rows under `cfg.data_dir`, lengths counted by `counter` (the
+    base's tokenizer in `main`). Duplicate sample ids are a prep bug."""
     settings = image_settings(cfg)
     rows: list[TrainingSample] = []
-    for docs in (uae_docs(data_root, train_shas), docile_docs(data_root, train_shas),
-                 fatura_docs(data_root, train_shas)):  # fmt: skip
+    for docs in mix_docs(data_root, train_shas, mix).values():
         rows.extend(build_row(doc, cfg.data_dir, settings, counter) for doc in docs)
     ids = [r.sample_id for r in rows]
     if len(ids) != len(set(ids)):
         raise TrainingError("duplicate sample ids in the Extractor B data prep")
-    check_mix(rows)
+    check_mix(rows, mix)
     write_raw(rows, cfg.data_dir)
     return rows
 
@@ -310,7 +565,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ml.extractor_b.data", description=__doc__)
     parser.add_argument("--data-root", type=Path, default=Path("data"))
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument(
+        "--real-mix",
+        choices=REAL_MIXES,
+        default=os.environ.get("REAL_MIX") or "v1",
+        help="ADR-0019 §9.2 round (default: $REAL_MIX, else v1)",
+    )
     args = parser.parse_args(argv)
+    if args.real_mix not in REAL_MIXES:  # argparse does not check a default against choices
+        parser.error(f"REAL_MIX={args.real_mix!r} is not one of {', '.join(REAL_MIXES)}")
     try:
         from ml.extractor_b.train import prepare_data, resolve_base
 
@@ -318,13 +581,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         check_serving_rung(cfg)
         counter = QwenTokenCounter(resolve_base(os.environ).path)
         shas = train_pool()
-        rows = build_dataset(cfg, args.data_root, train_shas=shas, counter=counter)
+        rows = build_dataset(
+            cfg, args.data_root, train_shas=shas, counter=counter, mix=args.real_mix
+        )
         kept, report = prepare_data(cfg, train_shas=shas)
     except ApxError as exc:
         print(f"extractor_b.data: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
     print(
-        f"extractor_b.data: {len(rows)} raw rows, {len(kept)} kept, "
+        f"extractor_b.data: REAL_MIX={args.real_mix}, {len(rows)} raw rows, {len(kept)} kept, "
         f"{report.quarantined} quarantined -> {cfg.data_dir}"
     )
     return 0

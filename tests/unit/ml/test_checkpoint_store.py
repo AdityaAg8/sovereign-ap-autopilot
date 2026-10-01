@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from ml.extractor_b.checkpoints import (
@@ -200,6 +200,11 @@ def test_retention_plan_rejects_negative_keep() -> None:
         retention_plan([1], best_step=None, keep_last=-1)
 
 
+# Filesystem-bound (mkdir, file writes and renames per example): wall time tracks host load,
+# not the code, so Hypothesis's 200 ms per-example deadline made it flaky (REVIEW N-12). Every
+# example still runs to completion and the example count is unchanged; only the timing check
+# is dropped.
+@settings(deadline=None)
 @given(payloads=st.lists(st.binary(min_size=0, max_size=64), min_size=1, max_size=5))
 def test_commit_verify_round_trip(
     tmp_path_factory: pytest.TempPathFactory, payloads: list[bytes]

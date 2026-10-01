@@ -3,7 +3,9 @@ evaluation set in the committed `evals/splits.json` holds out (listed in any gro
 `train`) is left unassigned, so its corrections can never reach a training manifest; every other
 document is new production data and trains. Fails closed: with no readable splits file nothing
 is proven safe, so the correction stays unassigned too. Deliberately never names the held-out
-groups themselves -- only apx/trust may use the calibration split (tests/test_no_leakage.py)."""
+groups themselves -- only apx/trust may use the calibration split (tests/test_no_leakage.py).
+`require_splits` is the start-up check: the API and worker refuse to start without a readable
+file, so a deployment can never silently train on nothing (REVIEW H-04)."""
 
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from pathlib import Path
 
 import structlog
 
+from apx.common.errors import ConfigError
 from apx.db.enums import LabelSplit
 
 logger = structlog.get_logger(__name__)
@@ -38,6 +41,24 @@ def _held_out(path: Path) -> frozenset[str] | None:
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         logger.error("learning_splits_unreadable", path=str(path), error=str(exc))
         return None
+
+
+class SplitsUnavailableError(ConfigError):
+    """The splits file is missing or malformed, so no correction could ever be assigned a split
+    (every one would stay unassigned and the learning loop would get no labels)."""
+
+
+def require_splits(path: Path | None = None) -> Path:
+    """Returns the splits file path once it has been read and parsed, or raises
+    `SplitsUnavailableError` naming it and the `LEARNING_SPLITS_PATH` override. Called at API
+    and worker start-up."""
+    target = path or splits_path()
+    if _held_out(target) is None:
+        raise SplitsUnavailableError(
+            f"learning splits file {target} is missing or malformed; ship evals/splits.json or "
+            "set LEARNING_SPLITS_PATH to a readable copy"
+        )
+    return target
 
 
 def splits_path() -> Path:

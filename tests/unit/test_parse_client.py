@@ -45,6 +45,7 @@ async def test_parse_page_image_success(monkeypatch: pytest.MonkeyPatch) -> None
         ],
         "lines": [{"word_indices": [0, 1]}],
         "tables": [],
+        "truncated": False,
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -114,6 +115,7 @@ async def test_parse_page_image_out_of_range_word_index_raises_parse_error(
         "words": [{"text": "only", "bbox": [0.0, 0.0, 0.1, 0.1], "confidence": 1.0}],
         "lines": [{"word_indices": [0, 5]}],
         "tables": [],
+        "truncated": False,
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -135,6 +137,7 @@ async def test_parse_page_image_empty_line_raises_parse_error(
         "words": [],
         "lines": [{"word_indices": []}],
         "tables": [],
+        "truncated": False,
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -161,7 +164,14 @@ def test_config_reads_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_wire_response_shape_is_json_serializable() -> None:
     # Guards the wire contract apx.parse.client and infra/docker/parse/app.py both implement.
-    payload = {"width_px": 1, "height_px": 1, "words": [], "lines": [], "tables": []}
+    payload = {
+        "width_px": 1,
+        "height_px": 1,
+        "words": [],
+        "lines": [],
+        "tables": [],
+        "truncated": False,
+    }
     assert json.loads(json.dumps(payload)) == payload
 
 
@@ -186,6 +196,7 @@ async def test_client_accepts_the_parse_services_own_response_model(
         words=(service.WireWord(text="INV-1", bbox=(0.1, 0.1, 0.3, 0.2), confidence=1.0),),
         lines=(service.WireLine(word_indices=(0,)),),
         peak_vram_gb=2.21,
+        truncated=True,
     ).model_dump(mode="json")
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -194,3 +205,79 @@ async def test_client_accepts_the_parse_services_own_response_model(
     client = _client_with_handler(monkeypatch, handler)
     page = await client.parse_page_image(document_sha256="a" * 64, page_index=0, png_bytes=b"png")
     assert [w.text for w in page.words] == ["INV-1"]
+    assert page.truncated is True
+
+
+@pytest.mark.asyncio
+async def test_page_carries_the_services_truncated_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-0013 amendment 1: a page the OCR service cut short says so on the `Page`."""
+    payload = {
+        "width_px": 10,
+        "height_px": 10,
+        "words": [{"text": "5", "bbox": [0.0, 0.0, 0.1, 0.1], "confidence": 1.0}],
+        "lines": [{"word_indices": [0]}],
+        "tables": [],
+        "truncated": True,
+    }
+    client = _client_with_handler(monkeypatch, lambda _r: httpx.Response(200, json=payload))
+    page = await client.parse_page_image(document_sha256=_SHA, page_index=1, png_bytes=b"x")
+    assert page.truncated is True
+
+
+@pytest.mark.asyncio
+async def test_a_response_without_the_truncated_flag_is_malformed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No default: an old or broken service that does not say whether it finished the page must
+    not be read as "complete" (no silent fallback)."""
+    payload = {"width_px": 10, "height_px": 10, "words": [], "lines": [], "tables": []}
+    client = _client_with_handler(monkeypatch, lambda _r: httpx.Response(200, json=payload))
+    with pytest.raises(ParseError, match="malformed"):
+        await client.parse_page_image(document_sha256=_SHA, page_index=0, png_bytes=b"x")
+
+
+def _ok_payload() -> dict[str, object]:
+    return {
+        "width_px": 1,
+        "height_px": 1,
+        "words": [],
+        "lines": [],
+        "tables": [],
+        "truncated": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_every_call_carries_the_configured_service_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REVIEW N-06: the parse service refuses /parse and /unload without its bearer token."""
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, request.headers.get("authorization")))
+        return httpx.Response(200, json=_ok_payload() if request.url.path == "/parse" else {})
+
+    transport = httpx.MockTransport(handler)
+    real_async_client = httpx.AsyncClient
+
+    def factory(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = transport
+        return real_async_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    monkeypatch.setenv("PARSE_SERVICE_TOKEN", "s3cret-token")
+    client = ParseServiceClient(ParseClientConfig(base_url="http://parse-test"))
+    await client.parse_page_image(document_sha256=_SHA, page_index=0, png_bytes=b"x")
+    await client.unload()
+    assert seen == [("/parse", "Bearer s3cret-token"), ("/unload", "Bearer s3cret-token")]
+
+
+def test_the_service_token_is_never_shown_in_the_config_repr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PARSE_SERVICE_TOKEN", "s3cret-token")
+    config = ParseClientConfig()
+    assert "s3cret-token" not in repr(config)
+    assert config.service_token is not None
+    assert config.service_token.get_secret_value() == "s3cret-token"

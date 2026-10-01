@@ -44,6 +44,7 @@ from apx.scan.cap import cap_flags
 from apx.scan.guard import InjectionGuard
 from apx.scan.interfaces import HiddenContentDetector, ScanFlag, ScanFlagKind, ScanReport
 from apx.trust.interfaces import CalibrationMethod, FieldFeatures
+from apx.validate.address import resolve_emirate
 from apx.validate.interfaces import NO_CURRENCY
 from apx.workflows.interfaces import InvoiceWorkflowInput
 from apx.workflows.sql import HistorySnapshot
@@ -59,15 +60,6 @@ _REQUIRED = (
     FieldName.SUBTOTAL,
     FieldName.VAT_TOTAL,
     FieldName.TOTAL,
-)
-UAE_EMIRATES = (
-    "Abu Dhabi",
-    "Dubai",
-    "Sharjah",
-    "Ajman",
-    "Umm Al Quwain",
-    "Ras Al Khaimah",
-    "Fujairah",
 )
 
 
@@ -356,13 +348,6 @@ def _candidate_pages(
     return candidates
 
 
-def _emirate(address: str | None) -> str | None:
-    if not address:
-        return None
-    lowered = address.lower()
-    return next((e for e in UAE_EMIRATES if e.lower() in lowered), None)
-
-
 class PintAeUblBuilder:
     """`UblBuilder`: maps an `Invoice` onto `InvoiceFields` and builds PINT AE UBL. The payment
     account is always the vendor master's verified IBAN, never the one printed on the invoice.
@@ -412,13 +397,13 @@ class PintAeUblBuilder:
             supplier_name=invoice.supplier.name,
             supplier_trn=invoice.supplier.trn,
             supplier_address_line1=invoice.supplier.address,
-            supplier_city=_emirate(invoice.supplier.address),
+            supplier_city=resolve_emirate(invoice.supplier.address),
             supplier_country_code=invoice.supplier.country,
             buyer_name=invoice.buyer.name,
             buyer_trn=self._buyer_trn,
             buyer_legal_registration_id=self._buyer_license,
             buyer_address_line1=buyer_address,
-            buyer_city=_emirate(buyer_address),
+            buyer_city=resolve_emirate(buyer_address),
             buyer_country_code=invoice.buyer.country,
             payment_account_iban=invoice.iban,
             sum_line_net_amount=_fmt(

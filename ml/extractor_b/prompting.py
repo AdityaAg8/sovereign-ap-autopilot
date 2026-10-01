@@ -1,13 +1,14 @@
 """Turns an Extractor B training row into the exact serving messages (`apx.extract.prompt_b`)
 and then into the HF/Unsloth conversation the trainer consumes, so the fine-tune sees the same
 system prompt, user text and page pixels as serving (ADR-0009 §1.1-1.2). Also holds the
-torch-free label mask for sources without line-item labels (ADR-0012 §3)."""
+torch-free label masks: `line_items` for sources without line-item labels (ADR-0012 §3) and the
+per-field mask for keys a source does not annotate (ADR-0019 §9.3)."""
 
 from __future__ import annotations
 
 import base64
 import io
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
 
@@ -16,9 +17,14 @@ from PIL import Image
 from apx.extract.prompt_b import b_messages
 from apx.llm.interfaces import ChatMessage, ImagePart, TextPart
 from ml.extractor_b.interfaces import LINE_ITEMS_UNLABELLED, TrainingError, TrainingSample
+from ml.extractor_b.mappings import UNANNOTATED
+from ml.extractor_b.tokens import masked_labels
 
 SAMPLE_IDS_KEY = "sample_ids"
 MASK_LINE_ITEMS_KEY = "mask_line_items"
+MASK_FIELDS_KEY = "mask_fields"
+"""Sorted `UNANNOTATED` keys of the row's source; present only when non-empty, so UAE and FATURA
+examples are the exact v1 dicts (ADR-0019 §9.3)."""
 LINE_ITEMS_TAIL: Final[str] = ',"line_items":[]}'
 """How every unlabelled-source target ends: `line_items` is the last schema key and targets are
 compact JSON (`ml.extractor_b.data.TARGET_SEPARATORS`, ADR-0011 amendment 3)."""
@@ -79,6 +85,8 @@ def training_example(row: TrainingSample, data_dir: Path) -> dict[str, Any]:
         serving_messages(row, data_dir), target_json=row.target_json, sample_id=row.sample_id
     )
     example[MASK_LINE_ITEMS_KEY] = mask
+    if fields := UNANNOTATED[row.source]:
+        example[MASK_FIELDS_KEY] = sorted(fields)
     return example
 
 
@@ -115,3 +123,65 @@ def mask_line_items_labels(
                 raise TrainingError("line_items suffix found outside the supervised response")
             return [*labels[:start], *([IGNORE_INDEX] * (len(labels) - start))]
     raise TrainingError("line_items suffix not found in the tokenised row; tokenizer drift?")
+
+
+TargetEncoder = Callable[[str], tuple[list[int], list[tuple[int, int]]]]
+"""Tokenises a target JSON alone: (ids, character offsets), no special tokens."""
+
+
+def example_target(example: Mapping[str, Any]) -> str:
+    """The assistant target text of a `training_example`."""
+    last = example["messages"][-1]
+    if last["role"] != "assistant":
+        raise TrainingError("training example does not end with the assistant target")
+    return str(last["content"][0]["text"])
+
+
+def mask_fields_labels(
+    input_ids: Sequence[int],
+    labels: Sequence[int],
+    *,
+    target_json: str,
+    masked_keys: frozenset[str],
+    encode: TargetEncoder,
+) -> list[int]:
+    """`labels` of a tokenised conversation with the ADR-0019 §9.3 field mask applied inside the
+    supervised response. The target, tokenised alone, must sit at the first supervised token;
+    anything else is tokenizer drift and a `TrainingError`, never a silently unmasked row."""
+    if len(input_ids) != len(labels):
+        raise TrainingError("mask_fields_labels: input_ids/labels length mismatch")
+    start = next((i for i, label in enumerate(labels) if label != IGNORE_INDEX), None)
+    target_ids, offsets = encode(target_json)
+    end = (start or 0) + len(target_ids)
+    if start is None or list(input_ids[start:end]) != list(target_ids):
+        raise TrainingError("target tokens are not at the start of the supervised response")
+    window = masked_labels(target_ids, offsets, target_json, masked_keys)
+    masked = [
+        IGNORE_INDEX if w == IGNORE_INDEX else labels[start + j] for j, w in enumerate(window)
+    ]
+    return [*labels[:start], *masked, *labels[end:]]
+
+
+def finalize_labels(
+    example: Mapping[str, Any],
+    input_ids: Sequence[int],
+    labels: Sequence[int],
+    *,
+    suffix_ids: Sequence[int],
+    encode: TargetEncoder,
+) -> list[int]:
+    """Per-example label post-processing in the collator: the field mask (only for examples with
+    `MASK_FIELDS_KEY`), then the `line_items` mask (only with `MASK_LINE_ITEMS_KEY`). An example
+    with neither, UAE's, returns `labels` unchanged."""
+    out = list(labels)
+    if fields := example.get(MASK_FIELDS_KEY):
+        out = mask_fields_labels(
+            input_ids,
+            out,
+            target_json=example_target(example),
+            masked_keys=frozenset(fields),
+            encode=encode,
+        )
+    if example.get(MASK_LINE_ITEMS_KEY):
+        out = mask_line_items_labels(input_ids, out, suffix_ids)
+    return out

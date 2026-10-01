@@ -1,12 +1,14 @@
 """Born-digital PDF fast path: word/line/table boxes straight from the PDF's own text layer via
 pdfplumber, with no model call (PRD §3, §10 M3.1). This is the only path the IoU≥0.5 gate on
 ≥98% of labeled fields runs against; PaddleOCR-VL (apx.parse.client) is for scanned pages only.
-Field boxes built this way satisfy I1 (PRD §6.2): they come from parse words, never a model."""
+Field boxes built this way satisfy I1 (PRD §6.2): they come from parse words, never a model.
+Word text is emitted in logical reading order (Arabic un-reversed, apx.parse.bidi)."""
 
 from __future__ import annotations
 
 import io
-from typing import Final, TypedDict, cast
+import unicodedata
+from typing import Final, NotRequired, TypedDict, cast
 
 import numpy as np
 import pdfplumber
@@ -16,7 +18,16 @@ from PIL import Image
 
 from apx.common.errors import ParseError
 from apx.common.types import BBox
+from apx.parse.bidi import VisualWord, logical_line
 from apx.parse.interfaces import Line, Page, Table, TableCell, Word
+
+
+class _RawChar(TypedDict):
+    """The subset of a pdfplumber char dict `_visual_text` reads."""
+
+    text: str
+    x0: float
+    x1: float
 
 
 class _RawWord(TypedDict):
@@ -28,6 +39,7 @@ class _RawWord(TypedDict):
     x1: float
     top: float
     bottom: float
+    chars: NotRequired[list[_RawChar]]
 
 
 # Arabic-script Unicode blocks (Arabic, Supplement, Extended-A, Presentation Forms A/B). A line
@@ -40,10 +52,14 @@ _ARABIC_BLOCKS: Final[tuple[tuple[int, int], ...]] = (
     (0xFE70, 0xFEFF),
 )
 _RTL_LINE_THRESHOLD: Final[float] = 0.3
-"""Arabic-letter fraction above which a line's words are reordered right-to-left."""
+"""Arabic-letter fraction at or above which a line is read as a right-to-left paragraph."""
 
 RENDER_SCALE: Final[float] = 2.0
 """~144 DPI page raster used for `Page.image_png` and, unchanged, as the scan-path input."""
+
+_MARK_EPS: Final[float] = 0.01
+"""Points of float noise tolerated when a zero-width mark sits exactly on a glyph boundary (its
+origin equals the next glyph's x0 up to rounding): it belongs to the glyph starting there."""
 
 _INK_THRESHOLD: Final[int] = 128
 _INK_SEARCH_MARGIN: Final[float] = 0.006
@@ -125,7 +141,8 @@ def _parse_digital_page(
     document_sha256: str, index: int, plumber_page: pdfplumber.page.Page, image_png: bytes
 ) -> Page:
     raw_words = cast(
-        "list[_RawWord]", plumber_page.extract_words(use_text_flow=False, keep_blank_chars=False)
+        "list[_RawWord]",
+        plumber_page.extract_words(use_text_flow=False, keep_blank_chars=False, return_chars=True),
     )
     if not raw_words:
         raise ParseError(f"{document_sha256} page {index} has no extractable text")
@@ -140,22 +157,25 @@ def _parse_digital_page(
     words: list[Word] = []
     lines: list[Line] = []
     word_index = 0
-    for line_i, line_words in enumerate(lines_of_words):
-        line_text = "".join(w["text"] for w in line_words)
-        if is_rtl_text(line_text):
-            line_words = sorted(line_words, key=lambda w: -w["x0"])  # right-to-left logical order
-        else:
-            line_words = sorted(line_words, key=lambda w: w["x0"])  # left-to-right
+    for line_i, visual_words in enumerate(lines_of_words):
+        # The text layer holds glyphs in visual order (Arabic letters reversed, as presentation
+        # forms): recover logical word order and text, keeping each word's own box.
+        line_height = max(w["bottom"] - w["top"] for w in visual_words)
+        logical = logical_line(
+            [VisualWord(_visual_text(w), w["x0"], w["x1"]) for w in visual_words],
+            rtl=is_rtl_text("".join(w["text"] for w in visual_words)),
+            line_height=line_height,
+        )
 
         provisional = [
             (
-                raw,
+                text,
                 max(0.0, min(1.0, raw["x0"] / width)),
                 max(0.0, min(1.0, raw["top"] / height)),
                 max(0.0, min(1.0, raw["x1"] / width)),
                 max(0.0, min(1.0, raw["bottom"] / height)),
             )
-            for raw in line_words
+            for raw, text in ((visual_words[i], text) for i, text in logical)
         ]
         line_y0, line_y1 = _refine_line_vertical_extent(
             ink,
@@ -167,13 +187,11 @@ def _parse_digital_page(
 
         line_id = f"p{index}l{line_i}"
         line_word_ids: list[str] = []
-        for raw, word_x0, _approx_y0, word_x1, _approx_y1 in provisional:
+        for text, word_x0, _approx_y0, word_x1, _approx_y1 in provisional:
             word_id = f"p{index}w{word_index}"
             word_index += 1
             bbox = BBox(page=index, x0=word_x0, y0=line_y0, x1=word_x1, y1=line_y1)
-            words.append(
-                Word(id=word_id, text=raw["text"], bbox=bbox, line_id=line_id, confidence=1.0)
-            )
+            words.append(Word(id=word_id, text=text, bbox=bbox, line_id=line_id, confidence=1.0))
             line_word_ids.append(word_id)
         lines.append(
             Line(id=line_id, word_ids=tuple(line_word_ids), bbox=_line_bbox(words, line_word_ids))
@@ -190,6 +208,36 @@ def _parse_digital_page(
         tables=tables,
         image_png=image_png,
     )
+
+
+def _visual_text(raw: _RawWord) -> str:
+    """The word's glyphs left to right, with each combining mark placed directly after the base
+    glyph it is drawn on. Marks are zero-width and positioned at or inside their base's span,
+    so pdfplumber's x-sort can land a mark after the wrong neighbour (a damma read onto the
+    letter beside it); this re-attaches each mark to the base whose [x0, x1) holds it."""
+    chars = raw.get("chars")
+    if not chars or not any(unicodedata.bidirectional(c["text"]) == "NSM" for c in chars):
+        return raw["text"]
+    bases = sorted(
+        (c for c in chars if unicodedata.bidirectional(c["text"]) != "NSM"), key=lambda c: c["x0"]
+    )
+    if not bases:
+        return raw["text"]
+    marks: list[list[str]] = [[] for _ in bases]
+    for mark in (c for c in chars if unicodedata.bidirectional(c["text"]) == "NSM"):
+        owner = next(
+            (
+                i
+                for i, b in enumerate(bases)
+                if b["x0"] - _MARK_EPS <= mark["x0"] < b["x1"] - _MARK_EPS
+            ),
+            min(
+                range(len(bases)),
+                key=lambda i: abs((bases[i]["x0"] + bases[i]["x1"]) / 2 - mark["x0"]),
+            ),
+        )
+        marks[owner].append(mark["text"])
+    return "".join(b["text"] + "".join(m) for b, m in zip(bases, marks, strict=True))
 
 
 def _grayscale_ink(image_png: bytes) -> NDArray[np.uint8]:

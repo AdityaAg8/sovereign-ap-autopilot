@@ -1,6 +1,7 @@
 """Unit tests for extraction row identity (`evals.extraction_identity`, M7.1 review H2): the served
 GGUF sha256 resolves from models.lock or an export manifest, the prompt version tracks the prompt
-contract, and the harness refuses to resume a row file written by another build or prompt."""
+contract, and the harness refuses to resume a row file written by another build or prompt, or
+under other llama-swap serving args or another parser build."""
 
 from __future__ import annotations
 
@@ -13,16 +14,28 @@ import pytest
 
 from apx.extract.interfaces import ExtractorId
 from apx.extract.prompt import InvoicePromptBuilder, PromptSettings
-from evals.extraction_a import prompt_builder_for, run, run_identity
+from evals.extraction_a import (
+    CLIENT_CONCURRENCY_KEY,
+    prompt_builder_for,
+    row_stamp,
+    run,
+    run_identity,
+    run_serving,
+)
 from evals.extraction_identity import (
     RowIdentity,
     RowIdentityError,
     ServedModelError,
+    ServingIdentity,
+    ServingIdentityError,
     prompt_version,
     require_identity,
+    require_serving,
     served_gguf_sha256,
     served_paths,
+    serving_args_sha256,
 )
+from evals.parse_cache import parser_identity
 from evals.splits import load_splits
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -149,3 +162,89 @@ async def test_harness_refuses_to_resume_rows_of_another_run(tmp_path: Path) -> 
         ExtractorId.A, "extractor-a", llama_swap_config=swap, models_lock=LOCK, models_root=tmp_path
     )
     assert expected.model == "extractor-a" and not (tmp_path / "report.md").exists()
+
+
+def test_serving_hash_tracks_the_alias_args_not_formatting(tmp_path: Path) -> None:
+    text = SWAP.read_text(encoding="utf-8")
+    swap = tmp_path / "llama-swap.yaml"
+    swap.write_text(text, encoding="utf-8")
+    base = serving_args_sha256("extractor-a", llama_swap_config=swap)
+    assert len(base) == 16
+    assert base != serving_args_sha256("extractor-b", llama_swap_config=swap)
+    # Re-wrapping the cmd block (same tokens) is the same server.
+    swap.write_text(text.replace("--parallel 1\n", "--parallel    1\n", 1), encoding="utf-8")
+    assert serving_args_sha256("extractor-a", llama_swap_config=swap) == base
+    # ADR-0013 amdt 1: `--parallel 2` changed what A reads, so it is another serving identity.
+    swap.write_text(text.replace("--parallel 1\n", "--parallel 2\n", 1), encoding="utf-8")
+    assert serving_args_sha256("extractor-a", llama_swap_config=swap) != base
+    # A shared macro flag (the llama-server defaults every alias expands) counts too.
+    swap.write_text(text.replace("--temp 0.2", "--temp 0.3", 1), encoding="utf-8")
+    assert serving_args_sha256("extractor-a", llama_swap_config=swap) != base
+    with pytest.raises(ServedModelError):
+        serving_args_sha256("no-such-alias", llama_swap_config=swap)
+
+
+def test_require_serving_rejects_other_configs_and_legacy_rows(tmp_path: Path) -> None:
+    serving = ServingIdentity(serving_args_sha256="1" * 16, parser_identity="2" * 16)
+    rows_path = tmp_path / "rows.jsonl"
+    require_serving({"s1": serving.as_row_fields()}, serving, rows_path)
+    other = {"s1": {**serving.as_row_fields(), "serving_args_sha256": "3" * 16}}
+    with pytest.raises(ServingIdentityError, match="served or parsed differently"):
+        require_serving(other, serving, rows_path)
+    with pytest.raises(ServingIdentityError):  # a parser fix since the rows were written
+        require_serving(
+            {"s1": {**serving.as_row_fields(), "parser_identity": "4" * 16}}, serving, rows_path
+        )
+    with pytest.raises(RowIdentityError):  # rows from before serving fields: unknown config
+        require_serving({"s2": IDENTITY.as_row_fields()}, serving, rows_path)
+
+
+@pytest.mark.parametrize("concurrency", [1, 2])
+def test_every_row_records_identity_serving_and_client_concurrency(concurrency: int) -> None:
+    serving = ServingIdentity(serving_args_sha256="1" * 16, parser_identity="2" * 16)
+    stamp = row_stamp(IDENTITY, serving, concurrency)
+    assert stamp == {
+        **IDENTITY.as_row_fields(),
+        **serving.as_row_fields(),
+        CLIENT_CONCURRENCY_KEY: concurrency,
+    }
+    # Concurrency is metadata for latency consumers, not identity: a resume may change it.
+    require_identity({"s1": stamp}, IDENTITY, Path("rows.jsonl"))
+    require_serving({"s1": stamp}, serving, Path("rows.jsonl"))
+
+
+async def test_harness_refuses_to_resume_rows_served_with_other_args(tmp_path: Path) -> None:
+    """The M5.6 corruption case: rows of the right build and prompt, but written while llama-swap
+    served A with other args (`--parallel 2`), must not be mixed into a `--parallel 1` run."""
+    first = sorted(load_splits().sets["uae"]["test"])[0]
+    (tmp_path / f"{first}.pdf").write_bytes(b"%PDF-1.4")
+    swap = tmp_path / "llama-swap.yaml"
+    text = SWAP.read_text(encoding="utf-8")
+    swap.write_text(text.replace("--parallel 1\n", "--parallel 2\n", 1), encoding="utf-8")
+    old_serving = run_serving("extractor-a", llama_swap_config=swap, parser_id=parser_identity())
+    swap.write_text(text, encoding="utf-8")
+    identity = run_identity(
+        ExtractorId.A, "extractor-a", llama_swap_config=swap, models_lock=LOCK, models_root=tmp_path
+    )
+    rows = tmp_path / "rows.jsonl"
+    row = {"sha": first, "valid_json": True, **identity.as_row_fields()}
+    rows.write_text(json.dumps({**row, **old_serving.as_row_fields()}) + "\n", encoding="utf-8")
+    args = argparse.Namespace(
+        data_dir=tmp_path,
+        limit=0,
+        rows=rows,
+        extractor="a",
+        split="test",
+        model="",
+        base_url="http://llm.test",
+        concurrency=1,
+        report=tmp_path / "report.md",
+        llama_swap_config=swap,
+        models_lock=LOCK,
+        models_root=tmp_path,
+        parse_cache=tmp_path / "cache",
+        no_parse_cache=False,
+    )
+    with pytest.raises(ServingIdentityError, match="served or parsed differently"):
+        await run(args)
+    assert not (tmp_path / "report.md").exists()

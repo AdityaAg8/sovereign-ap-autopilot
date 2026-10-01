@@ -1,7 +1,7 @@
 """Alembic async migration runner for the Postgres schema in `apx/db/models.py`. Resolves the
-connection URL like the app does (`apx.db.session.get_database_url`, else `alembic.ini`) and runs
-migrations through an `asyncpg` engine so the same driver is used in tests and production
-(PRD §7 db/migrations, §10 M5.1)."""
+connection URL like the app does (`apx.db.session.get_database_url`, else a non-empty
+`alembic.ini` value) and runs migrations through an `asyncpg` engine so the same driver is used
+in tests and production (PRD §7 db/migrations, §10 M5.1)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,13 @@ config = context.config
 # The app's own resolution (`DATABASE_URL`, else the Compose `POSTGRES_*` settings) wins over
 # the static `alembic.ini` value, so migrations reach the same database the app does -- a
 # throwaway test container, the host via the gateway, or `postgres` inside the Compose network.
-if os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_PASSWORD"):
+# `alembic.ini` ships an empty URL, so with nothing configured `get_database_url` raises a typed
+# `ConfigError` instead of connecting with a baked-in password.
+if (
+    os.environ.get("DATABASE_URL")
+    or os.environ.get("POSTGRES_PASSWORD")
+    or not config.get_main_option("sqlalchemy.url")
+):
     config.set_main_option("sqlalchemy.url", get_database_url())
 
 if config.config_file_name is not None:

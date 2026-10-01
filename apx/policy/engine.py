@@ -18,6 +18,7 @@ from apx.policy.interfaces import (
     PolicyThresholds,
     RoutingDecision,
     RoutingInput,
+    ValidationFinding,
     capabilities_for,
     is_approval_action,
     pin_payee,
@@ -59,12 +60,22 @@ class DefaultPolicyEngine:
                 )
             )
 
-        if any(v.severity == "error" for v in inp.validation.violations):
+        errors = tuple(
+            ValidationFinding(code=v.code, field=v.field)
+            for v in inp.validation.violations
+            if v.severity == "error"
+        )
+        if errors:
+            # Codes and field paths are the validator's own text, never the document's.
+            listed = ", ".join(
+                f.code.value if f.field is None else f"{f.code.value} ({f.field})" for f in errors
+            )
             reasons.append(
                 PolicyReason(
                     rule=PolicyRule.VALIDATION,
                     route=Route.REVIEW,
-                    message="validation found an error-severity violation",
+                    message=f"validation found error-severity violations: {listed}",
+                    violations=errors,
                 )
             )
 

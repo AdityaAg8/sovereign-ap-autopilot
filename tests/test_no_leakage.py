@@ -1,19 +1,22 @@
 """Leakage gate for PRD §6.2 I5 ("eval, cal and test data never reach training") and ADR-0005:
 validates the committed evals/splits.json has no cross-pool sha256 overlap and no duplicate
-within a split, greps apx/ to confirm only apx/trust references the cal split (quoted "cal" or a
-`*Split.CAL` member; the one exempt line is the DB enum declaring the value), and proves the
-checker is not a no-op by injecting a duplicate into a temp copy of splits.json. No network,
-no GPU.
+within a split, checks no real hold-out (CORD, DocILE val, ExtractBench; ADR-0019 §4.5) sits in an
+ml/ training manifest, greps apx/ to confirm only apx/trust references the cal split (quoted "cal"
+or a `*Split.CAL` member; the one exempt line is the DB enum declaring the value), and proves the
+checkers are not no-ops with planted violations. No network, no GPU.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
 
 from evals.splits import (
     SPLITS_PATH,
+    SetName,
+    SplitsFile,
     find_duplicate_documents,
     load_splits,
     validate_splits,
@@ -155,3 +158,85 @@ def test_checker_fails_on_a_duplicate_within_a_single_split_in_a_temp_copy(
     problems = find_duplicate_documents(load_splits(mutated_path))
 
     assert any(any_split_sha in problem and "fatura.train" in problem for problem in problems)
+
+
+# --- ADR-0019 §4.5: real hold-outs never reach an ml/ training manifest ------------------------
+
+DATA_ROOT = REPO_ROOT / "data"
+HOLDOUT_SPLITS: tuple[tuple[SetName, str], ...] = (
+    ("cord", "val"),
+    ("cord", "test"),
+    ("docile", "val"),
+    ("extractbench", "eval"),
+    ("fatura", "test"),
+    ("uae", "cal"),
+    ("uae", "test"),
+)
+
+
+def holdout_shas(splits: SplitsFile, data_root: Path = DATA_ROOT) -> set[str]:
+    """Every hold-out document sha256: the splits.json hold-outs plus, when DocILE is fetched,
+    the sha256 of every DocILE val PDF (its manifest records archives, not documents)."""
+    shas: set[str] = set()
+    for set_name, split in HOLDOUT_SPLITS:
+        shas.update(splits.sets.get(set_name, {}).get(split, []))
+    val_list = data_root / "docile" / "val.json"
+    if val_list.is_file():
+        for doc_id in json.loads(val_list.read_text(encoding="utf-8")):
+            pdf = data_root / "docile" / "pdfs" / f"{doc_id}.pdf"
+            if pdf.is_file():
+                shas.add(hashlib.sha256(pdf.read_bytes()).hexdigest())
+    return shas
+
+
+def ml_manifest_leaks(holdouts: set[str], ml_root: Path) -> list[str]:
+    """`path:line sha` for each training-manifest row whose document is a hold-out."""
+    leaks: list[str] = []
+    for manifest in sorted(ml_root.rglob("manifest.jsonl")) if ml_root.is_dir() else []:
+        for lineno, line in enumerate(manifest.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            sha = json.loads(line).get("document_sha256")
+            if sha in holdouts:
+                leaks.append(f"{manifest}:{lineno} {sha}")
+    return leaks
+
+
+def test_cord_splits_are_registered() -> None:
+    splits = load_splits()
+    assert len(splits.sets["cord"]["test"]) == 100
+    assert len(splits.sets["cord"]["val"]) == 100
+    assert splits.sets["cord"]["train"], "CORD train is a train set (ADR-0019 §4.5)"
+
+
+def test_real_holdouts_never_appear_in_ml_training_manifests() -> None:
+    holdouts = holdout_shas(load_splits())
+    assert len(holdouts) >= 200 + 252, "CORD test/val and ExtractBench must be hold-outs"
+    assert ml_manifest_leaks(holdouts, DATA_ROOT / "ml") == []
+
+
+def test_ml_manifest_leak_check_catches_a_planted_holdout(tmp_path: Path) -> None:
+    splits = load_splits()
+    planted = sorted(splits.sets["cord"]["test"])[0]
+    train_sha = sorted(splits.sets["cord"]["train"])[0]
+    run = tmp_path / "ml" / "extractor_b"
+    run.mkdir(parents=True)
+    rows = [{"document_sha256": train_sha}, {"document_sha256": planted}]
+    (run / "manifest.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+    )
+
+    leaks = ml_manifest_leaks(holdout_shas(splits, tmp_path), tmp_path / "ml")
+
+    assert len(leaks) == 1
+    assert planted in leaks[0]
+
+
+def test_docile_val_pdfs_count_as_holdouts_when_fetched(tmp_path: Path) -> None:
+    (tmp_path / "docile" / "pdfs").mkdir(parents=True)
+    (tmp_path / "docile" / "val.json").write_text('["d1"]', encoding="utf-8")
+    (tmp_path / "docile" / "pdfs" / "d1.pdf").write_bytes(b"%PDF-docile")
+
+    shas = holdout_shas(load_splits(), tmp_path)
+
+    assert hashlib.sha256(b"%PDF-docile").hexdigest() in shas

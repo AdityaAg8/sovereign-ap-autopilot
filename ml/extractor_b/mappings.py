@@ -1,8 +1,9 @@
 """Label mappings from each Extractor B training source to the extraction target JSON
-(ADR-0009 §1.3-1.4): UAE factory labels, DocILE KILE/LIR and FATURA boxes. Every source label is
-either mapped or explicitly ignored; an unknown label raises, so a mapping gap never trains.
-Classified targets (BT-3 type code, line VAT category) come from what the source knows for
-certain, never from a guess (ADR-0012 §1.3)."""
+(ADR-0009 §1.3-1.4, ADR-0019 §2): UAE factory labels, DocILE KILE/LIR, FATURA boxes and CORD v2
+receipts (which also score the real-data track), plus the per-source loss-mask keys (ADR-0019
+§9.3). Every source label is either mapped or explicitly ignored; an unknown label raises, so a
+mapping gap never trains. Classified targets (BT-3 type code, line VAT category) come from what
+the source knows for certain, never from a guess (ADR-0012 §1.3)."""
 
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ from apx.extract.interfaces import (
 )
 from factory.layouts import TAX_CASE_VAT_CATEGORY, TaxCase
 from ml.extractor_b.guards import ISO_4217
-from ml.extractor_b.interfaces import TrainingError
+from ml.extractor_b.interfaces import SampleSource, TrainingError
+from ml.extractor_b.tokens import LINE_KEY_PREFIX
 
 HEADER_KEYS: Final[tuple[str, ...]] = tuple(f.value for f in FieldName)
 _ARABIC: Final[re.Pattern[str]] = re.compile("[\u0600-\u06ff]")
@@ -189,6 +191,30 @@ def docile_target(annotation: Mapping[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------------------------
+# CORD v2 leaf walking (`ground_truth.gt_parse`, dotted leaf keys; ADR-0019 §2). The one mapping
+# table (`CORD_FIELDS` / `CORD_IGNORED`, below) serves both evaluation and phase-2 training.
+# ---------------------------------------------------------------------------------------------
+
+
+def cord_leaves(node: Any, prefix: str = "") -> Iterable[tuple[str, str]]:
+    """(dotted key, value) for every string leaf of a CORD `gt_parse` tree, in document order;
+    a group given as one object or as a list of objects is walked the same way."""
+    if isinstance(node, list):
+        for item in node:
+            yield from cord_leaves(item, prefix)
+    elif isinstance(node, Mapping):
+        for key, value in node.items():
+            yield from cord_leaves(value, f"{prefix}.{key}" if prefix else str(key))
+    elif node is not None:
+        yield prefix, str(node)
+
+
+def unmapped_cord_keys(gt_parse: Mapping[str, Any]) -> list[str]:
+    """CORD keys in `gt_parse` that are neither mapped nor ignored (a mapping gap)."""
+    return sorted({k for k, _ in cord_leaves(gt_parse) if not cord_label_known(k)})
+
+
+# ---------------------------------------------------------------------------------------------
 # FATURA (Annotations/Original_Format/<doc_id>.json). Boxes include their key text
 # ("Date: 03-Jan-1994"), which is stripped. FATURA has no line-item text annotations.
 # ---------------------------------------------------------------------------------------------
@@ -290,6 +316,137 @@ def fatura_target(annotation: Mapping[str, Any]) -> dict[str, Any]:
         target[field] = value or None
     target["currency"] = currency
     return target
+
+
+# ---------------------------------------------------------------------------------------------
+# CORD v2 (naver-clova-ix/cord-v2 `ground_truth.gt_parse`, ADR-0019 §2). Receipts annotate only
+# the three header totals and four line keys; every other target key is loss-masked (§9.3).
+# ---------------------------------------------------------------------------------------------
+
+CORD_V2_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "menu.nm", "menu.num", "menu.unitprice", "menu.cnt", "menu.discountprice",
+        "menu.price", "menu.itemsubtotal", "menu.vatyn", "menu.etc",
+        "menu.sub.nm", "menu.sub.num", "menu.sub.unitprice", "menu.sub.cnt",
+        "menu.sub.discountprice", "menu.sub.price", "menu.sub.etc",
+        "void_menu.nm", "void_menu.price",
+        "sub_total.subtotal_price", "sub_total.discount_price", "sub_total.service_price",
+        "sub_total.othersvc_price", "sub_total.tax_price", "sub_total.etc",
+        "total.total_price", "total.total_etc", "total.cashprice", "total.changeprice",
+        "total.creditcardprice", "total.emoneyprice", "total.menutype_cnt", "total.menuqty_cnt",
+    }
+)  # fmt: skip
+"""The CORD v2 label set (clovaai/cord README) as `gt_parse` paths; `menu.sub` is nested."""
+CORD_FIELDS: Final[Mapping[str, str]] = {
+    "menu.nm": f"{LINE_KEY_PREFIX}description",
+    "menu.cnt": f"{LINE_KEY_PREFIX}quantity",
+    "menu.unitprice": f"{LINE_KEY_PREFIX}unit_price",
+    "menu.price": f"{LINE_KEY_PREFIX}net_amount",
+    "sub_total.subtotal_price": "subtotal",
+    "sub_total.tax_price": "vat_total",
+    "total.total_price": "total",
+}
+CORD_IGNORED: Final[frozenset[str]] = frozenset(
+    {
+        "menu.sub.*", "menu.num", "menu.discountprice", "menu.etc", "menu.itemsubtotal",
+        "menu.vatyn", "void_menu.*", "sub_total.discount_price", "sub_total.service_price",
+        "sub_total.othersvc_price", "sub_total.etc", "total.cashprice", "total.changeprice",
+        "total.creditcardprice", "total.emoneyprice", "total.menutype_cnt",
+        "total.menuqty_cnt", "total.total_etc",
+    }
+)  # fmt: skip
+"""`x.*` ignores every label under `x`. `menu.itemsubtotal` and `menu.vatyn` are CORD v2 labels
+the ADR-0019 §2 table does not list; neither has a schema field, so they are ignored."""
+_CORD_LINE_GROUP: Final[str] = "menu"
+
+
+def cord_label_known(path: str) -> bool:
+    """True when a `gt_parse` path is mapped or ignored (directly or under an `x.*` prefix)."""
+    if path in CORD_FIELDS or path in CORD_IGNORED:
+        return True
+    return any(path.startswith(p.removesuffix("*")) for p in CORD_IGNORED if p.endswith(".*"))
+
+
+def _cord_text(value: Any, path: str) -> str | None:
+    """A leaf as printed: a string, or a list of strings joined with a space in order."""
+    if isinstance(value, str):
+        parts = [value]
+    elif isinstance(value, list) and all(isinstance(v, str) for v in value):
+        parts = value
+    else:
+        raise TrainingError(f"CORD label {path!r} has a non-text value {type(value).__name__}")
+    text = " ".join(p.strip() for p in parts if p.strip())
+    return text or None
+
+
+def _cord_groups(value: Any, path: str) -> list[Mapping[str, Any]]:
+    items = value if isinstance(value, list) else [value]
+    if not all(isinstance(item, Mapping) for item in items):
+        raise TrainingError(f"CORD group {path!r} is not an object or a list of objects")
+    return items
+
+
+def _cord_leaves(group: Mapping[str, Any], prefix: str) -> Iterable[tuple[str, Any]]:
+    """(`path`, value) for every label under `group`; nested groups (`menu.sub`) recurse.
+    An unknown path raises, so a label the tables miss never trains."""
+    for key, value in group.items():
+        path = f"{prefix}.{key}"
+        if isinstance(value, Mapping) or (
+            isinstance(value, list) and value and all(isinstance(v, Mapping) for v in value)
+        ):
+            for sub in _cord_groups(value, path):
+                yield from _cord_leaves(sub, path)
+            continue
+        if not cord_label_known(path):
+            raise TrainingError(f"unmapped CORD label {path!r}")
+        yield path, value
+
+
+def cord_target(gt_parse: Mapping[str, Any]) -> dict[str, Any]:
+    """B target JSON from a CORD `gt_parse`, values as printed. One `menu` entry is one line;
+    repeated header totals follow `merge_annotations`. Type code and every unannotated key stay
+    null (and are loss-masked through `UNANNOTATED`)."""
+    target = empty_target()
+    header: dict[str, list[str]] = {}
+    lines: list[dict[str, str]] = []
+    for group_name, group_value in gt_parse.items():
+        for group in _cord_groups(group_value, group_name):
+            line: dict[str, str] = {}
+            for path, value in _cord_leaves(group, group_name):
+                ours = CORD_FIELDS.get(path)
+                text = None if ours is None else _cord_text(value, path)
+                if ours is None or text is None:
+                    continue
+                if ours.startswith(LINE_KEY_PREFIX):
+                    line[ours.removeprefix(LINE_KEY_PREFIX)] = text
+                else:
+                    header.setdefault(ours, []).append(text)
+            if group_name == _CORD_LINE_GROUP and line:
+                lines.append(line)
+    for field, values in header.items():
+        target[field] = merge_annotations(field, values)
+    target["line_items"] = [_line_item(line) for line in lines]
+    return target
+
+
+# ---------------------------------------------------------------------------------------------
+# Per-source loss mask (ADR-0019 §9.3): keys a source does not annotate stay null in the target
+# JSON (the runtime format) but their value tokens carry no loss (`tokens.masked_labels`).
+# ---------------------------------------------------------------------------------------------
+
+_CORD_ANNOTATED: Final[frozenset[str]] = frozenset(CORD_FIELDS.values())
+ALL_TARGET_KEYS: Final[frozenset[str]] = frozenset(
+    {*HEADER_KEYS, INVOICE_TYPE_CODE_KEY, *(f"{LINE_KEY_PREFIX}{k}" for k in LINE_ITEM_KEYS)}
+)
+"""Every maskable key: the header fields, the type code and each `line_items[].<key>`."""
+UNANNOTATED: Final[Mapping[SampleSource, frozenset[str]]] = {
+    SampleSource.UAE: frozenset(),
+    SampleSource.FATURA: frozenset(),
+    SampleSource.DOCILE: frozenset({INVOICE_TYPE_CODE_KEY, f"{LINE_KEY_PREFIX}vat_category"}),
+    SampleSource.CORD: ALL_TARGET_KEYS - _CORD_ANNOTATED,
+}
+"""UAE and FATURA carry no field mask, so their training rows stay byte-identical to v1 (FATURA's
+`line_items` mask is the separate ADR-0012 §3 one)."""
 
 
 def unknown_labels(labels: Iterable[str], known: Iterable[str]) -> list[str]:

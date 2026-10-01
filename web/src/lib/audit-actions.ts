@@ -1,12 +1,15 @@
 /** Human labels for audit_log actions as apx writes them (apx.agent.interfaces.AuditAction:
  * `activity:<step>`, `authorize:<cap>`, `decision.<action>`, `proposal.submit|accept`,
- * `payment_state:<...>`, `field_edit`, `agent.review_note*`, `mcp.read|refusal`), used by the invoice
+ * `payment_state:<...>`, `field_edit`, `agent.review_note*`, `chat.unverifiable`, `mcp.read|refusal`),
+ * used by the invoice
  * Audit tab (PRD §10 M9.3). An action this table doesn't know yet still gets a readable label. */
 
-/** Workflow steps, in pipeline order (apx.workflows.activities `activity.defn` names). */
+/** Workflow steps, in pipeline order (apx.workflows.activities `_audit` step names: the
+ * `activity.defn` names plus the out-of-band `parse_cache_miss`, `payee_changed` and `failed`). */
 const ACTIVITY_LABEL: Readonly<Record<string, string>> = {
   scan: "Scanned for hidden instructions",
   parse: "Document parsed",
+  parse_cache_miss: "Parsed copy missing, document re-parsed",
   extract: "Fields extracted",
   trust_gate: "Confidence checked",
   build_invoice: "Invoice assembled",
@@ -14,9 +17,11 @@ const ACTIVITY_LABEL: Readonly<Record<string, string>> = {
   apply_review: "Reviewer corrections applied",
   fraud: "Fraud checks run",
   route: "Routed",
+  payee_changed: "Payee changed since routing",
   build_einvoice: "E-invoice built",
   send_to_asp: "Sent to the ASP",
   archive: "Archived",
+  failed: "Workflow failed",
 };
 
 /** apx.policy.interfaces.Capability values. */
@@ -54,6 +59,7 @@ const EXACT_LABEL: Readonly<Record<string, string>> = {
   "agent.review_note": "Assistant review note",
   "agent.review_note_refused": "Review note withheld (not verifiable)",
   "agent.review_note_unavailable": "Review note unavailable (model offline)",
+  "chat.unverifiable": "Assistant answer withheld (citations not verifiable)",
   "mcp.refusal": "Assistant request refused",
   "mcp.read": "Assistant read records",
 };

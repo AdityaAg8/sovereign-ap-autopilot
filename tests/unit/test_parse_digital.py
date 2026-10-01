@@ -5,10 +5,13 @@ detection. Fast, no GPU, no network; PDFs are generated in-memory with reportlab
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pdfplumber
 import pytest
 from PIL import Image
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from apx.common.errors import ParseError
@@ -212,3 +215,56 @@ def test_ltr_line_keeps_left_to_right_order() -> None:
 
     result = _parse_digital_page("a" * 64, 0, _FakePlumberPage(words), _blank_png())
     assert [w.text for w in result.words] == ["first", "second"]
+
+
+_NASKH_PATH = (
+    Path(__file__).resolve().parent.parent / "fixtures" / "fonts" / "NotoNaskhArabic-Regular.ttf"
+)
+_NASKH = "ParseTestNaskh"
+
+
+def _visual_arabic_pdf(words_right_to_left: list[str], font_size: float = 12.0) -> bytes:
+    """A born-digital RTL line as a shaping renderer (Chromium, the factory's) writes it: each
+    word's glyphs drawn left to right in visual order as Arabic presentation forms, words laid
+    out from the right margin leftwards. reportlab draws the given glyph string verbatim, so this
+    reproduces the text layer pdfplumber reads from real AR-first invoices."""
+    if _NASKH not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont(_NASKH, str(_NASKH_PATH)))
+
+    def draw(c: canvas.Canvas) -> None:
+        c.setFont(_NASKH, font_size)
+        right = _PAGE_W - 20.0
+        for word in words_right_to_left:
+            width = pdfmetrics.stringWidth(word, _NASKH, font_size)
+            c.drawString(right - width, 150, word)
+            right -= width + 0.4 * font_size  # a word space above pdfplumber's x_tolerance
+
+    return _make_pdf(draw)
+
+
+def test_arabic_line_parses_to_logical_text_with_word_boxes() -> None:
+    # Regression (e2e doc 41f5771c): the text layer holds the Arabic IBAN sentence in visual
+    # order with presentation forms, so the LLM saw reversed words and returned no IBAN.
+    ila, raqm = "ﯽﻟإ", "ﻢقر"
+    al_iban = "نﺎبيآﻟا"
+    # Shadda drawn after its left neighbour, so its zero-width origin lands exactly on the next
+    # glyph's x0 -- it must re-attach to that glyph (noon), as in the factory PDFs.
+    musanni = "ﻊّنﺼﻣُ"
+    iban = "AE500335205997283792984"
+    pdf_bytes = _visual_arabic_pdf([ila, raqm, al_iban, "." + iban, musanni])
+
+    page = parse_digital_pdf("a" * 64, pdf_bytes)[0]
+
+    assert len(page.lines) == 1
+    texts = [w.text for w in page.words]
+    assert texts == [
+        "إلى",
+        "رقم",
+        "الآيبان",
+        iban + ".",
+        "مُصنّع",
+    ]
+    # Boxes still belong to their own words: logical order runs right to left on the page.
+    x0s = [w.bbox.x0 for w in page.words]
+    assert x0s == sorted(x0s, reverse=True)
+    assert page.lines[0].word_ids == tuple(w.id for w in page.words)

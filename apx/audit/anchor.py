@@ -60,6 +60,8 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
+from contextlib import aclosing
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -68,11 +70,19 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apx.audit.interfaces import AuditEntry, CanonicalValue, VerifyResult, entry_hash
-from apx.audit.verify import load_chain_entries, verify_chain
+from apx.audit.verify import ChainWalker, iter_chain_entries, use_snapshot
 from apx.common.errors import ApxError, AuditUnavailableError
 from apx.common.types import Frozen, Sha256Hex
 from apx.db.models import AuditAnchor as AuditAnchorRow
+from apx.db.models import AuditLog as AuditLogRow
 from apx.db.session import get_session
+
+
+@dataclass(frozen=True)
+class _ChainHead:
+    id: int
+    hash: str
+
 
 GENESIS_ANCHOR_HASH: Final[str] = "0" * 64
 """`prev_anchor_hash` of the first anchor -- the anchor chain's own genesis, independent of
@@ -227,7 +237,8 @@ def verify_anchors(
        anchor's `anchor_hash`, genesis for the first, and each `anchor_hash` reproduces from
        its own fields) -- catches an edited anchor row even if db and file were edited
        identically (`"anchor_chain_broken"`).
-    3. Each anchor's `(last_id, last_hash)` must appear unchanged in `chain_entries` -- catches
+    3. Each anchor's `(last_id, last_hash)` must appear unchanged in `chain_entries` (the whole
+       chain, or just the entries anchors name, which is all this looks up) -- catches
        the anchored row having been deleted (tail truncation) or its hash having changed since
        (a forged rewrite of the chain) (`"anchored_row_missing_or_changed"`).
 
@@ -321,10 +332,14 @@ async def _write_anchor(session: AsyncSession) -> AuditAnchorRecord | None:
     matches the latest anchor -- callers should only reach this after a clean verify."""
     await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ANCHOR_LOCK_KEY})
 
-    chain_entries = await load_chain_entries(session)
-    if not chain_entries:
+    head_row = (
+        await session.execute(
+            select(AuditLogRow.id, AuditLogRow.hash).order_by(AuditLogRow.id.desc()).limit(1)
+        )
+    ).first()
+    if head_row is None:
         return None
-    head = chain_entries[-1]
+    head = _ChainHead(id=head_row.id, hash=head_row.hash)
 
     prior_anchors = await _load_db_anchors(session)
     if prior_anchors and prior_anchors[-1].last_id == head.id:
@@ -374,13 +389,23 @@ class PgAuditFullVerifier:
 
     async def verify(self) -> FullVerifyResult:
         try:
+            # One snapshot, streamed in pages (bounded memory, REVIEW L-05): only the entries an
+            # anchor names are kept, which is all `verify_anchors` looks up.
+            walker = ChainWalker()
+            anchored_entries: list[AuditEntry] = []
             async with get_session() as session:
-                chain_entries = await load_chain_entries(session)
+                await use_snapshot(session)
                 db_anchors = await _load_db_anchors(session)
+                anchored_ids = {anchor.last_id for anchor in db_anchors}
+                async with aclosing(iter_chain_entries(session)) as entries:
+                    async for entry in entries:
+                        walker.feed(entry)
+                        if entry.id in anchored_ids:
+                            anchored_entries.append(entry)
 
-            chain_result = verify_chain(chain_entries)
+            chain_result = walker.result()
             file_anchors = read_anchor_file()
-            anchor_result = verify_anchors(db_anchors, file_anchors, chain_entries)
+            anchor_result = verify_anchors(db_anchors, file_anchors, anchored_entries)
             ok = chain_result.ok and anchor_result.ok
 
             healed_anchor_ids: tuple[int, ...] = ()

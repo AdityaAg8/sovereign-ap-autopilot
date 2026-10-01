@@ -204,4 +204,35 @@ def test_splits_json_round_trip_matches_pydantic_contract(tmp_path: Path) -> Non
     path = tmp_path / "splits.json"
     save_splits(empty_splits(now=datetime.fromisoformat("2026-01-01T00:00:00+00:00")), path)
     raw = json.loads(path.read_text(encoding="utf-8"))
-    assert set(raw["sets"]) == {"uae", "docile", "fatura", "extractbench", "attacks"}
+    assert set(raw["sets"]) == {"uae", "docile", "fatura", "extractbench", "attacks", "cord"}
+    assert list(raw["sets"]["cord"]) == ["train", "val", "test"]
+
+
+def test_build_from_manifest_registers_cord_documents_not_shards() -> None:
+    manifest = Manifest(
+        generated_at=datetime.fromisoformat("2026-09-29T00:00:00+00:00"),
+        datasets={
+            "cord": DatasetEntry(
+                status=DatasetStatus.PRESENT,
+                source="hf",
+                version="rev:test,validation,train",
+                license="CC-BY-4.0",
+                files=[
+                    _manifest_file(SHA_A, "test", None),  # a parquet shard, not a document
+                    _manifest_file(SHA_B, "test", "test-0000"),
+                    _manifest_file(SHA_C, "val", "validation-0000"),
+                    _manifest_file(SHA_D, "train", "train-0000"),
+                ],
+            )
+        },
+    )
+    cord = build_from_manifest(manifest).sets["cord"]
+    assert cord == {"train": [SHA_D], "val": [SHA_C], "test": [SHA_B]}
+
+
+def test_find_leaks_flags_cord_test_in_training() -> None:
+    splits = empty_splits(now=datetime.fromisoformat("2026-01-01T00:00:00+00:00"))
+    sets = dict(splits.sets)
+    sets["cord"] = {"train": [SHA_A], "val": [SHA_B], "test": [SHA_A]}
+    problems = find_leaks(SplitsFile(generated_at=splits.generated_at, sets=sets))
+    assert any(SHA_A in p and "'cord_test'" in p and "'train'" in p for p in problems)

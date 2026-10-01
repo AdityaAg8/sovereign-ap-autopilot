@@ -35,7 +35,7 @@ Every workflow in this repo is a `make` target (run from the repo root, in Git B
 | `make lint` | ruff check + format check, ESLint |
 | `make fmt` | ruff format + fixes, Prettier |
 | `make typecheck` | `mypy --strict`, `tsc` |
-| `make test` | pytest unit suite (integration, GPU and trainer tests are opt-in markers); green on Windows and Linux |
+| `make test` | pytest unit suite (integration, GPU and trainer tests are opt-in markers). On Windows it runs in a Linux container (`scripts/pytest_linux.sh`, needs Docker), since Smart App Control blocks the Playwright browser the render tests launch |
 | `make test-integration` | Tests marked `integration` against the running stack (`make up` first) |
 | `make test-gpu` | Tests marked `gpu` or `integration` (live stack with models) |
 | `make test-artifacts` | PINT AE schematron tests (bundles from `uv run python -m evals.pint_ae.fetch`) |
@@ -81,7 +81,8 @@ Guide: [Training Extractor B](training.md).
 | `make gates-b` | GPU, needs `make up`: P1-P5 → `reports/extractor_b_gates.md`; exit 1 if a gate fails |
 | `make promote-b` | CPU: only if every gate passed, move `champion` (calibrator, models.lock, llama-swap, alias) |
 | `make test-export` | Exporter-image tests on CPU |
-| `make test-trainer` | Trainer-image tests on CPU |
+| `make test-trainer` | Trainer-image tests on CPU (`trainer and not gpu`) |
+| `make test-trainer-gpu` | Trainer-image GPU tests (DeltaNet fast path, ADR-0011 amdt 6 item 3) |
 | `make retrain` | Challenger vs champion on gates G1-G11; promote only if nothing regresses ([ADR-0015](adr/0015-promotion-gates.md)). Not usable yet: exits 2 with `RetrainPrerequisiteError` until the production adapters land |
 
 ## Useful one-liners

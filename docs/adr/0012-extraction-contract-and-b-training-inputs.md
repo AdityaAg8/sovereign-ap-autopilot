@@ -280,6 +280,73 @@ manifest (`data/ml/extractor_b/manifest.jsonl`, fingerprinted by B's run) is lef
 Measuring the scan path needs a consumer change (feed the scan PNG instead of the PDF for
 `has_scan` documents), which is out of this amendment's scope.
 
+## Amendment 4 (2026-09-26): supplier address and totals in review (M5.6 e2e)
+
+What happened. In the M5.6 run of 20 factory invoices, a reviewer could approve two invoices
+that then failed PINT AE schematron at the build, and had no way to fix either. For
+`fbf2cc1d12b3`, OCR read the supplier's emirate as "Ras Al Khalaimah". The builder's emirate
+lookup found none, so the UBL had no seller CityName or CountrySubentity and failed
+`ibr-143-ae`, while the validator had reported no violations. For `13e9e6552e94`, the validator
+reported three error-severity `totals_mismatch` violations. The API still allowed the approval,
+and the build failed `ibr-147-ae`. No correction carries amounts.
+
+Decision.
+- **One emirate lookup.** `apx.validate.address.resolve_emirate` is the only lookup. The UBL
+  builder (`PintAeUblBuilder`, seller and buyer city) and the validator both use it, so they
+  cannot disagree. It matches exact aliases only (`EMIRATE_ALIASES`), each mapped to the
+  canonical emirate: the English name, the official variants (Abudhabi, Umm Al Qaiwain,
+  Fujeirah), the Arabic names (أبوظبي and أبو ظبي، دبي، الشارقة، عجمان، أم القيوين، رأس الخيمة،
+  الفجيرة). English is compared lower-cased, with hyphens read as spaces and whitespace
+  collapsed, so Ras Al-Khaimah and Abu-Dhabi match. There is no fuzzy matching: an OCR
+  misspelling such as "Ras Al Khalaimah" stays unresolved and goes to the reviewer.
+- **Validator.** `check_mandatory_fields` reports an error-severity `MISSING_MANDATORY` on
+  `supplier.address` when the address is missing or names no emirate. The invoice routes to
+  REVIEW, and the reviewer sees the finding before approving.
+- **The finding is recorded.** A VALIDATION `PolicyReason` now carries its error-severity
+  findings (`ValidationFinding`: code and field path, both system text). Its message lists
+  them, for example `missing_mandatory (supplier.address)`. `routing_record` stores them under
+  `violations` on the `policy_route` decision. `PolicyReason.violations` defaults to empty, so
+  route results recorded before this amendment still deserialize on workflow replay.
+- **Address correction.** The reviewer fixes `supplier_address` with the existing
+  `PATCH /invoices/{id}/fields`. On approve, and on executing an approve_payment proposal, the
+  latest address (a reviewer's row wins) must name an emirate. Otherwise the API returns
+  `MissingCorrectionsError` (422, nothing recorded), and the detail's field list names
+  `supplier_address`. The API compares the reviewer's address with the extracted raw address,
+  which is what `GroundedInvoiceBuilder` reads, both with whitespace collapsed. A reviewer's
+  address is also checked before anything is recorded: C0/C1 control characters other than
+  space, tab, CR and LF, or more than 500 characters, are a `MissingCorrectionsError` naming
+  `supplier_address` (422). `FieldEdit.value` is capped at 1,000 characters for every field
+  edit. If the addresses differ, the reviewer's whitespace-collapsed address goes to
+  the workflow as `ReviewCorrections.supplier_address`, an optional field that defaults to None,
+  so review signals recorded earlier still replay. `apply_corrections` writes it to the
+  supplier, and `apply_review` re-validates. A corrected address passes. An uncorrected one is
+  still refused as `MISSING_MANDATORY` (`MissingCorrectionsError`, non-retryable). No workflow
+  code changed.
+- **Totals refuse the approval when no correction can clear them.** The API reads the
+  invoice's newest `policy_route` decision. While it lists an error-severity `totals_mismatch`
+  on a line net amount, the subtotal or the total (or one with no field), `approve` and
+  executing an approve_payment proposal return `TotalsMismatchError`, a
+  `MissingCorrectionsError` subclass (422, nothing recorded, no signal). The detail names the
+  fields and tells the reviewer to reject. A `vat_total` finding does not refuse the approval:
+  `check_vat` recomputes the VAT total from the line categories and rates, which a reviewer may
+  correct (a zero-rated line the extractors read as S/5 against a printed VAT of 0.00 is
+  cleared by correcting it to Z/0). `apply_review` re-validates after the corrections and
+  refuses any `TOTALS_MISMATCH` still left, as defence in depth. That is also the only check
+  for decisions routed before this amendment, which carry no findings.
+- **Audit of what was approved.** The `decision.approve` (and `proposal.accept`) audit event
+  carries the corrections the approval sent to the workflow, the supplier address included, so
+  a field edit racing an approval is auditable: the event shows exactly which values were
+  applied. Follow-up: bind a SHA-256 of the corrections into the approval grant's digest. That
+  is not a small change. The grant is issued before the corrections are read, and
+  `SqlPaymentStateWriter` recomputes the digest from database state that does not hold them.
+
+Consequences. An invoice whose supplier address names no emirate now costs a review, where
+before it reached the build and failed there. An invoice with amounts that do not add up can
+only be rejected. The M5.6 e2e driver (`scripts/e2e_pipeline.py`) now fixes a misread seller
+address through the fields API before approving, as a reviewer would. The web client needs no
+schema change: `reasons` stays a list of strings, and
+the 422 detail keeps the `correct these fields first:` list it already parses.
+
 ## Consequences
 
 - Positive: E, AE, O and credit notes are representable end to end. The money path loses its
@@ -307,3 +374,8 @@ Measuring the scan path needs a consumer change (feed the scan PNG instead of th
 - GPU phase: `make test-trainer` adds a real-tokenizer assertion that the FATURA suffix is found
   and masked (the builder adds it with the trainer marker). §7 report
   `reports/extraction_a_schema_delta.md`.
+- `tests/unit/test_review_address_totals.py` (amendment 4): the shared emirate lookup, the
+  validator and UBL agreeing, the address correction through `corrections_for_rows`,
+  `apply_corrections` and `apply_review`, the recorded findings and the totals refusal;
+  `tests/integration/test_api_authz.py::test_address_fix_reaches_the_corrections_and_totals_mismatch_refuses_approval`
+  over the real API and Postgres.

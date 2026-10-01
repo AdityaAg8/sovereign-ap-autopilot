@@ -19,8 +19,10 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         seed e2e-pipeline factory restore-scans e2e eval eval-quick eval-chat eval-chat-dry eval-attacks retrain demo fresh-clone \
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
-        extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate \
-        guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report \
+        extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate archive-stale-rows \
+        train-b-reeval test-trainer-gpu guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
+        real-fetch-cord real-parse-cord real-cord-dev real-cord real-cord-b real-extractbench \
+        real-docile real-reality-template real-reality real-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
         verify-m7 verify-m8 verify-m9 verify-m10 verify-m11 verify-m12 verify-all ci-local
 
@@ -90,8 +92,14 @@ typecheck:
 	@echo "==> web typecheck"
 	cd $(WEB_DIR) && pnpm typecheck
 
+# Windows hosts run the suite in a Linux container (scripts/pytest_linux.sh): Smart App Control
+# blocks the unsigned Playwright driver/Chromium the factory render tests launch.
 test:
+ifeq ($(OS),Windows_NT)
+	bash scripts/pytest_linux.sh
+else
 	uv run python -m pytest
+endif
 
 factory:
 	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py, PRD §10 M2.3)"
@@ -125,6 +133,14 @@ down:
 	@echo "==> docker compose down (infra/compose.yaml)"
 	cd infra && $(COMPOSE) down
 
+# One-time (idempotent) for installs whose Postgres volume was created with the old default
+# password (REVIEW C-02/L-01): `make env` adds the generated secrets to .env, this sets both
+# roles' passwords to them over the container's local socket, then `make up` recreates the app.
+.PHONY: rotate-db-password
+rotate-db-password: env
+	@echo "==> setting the apx and apx_agent_ro Postgres passwords from .env (values never printed)"
+	uv run python scripts/rotate_db_password.py
+
 models:
 	@echo "==> resolving infra/models.yaml against the Hugging Face Hub"
 	uv run python scripts/resolve_models.py
@@ -155,17 +171,96 @@ test-artifacts:
 
 # Host-run GPU evals reach the parse service through gateway's loopback-only 127.0.0.1:8010
 # (ADR-0001 amendment 2); the runtime default `http://parse:8000` resolves only on `app`.
-HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010)
+HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_SERVICE_TOKEN=$$(sed -n 's/^PARSE_SERVICE_TOKEN=//p' .env)
+
+## --- GPU queue: one parse per document, then the GPU evals back to back -----------------
+# `parse-cache` fills data/cache/parse/<parser identity>/ (evals.parse_cache) with the UAE split
+# inputs the extraction harness feeds, so the A/B test and cal runs and gates-b never re-OCR a
+# scan; a parser source change gives a new identity (a fresh cache). Needs the parse service.
+# `gpu-queue` runs QUEUE (comma-separated make targets, each optionally with VAR=value) holding
+# data/ml/gpu.lock, one log per item under logs/, stopping at the first failure; rerun resumes.
+# A '+' item (e.g. `+gates-b`) exits non-zero on a verdict, not a broken stack: its failure is
+# recorded and the queue goes on, so a failed gate does not leave the GPU idle until a human polls.
+# Sub-items joined by '|' run concurrently (ADR-0018): only jobs whose outputs cannot depend on
+# timing and whose VRAM fits together (B ~4.4 GB + OCR parse ~4.3 GB; never A beside the parse).
+# Default QUEUE is the ADR-0018 reduced plan, sequential (§5: concurrent OCR + B dropped OCR
+# decode from ~60 to 21 tok/s, so no '|' group by default): test and cal parses; A on test and
+# on cal; the champion-only trust gate on A ('+': a verdict, CPU); B on test; the attack suite.
+# Run `make archive-stale-rows` first (rows from another parser build refuse a resume). The fresh
+# e2e (`make e2e-pipeline`) runs before it, alone. Needs `make up` + `make seed`.
+# Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
+SPLITS ?= test,cal
+REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-adr0012,cal-rows-a,+calibrate TRUST_EXTRACTORS=a,eval-b,eval-attacks
+QUEUE ?= $(REDUCED_GPU_QUEUE)
+# ADR-0019 real-data track. Phase 1: A zero-shot (and B v1 as the "before") on real documents,
+# CORD first, then ExtractBench. Phase 2 re-evaluates a retrained B on the same hold-outs.
+REAL_EVAL_QUEUE = real-parse-cord SPLIT=validation,real-cord-dev,real-parse-cord SPLIT=test,real-cord SPLIT=test,real-cord-b B_VERSION=v1,real-extractbench,+real-report
+REAL_B_EVAL_QUEUE = eval-b,gates-b,real-cord-b B_VERSION=r1,real-docile EXTRACTOR=b B_VERSION=r1,+real-report
+
+# --- ADR-0019 real-data evaluation (reports/real_*.md|json; scoreboard real-data section) ---
+real-fetch-cord:
+	@echo "==> fetch CORD v2 test+validation (naver-clova-ix/cord-v2, pinned revision) -> data/cord/"
+	uv run python -m evals.datasets fetch --set cord --splits test,validation
+
+real-parse-cord:
+	@echo "==> parse CORD $(or $(SPLIT),test) into the shared parse cache (parse service; resumable)"
+	$(HOST_PARSE) uv run python -m evals.real parse --set cord --split $(or $(SPLIT),test)
+
+real-cord-dev:
+	@echo "==> Extractor A on CORD validation (mapping/normaliser development only; never a result)"
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split validation --extractor a
+	uv run python -m evals.real dev-report
+
+real-cord:
+	@echo "==> Extractor A zero-shot on CORD $(or $(SPLIT),test)"
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split $(or $(SPLIT),test) --extractor a
+
+real-cord-b:
+	@echo "==> Extractor B $(or $(B_VERSION),v1) on CORD test"
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split test --extractor b --b-version $(or $(B_VERSION),v1)
+
+real-extractbench:
+	@echo "==> Extractor A on ExtractBench short (headline on the 245 source:real documents)"
+	$(HOST_PARSE) uv run python -m evals.real run --set extractbench --extractor a
+
+real-docile:
+	@echo "==> Extractor $(or $(EXTRACTOR),a) on DocILE val (needs the DocILE fetch; fails typed without it)"
+	$(HOST_PARSE) uv run python -m evals.real run --set docile --extractor $(or $(EXTRACTOR),a) --b-version $(or $(B_VERSION),v1)
+
+real-reality-template:
+	uv run python -m evals.real reality-template
+
+real-reality:
+	@echo "==> Extractor A on the owner's labelled reality set (data/real_uae/)"
+	$(HOST_PARSE) uv run python -m evals.real run --set reality --extractor a
+
+real-report:
+	@echo "==> real-data reports -> scoreboard -> README"
+	uv run python -m evals.real report
+	uv run python -m evals.scoreboard
+	uv run python scripts/sync_readme.py
+
+parse-cache:
+	@echo "==> parse UAE $(SPLITS) into the shared parse cache data/cache/parse/ (parse service; resumable)"
+	$(HOST_PARSE) uv run python -m evals.parse_cache --splits $(SPLITS)
+
+gpu-queue:
+	@test -n "$(QUEUE)" || { echo 'gpu-queue: set QUEUE="target1,target2 VAR=x,..."' >&2; exit 2; }
+	@echo "==> GPU queue holding data/ml/gpu.lock: $(QUEUE) (logs/<item>.log; done markers logs/gpu_queue/)"
+	IFS=, read -r -a items <<< "$(QUEUE)"; bash scripts/gpu_queue.sh "$${items[@]}"
 
 ## --- ADR-0012 §7: M3.3 before/after on the same documents ---------------------------
 M33_DATA_DIR ?= data/uae/test
 M33_BEFORE ?= .claude/worktrees/int-m3b/logs/extraction_a.jsonl
 M33_AFTER ?= logs/extraction_a.adr0012.jsonl
 
+# --concurrency 1: extractor-a serves one slot (ADR-0013 amdt 1), so a second request in flight
+# only queues and its latency would include the wait; at 1 the rows' latency is the per-request
+# time the bake-off measures, so `make bakeoff` imports them as arm a (ADR-0016 amdt 2).
 extraction-a-adr0012:
 	@echo "==> Extractor A on $(M33_DATA_DIR) with the ADR-0012 prompt (GPU; needs make up; resumable rows: $(M33_AFTER))"
 	$(HOST_PARSE) uv run python -m evals.extraction_a --data-dir $(M33_DATA_DIR) --rows $(M33_AFTER) \
-		--report reports/extraction_a_adr0012.md
+		--concurrency 1 --report reports/extraction_a_adr0012.md
 
 extraction-a-compare:
 	@echo "==> paired before/after comparison -> reports/extraction_a_schema_delta.md (CPU)"
@@ -175,8 +270,12 @@ extraction-a-compare:
 # Host-side, needs `make up` (llama-swap + parse) and an otherwise idle GPU: every arm runs alone
 # on the card and its whole-card VRAM is part of the result. Probe first; `bakeoff` resumes.
 # Overridable: `make bakeoff BAKEOFF_ARMS=a,q38-9b-distill` (default: every arm).
+# Arm a imports the A test rows (BAKEOFF_REUSE_A) only when every row matches its identity,
+# serving args, parser build and client concurrency 1; otherwise arm a runs (ADR-0016 amdt 2).
+# Parses come from the shared cache `make parse-cache` fills. `BAKEOFF_REUSE_A=` disables reuse.
 BAKEOFF_DATA_DIR ?= data/uae/test
 BAKEOFF_ARMS ?=
+BAKEOFF_REUSE_A ?= $(M33_AFTER)
 
 bakeoff-probe:
 	@echo "==> M3.4 5-page VRAM probe per arm -> reports/bakeoff_probe.json (GPU; needs make up)"
@@ -184,7 +283,7 @@ bakeoff-probe:
 
 bakeoff:
 	@echo "==> M3.4 bake-off: 200 UAE + ExtractBench short per in-budget arm (GPU, resumable rows: logs/bakeoff/)"
-	$(HOST_PARSE) uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
+	$(HOST_PARSE) uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS)) $(if $(BAKEOFF_REUSE_A),--reuse-a-rows $(BAKEOFF_REUSE_A))
 	$(MAKE) bakeoff-report
 
 bakeoff-report:
@@ -193,18 +292,27 @@ bakeoff-report:
 
 ## --- Extractor B fine-tune (ADR-0011, docs/design/training-loop.md) ------------------
 # The trainer image digest is part of the resume fingerprint; GIT_SHA is recorded, not compared.
-TRAINER_IMAGE := sovereign-ap/trainer:2026.9.11
+TRAINER_IMAGE := sovereign-ap/trainer:2026.9.28
 TRAINER_RUN = cd infra && TRAINER_IMAGE_DIGEST=$$(docker image inspect -f '{{.Id}}' $(TRAINER_IMAGE)) \
 	GIT_SHA=$$(git rev-parse HEAD) $(COMPOSE) --profile train run --rm --name extractor-b-trainer trainer
 
+# REAL_MIX=r1 adds CORD train, r2 also DocILE train (ADR-0019 §9.2); empty keeps the v1 mix.
+REAL_MIX ?=
 train-b-data:
-	@echo "==> Extractor B data prep + guards (CPU) -> data/ml/extractor_b/"
-	uv run python -m ml.extractor_b.data
+	@echo "==> Extractor B data prep + guards (CPU) -> data/ml/extractor_b/ (mix: $(or $(REAL_MIX),v1))"
+	uv run python -m ml.extractor_b.data $(if $(REAL_MIX),--real-mix $(REAL_MIX))
 
 train-b-probe: gpu-free
 	@echo "==> Extractor B VRAM probe (foreground) -> data/ml/extractor_b/probe.json"
 	mkdir -p models/extractor_b data/ml
 	$(TRAINER_RUN) python -m ml.extractor_b.train --probe
+
+# ADR-0011 amendment 6 item 5: re-run a checkpoint's dev eval on the current trainer image; it
+# must reproduce the recorded dev F1 (± 0.1) and valid-JSON rate (± 1 row). GPU, foreground.
+REEVAL_CHECKPOINT ?= models/extractor_b/b-20260923T2025-eb0aea7d/checkpoints/checkpoint-000383
+train-b-reeval: gpu-free
+	@echo "==> Extractor B dev re-eval of $(REEVAL_CHECKPOINT) on $(TRAINER_IMAGE) -> data/ml/extractor_b/reeval.json"
+	$(TRAINER_RUN) python -m ml.extractor_b.reeval --checkpoint $(REEVAL_CHECKPOINT)
 
 train-b: gpu-free
 	@echo "==> Extractor B training, resuming the newest run (detached; log: logs/extractor_b_train.log)"
@@ -224,9 +332,15 @@ train-b-pause:
 	docker stop --time 180 extractor-b-trainer
 
 test-trainer:
-	@echo "==> trainer-image tests on CPU (pytest -m trainer)"
+	@echo "==> trainer-image tests on CPU (pytest -m 'trainer and not gpu')"
 	cd infra && $(COMPOSE) --profile train run --rm --no-deps -e CUDA_VISIBLE_DEVICES= trainer \
-		python -m pytest -m trainer -p no:cacheprovider --no-cov tests/trainer
+		python -m pytest -m "trainer and not gpu" -p no:cacheprovider --no-cov tests/trainer
+
+# ADR-0011 amendment 6 item 3: the DeltaNet fast-path tests need the GPU visible (~2 min).
+test-trainer-gpu: gpu-free
+	@echo "==> trainer-image GPU tests (pytest -m 'trainer and gpu')"
+	cd infra && $(COMPOSE) --profile train run --rm --no-deps trainer \
+		python -m pytest -m "trainer and gpu" -p no:cacheprovider --no-cov tests/trainer
 
 ## --- Extractor B export and report (ADR-0009 §1.7, training-loop.md step 13) ----------
 EXPORTER_RUN = cd infra && GIT_SHA=$$(git rev-parse HEAD) \
@@ -278,6 +392,12 @@ report-b:
 CAL_A_ROWS ?= logs/cal_a.jsonl
 CAL_B_ROWS ?= logs/cal_b.jsonl
 CAL_B_MODEL ?= extractor-b
+# TRUST_EXTRACTORS: "a b" (default) fits the two-extractor calibrator and requires cal/test B
+# rows; "a" is the explicit champion-only calibrator of ADR-0018 §5 (same alpha, delta, λ grid
+# and test gate; never activated while the runtime serves B). Test A rows: M33_AFTER (750 docs).
+TRUST_EXTRACTORS ?= a b
+# Row files `archive-stale-rows` checks against the current parser identity.
+STALE_ROW_FILES ?= $(M33_AFTER) logs/extractor_b_test.jsonl $(CAL_A_ROWS) $(CAL_B_ROWS)
 
 cal-rows-a:
 	@echo "==> Extractor A on UAE cal (750 docs; GPU; needs make up; resumable rows: $(CAL_A_ROWS))"
@@ -291,8 +411,13 @@ cal-rows-b:
 
 calibrate:
 	@echo "==> trust calibrator on cal, LTT at alpha 0.5/1/2%, UAE test gate -> reports/trust_gate.md (CPU)"
-	uv run python -m evals.trust_gate calibrate --cal-a-rows $(CAL_A_ROWS) --cal-b-rows $(CAL_B_ROWS) \
-		$(if $(A_ROWS),--test-a-rows $(A_ROWS)) $(if $(B_ROWS),--test-b-rows $(B_ROWS))
+	uv run python -m evals.trust_gate calibrate --extractors $(TRUST_EXTRACTORS) \
+		--cal-a-rows $(CAL_A_ROWS) --cal-b-rows $(CAL_B_ROWS) \
+		--test-a-rows $(or $(A_ROWS),$(M33_AFTER)) $(if $(B_ROWS),--test-b-rows $(B_ROWS))
+
+archive-stale-rows:
+	@echo "==> move row files from another parser build to logs/archive/ (CPU; never deletes)"
+	uv run python -m evals.archive_stale_rows --archive-dir logs/archive $(STALE_ROW_FILES)
 
 e2e:
 	@echo "==> Playwright end-to-end tests of the review UI on fixtures (web/e2e); fixture build first"
@@ -358,19 +483,30 @@ eval-attacks:
 	@echo "==> M6.6: the 312-case attack suite through the running stack (make up + make seed first)"
 	@echo "    review-routed cases approved via the API; payment state read from Postgres"
 	@echo "    ~4.2 h for 312 cases + 24 clean baseline (16 in flight); resumable -> reports/attacks_e2e.md"
-	uv run $(if $(wildcard .env),--env-file .env,) python scripts/attacks_e2e.py $(ATTACKS_ARGS)
+	@echo "    Postgres is read on 127.0.0.1:5432 through the devports service: started here for the run,"
+	@echo "    stopped afterwards unless it was already up (docs/runbook.md, REVIEW N-10)"
+	@was_up="$$(cd infra && $(COMPOSE) --profile devports ps -q --status running devports)"; \
+	(cd infra && $(COMPOSE) --profile devports up -d --wait devports); \
+	status=0; \
+	uv run $(if $(wildcard .env),--env-file .env,) python scripts/attacks_e2e.py $(ATTACKS_ARGS) \
+		|| status=$$?; \
+	if [ -z "$$was_up" ]; then (cd infra && $(COMPOSE) --profile devports stop devports); fi; \
+	exit $$status
 
 e2e-pipeline:
 	@echo "==> 20 documents through the running stack (make up + make seed first) -> reports/e2e_pipeline.md"
 	uv run python scripts/e2e_pipeline.py
+
+# Overridable: `make demo DEMO_ARGS="--timeout 900"` (per-scenario deadline, seconds).
+DEMO_ARGS ?=
 
 demo: up seed
 	@echo "==> web app against the live API on http://localhost:3000 (log: logs/web.log)"
 	@mkdir -p logs
 	cd $(WEB_DIR) && NEXT_PUBLIC_API_MODE=http pnpm build >../logs/web-build.log 2>&1
 	cd $(WEB_DIR) && (nohup pnpm start -p 3000 >../logs/web.log 2>&1 &)
-	@echo "==> staging the demo scenarios (docs/demo.md walks through them)"
-	uv run python scripts/demo.py
+	@echo "==> five scenarios, each asserted against the API (docs/demo.md walks through them)"
+	uv run python scripts/demo.py $(DEMO_ARGS)
 
 # Same jobs as .github/workflows/ci.yml on a clean clone of REF (default HEAD); for when Actions
 # can't run. Report: logs/ci-local/<ref>.md.
@@ -451,3 +587,12 @@ verify-m12:
 # Every milestone gate in order; a milestone whose gate is not built yet fails loudly.
 verify-all:
 	@for n in 0 1 2 3 4 5 6 7 8 9 10 11 12; do $(MAKE) verify-m$$n || exit 1; done
+
+# PRD §11.2 resilience scenarios (REVIEW.md H-06): llama-swap killed mid-extraction (fake server)
+# and Postgres stopped/restarted mid-workflow; needs Docker only. The live llama-swap container
+# variant is marked gpu and runs with the command in its docstring.
+.PHONY: test-resilience
+test-resilience:
+	@echo "==> resilience: llama-swap restart mid-extract, Postgres restart mid-workflow (Docker)"
+	uv run python -m pytest -m "integration and not gpu" --no-cov -p no:cacheprovider \
+		tests/integration/test_resilience_llama_swap.py tests/integration/test_resilience_postgres.py

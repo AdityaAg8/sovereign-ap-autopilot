@@ -17,6 +17,7 @@ from apx.common.purchasing import PoLine as PoLine
 from apx.common.purchasing import PurchaseOrder as PurchaseOrder
 from apx.common.types import Frozen, Money
 from apx.validate import ids as _ids
+from apx.validate.address import resolve_emirate
 
 
 class ViolationCode(StrEnum):
@@ -103,6 +104,9 @@ STANDARD_VAT_RATE: Final[Decimal] = Decimal("5")
 
 NO_CURRENCY: Final[str] = "XXX"
 """ISO 4217 "no currency": what the invoice builder records when none was extracted (ADR-0012)."""
+
+SUPPLIER_ADDRESS_VIOLATION_FIELD: Final[str] = "supplier.address"
+"""`Violation.field` of the supplier-address MISSING_MANDATORY error (ADR-0012 amendment 4)."""
 
 _ZERO: Final[Decimal] = Decimal("0")
 _CENTS: Final[Decimal] = Decimal("0.01")
@@ -454,6 +458,8 @@ def check_mandatory_fields(invoice: Invoice, *, buyer_trn: str | None = None) ->
     concern; by the time an `Invoice` exists here it has already passed the trust gate (§6.1),
     so this only catches values that type-check as present but are semantically empty, plus the
     invoice-line cardinality rule (an Invoice line group, IBG-25, must occur at least once).
+    The supplier address must name a UAE emirate (`apx.validate.address.resolve_emirate`, the
+    lookup the UBL builder uses for the seller city and subdivision).
     With `buyer_trn` (our own organisation's configured TRN) the document's buyer TRN is not
     required: the e-invoice takes the configured one and `check_buyer_trn` cross-checks."""
     violations: list[Violation] = []
@@ -473,6 +479,21 @@ def check_mandatory_fields(invoice: Invoice, *, buyer_trn: str | None = None) ->
     _require("supplier.name", invoice.supplier.name)
     _require("supplier.trn", invoice.supplier.trn)
     _require("buyer.name", invoice.buyer.name)
+    if resolve_emirate(invoice.supplier.address) is None:
+        # ADR-0012 amendment 4: the UBL builder derives the seller city and country subdivision
+        # from the same lookup, and PINT AE requires both (`ibr-143-ae`), so an address naming
+        # no emirate would pass here and fail at the build, after approval.
+        violations.append(
+            Violation(
+                code=ViolationCode.MISSING_MANDATORY,
+                field=SUPPLIER_ADDRESS_VIOLATION_FIELD,
+                message=(
+                    "supplier address names no UAE emirate; PINT AE needs the seller city and "
+                    "country subdivision (ibr-143-ae), so correct the supplier address"
+                ),
+                severity="error",
+            )
+        )
     if buyer_trn is None:
         # The buyer's TRN is the e-invoice's buyer electronic address (BT-49, `cbc:EndpointID`),
         # which the PINT AE builder never fabricates.

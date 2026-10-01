@@ -93,3 +93,15 @@ gateway port), and those Makefile targets set `PARSE_BASE_URL=http://127.0.0.1:8
 runtime path is unchanged: api and worker still call `parse:8000` over `app`. Parse holds no
 secrets and makes no outbound calls; it is one more fixed `proxy_pass` target, and
 `tests/integration/test_no_egress.py` checks that 8010 reaches parse and nothing else.
+
+## Amendment 3 (2026-09-27): Postgres and the Temporal UI move to an opt-in `devports` profile
+
+M11 audit pass 1 (REVIEW.md C-02, C-03; commit dab25f3) narrowed the first amendment. The
+default `gateway` no longer publishes Postgres (5432) or Temporal's Web UI (8233): a direct
+Postgres login is the schema owner, and from the Temporal UI anyone on the host could send a
+`review` signal. Both are served only by a second gateway under the Compose `devports` profile
+(`COMPOSE_PROFILES=devports make up`, `infra/docker/gateway/nginx.devports.conf`), still bound to
+127.0.0.1, and its Temporal UI proxy passes GET and HEAD only. Database passwords are generated
+into `.env` by `make env`; no service, `apx/db/session.py` or `alembic.ini` carries a default.
+Proof: `tests/unit/test_compose_security.py`, `tests/unit/test_db_session.py`. The no-egress
+scope and the proof above are unchanged.

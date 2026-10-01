@@ -245,11 +245,24 @@ class FixtureApiClient implements ApiClient {
   async decide(invoiceId: string, request: DecisionRequest): Promise<void> {
     const invoice = store().get(invoiceId);
     if (!invoice) throw new ApiError(`Invoice ${invoiceId} not found.`, 404);
+    // Mirrors the API's review state machine (REVIEW.md C-01, H-02): reject only while awaiting
+    // review; send-to-review only before routing, as a hold that leaves the status to the workflow.
+    const status = invoice.summary.status;
+    if (request.action === "reject" && status !== "awaiting_review")
+      throw new ApiError(
+        `invoice ${invoiceId} is ${status}; only an invoice awaiting review can be rejected`,
+        409,
+      );
+    if (request.action === "send_to_review" && !FLOW.includes(status))
+      throw new ApiError(
+        `invoice ${invoiceId} is ${status}; only an invoice not yet routed can be sent to review`,
+        409,
+      );
     const statusByAction = {
       approve: "approved",
       reject: "blocked",
-      send_to_review: "awaiting_review",
-      execute_proposal: invoice.summary.status,
+      send_to_review: status,
+      execute_proposal: status,
     } as const;
     if (request.action === "approve") {
       const unresolved = unresolvedClassifiedFields(invoice.fields);

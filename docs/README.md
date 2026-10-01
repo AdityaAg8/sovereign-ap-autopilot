@@ -37,6 +37,7 @@ ADR behind whichever module you are changing.
 | [0013](adr/0013-live-serving-budget-and-backpressure.md) | Whole-card VRAM budget of 11.8 GB per stage, A and B swap, preflight headroom checks |
 | [0014](adr/0014-p1-multiple-verified-accounts.md) | With several verified accounts, the invoice IBAN selects one and never introduces a payee; the payee is pinned from routing to build |
 | [0015](adr/0015-promotion-gates.md) | An Extractor B challenger is promoted only if no gate (G1-G11) regresses |
+| [0019](adr/0019-real-data-evaluation-track.md) | Real-data track: A and B measured on ExtractBench, CORD v2 and DocILE, then B retrained with CORD and DocILE train and measured before and after on the same hold-outs |
 
 There is no ADR-0007; the number was not used.
 

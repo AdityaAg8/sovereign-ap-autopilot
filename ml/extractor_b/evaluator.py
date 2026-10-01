@@ -1,7 +1,7 @@
 """Dev-holdout evaluation for Extractor B checkpoint selection (ADR-0011 §2): teacher-forced dev
 loss and greedy generation scored as micro field F1 over the 14 header fields with the M1.3
 scorer (`evals.scorers.field_f1`, which uses `apx.common.compare`). Invalid JSON fails every
-field. Generation is batched (longest prompt first, left padding, OOM backoff) with progress lines,
+field. Generation is batched (longest target first, left padding, OOM backoff) with progress lines,
 and each eval's raw generations are persisted atomically to `<run>/dev_outputs/step-NNNNNN.jsonl`
 (issue #53) for the training report; the model calls are injected, so batching, scoring and the
 writer are CPU-tested with fakes."""
@@ -36,9 +36,9 @@ EVAL_MAX_NEW_TOKENS = 4096
 """Same output budget as serving (`apx.llm.client.LlmSettings.max_tokens`). The old 2048 cut off
 the 27% of dev targets longer than that (up to ~2.9k tokens) and scored them as invalid JSON."""
 """Rows per generate call. Dev prompts are ~2.2-3.1k tokens and Qwen3.5-4B's hybrid attention keeps
-the KV cache small, so 8 rows are expected to fit beside the training state under the VRAM cap; an
-OOM halves the batch for the rest of the eval, and it is the first (longest) batch that would hit
-it."""
+the KV cache small, so 8 rows may fit beside the training state under the VRAM cap; an OOM shrinks
+the batch to three quarters for the rest of the eval (and later evals), and it is the first
+(longest) batch that would hit it. The M7.1 evals ran at batch 4."""
 
 
 DEV_OUTPUTS_DIR: Final[str] = "dev_outputs"
@@ -147,9 +147,23 @@ def eval_batch_size(env: Mapping[str, str]) -> int:
 
 
 def generation_order(rows: Sequence[TrainingSample]) -> list[TrainingSample]:
-    """Longest prompt first (an OOM surfaces on the first batch, and batches pad little), ties by
-    `sample_id` so the order is deterministic."""
-    return sorted(rows, key=lambda r: (-r.n_prompt_tokens, r.sample_id))
+    """Longest target first, then longest prompt, then `sample_id` (ADR-0011 amendment 5).
+
+    A batched `generate` decodes until its longest row stops, so the eval's cost is the sum of
+    each batch's longest output. Sorting by the gold target length puts rows that decode about as
+    long in one batch, which minimises that sum for contiguous batches (M7.1 dev set at batch 4:
+    69.0k decode steps instead of 93.2k in prompt order). The gold length only
+    schedules the rows; it never reaches the model or the scorer. The first batch holds the
+    longest outputs and near-longest prompts, so an OOM still surfaces early."""
+    return sorted(rows, key=lambda r: (-r.n_target_tokens, -r.n_prompt_tokens, r.sample_id))
+
+
+def backoff_batch(batch: int) -> int:
+    """Batch size after an OOM at `batch`: three quarters, rounded down (8, 6, 4, 3, 2, 1).
+    Halving went straight from 8 to 4 and threw away the 6 that may fit (ADR-0011 amendment 5)."""
+    if batch <= 1:
+        raise TrainingError("cannot shrink a batch of 1")
+    return max(1, batch * 3 // 4)
 
 
 def header_fields(target: Mapping[str, Any]) -> dict[str, str]:
@@ -260,8 +274,10 @@ class HfDevEvaluator:
     def _generate_all(
         self, model: object, processor: object, step: int, start: float
     ) -> dict[str, DevOutputRow]:
-        """Outputs keyed by `sample_id`. On OOM the batch size halves for the rest of this eval
-        and the failed batch is retried; an OOM at batch size 1 is re-raised."""
+        """Outputs keyed by `sample_id`. On OOM the batch shrinks (`backoff_batch`) for the rest of
+        this eval and the failed batch is retried; an OOM at batch size 1 is re-raised. The size
+        that worked carries over to the next eval of this process, so later evals do not repeat
+        the failed attempts."""
         order = generation_order(self.rows)
         total = len(order)
         batch = self.batch_size
@@ -276,7 +292,8 @@ class HfDevEvaluator:
                 _empty_cuda_cache()
                 if batch == 1:
                     raise
-                batch //= 2
+                batch = backoff_batch(batch)
+                self.batch_size = batch
                 print(
                     f"dev eval step={step} OOM at batch={len(chunk)}; "
                     f"retrying with batch={batch} for the rest of the eval",

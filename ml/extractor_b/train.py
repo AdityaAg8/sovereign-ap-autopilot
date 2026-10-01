@@ -35,6 +35,7 @@ from ml.extractor_b.interfaces import (
     GuardReport,
     LadderRung,
     RunFingerprint,
+    SampleSource,
     TrainConfig,
     TrainingError,
     TrainingSample,
@@ -114,10 +115,11 @@ def train_split_sha256(splits_path: Path | None = None) -> frozenset[str]:
 
 
 def prepare_data(
-    cfg: TrainConfig, *, train_shas: frozenset[str]
+    cfg: TrainConfig, *, train_shas: frozenset[str], data_root: Path = Path("data")
 ) -> tuple[list[TrainingSample], GuardReport]:
     """Run the pre-run guards on `raw_train.jsonl` + `raw_dev.jsonl` unless their outputs are
-    current; returns the kept rows and the report."""
+    current; returns the kept rows and the report. CORD rows are checked against their raw
+    `gt_parse` from `data_root`'s CORD train index (ADR-0019 amendment 1)."""
     data_dir = cfg.data_dir
     raw = [data_dir / "raw_train.jsonl", data_dir / "raw_dev.jsonl"]
     for p in raw:
@@ -126,6 +128,11 @@ def prepare_data(
     if not guard_outputs_current(data_dir, raw):
         lines = [line for p in raw for line in p.read_text(encoding="utf-8").splitlines()]
         rows, invalid = parse_raw_rows(lines)
+        cord_trees = None
+        if any(r.source is SampleSource.CORD for r in rows):
+            from ml.extractor_b.data import cord_trees as load_cord_trees
+
+            cord_trees = load_cord_trees(data_root)
         kept, quarantined, report = run_guards(
             rows,
             train_split_sha256=train_shas,
@@ -135,6 +142,7 @@ def prepare_data(
             image_root=data_dir,
             quarantine_path=data_dir / "quarantine.jsonl",
             pre_quarantined=invalid,
+            cord_trees=cord_trees,
         )
         write_guard_outputs(data_dir, kept, quarantined, report)
         atomic_write_bytes(data_dir / "raw.sha256", raw_stamp(raw).encode("ascii"))

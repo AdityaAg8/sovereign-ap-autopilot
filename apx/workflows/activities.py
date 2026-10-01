@@ -3,7 +3,8 @@ pipeline module's Protocol (or, for ASP send and archive, an idempotency-guarded
 client) through the injected `InvoiceActivityDeps` registry, then appends an audit event.
 Business logic for scanning, parsing, extraction, trust, validation, fraud, policy and
 e-invoicing lives on their own module branches; this file wires, never re-implements, them
-(PRD §3, §6.2 I4, §6.4, §10 M5.2)."""
+(PRD §3, §6.2 I4, §6.4, §10 M5.2). Where an activity writes state in its own transaction
+(`send_to_asp`, `archive`, `mark_failed`), the audit entry joins that transaction (REVIEW M-02)."""
 
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from pydantic import JsonValue
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
@@ -22,9 +23,11 @@ from temporalio.exceptions import ApplicationError
 from apx.agent.interfaces import AgentContext, ExceptionAgent
 from apx.agent.runner import record_review_note
 from apx.asp_mock.interfaces import Archive, ArchiveRecord, AspClient, AspReceipt, AspSubmission
+from apx.audit.chain import append_in_transaction
 from apx.audit.interfaces import AuditEvent, AuditLog
 from apx.common.errors import (
     EInvoiceError,
+    FailureNotRecordedError,
     ModelOutputError,
     ModelServingError,
     ParsedArtifactIntegrityError,
@@ -34,8 +37,9 @@ from apx.common.errors import (
 )
 from apx.common.invoice import Invoice
 from apx.common.master import Vendor
-from apx.common.types import IdempotencyKey, Sha256Hex
+from apx.common.types import Frozen, IdempotencyKey, Sha256Hex
 from apx.db.enums import DbInvoiceStatus
+from apx.db.models import IngestedDocument as IngestedDocumentRow
 from apx.db.models import Invoice as InvoiceRow
 from apx.einvoice.interfaces import (
     EInvoiceDocument,
@@ -64,6 +68,7 @@ from apx.policy.interfaces import (
     select_payee,
 )
 from apx.scan.interfaces import Scanner, ScanReport
+from apx.trust.gate import refuse_truncated_parse
 from apx.trust.interfaces import FeatureBuilder, TrustDecision, TrustGate
 from apx.validate.interfaces import ValidationReport, Validator, ViolationCode
 from apx.workflows.corrections import (
@@ -93,10 +98,23 @@ _CLASSIFICATION_CODES = frozenset(
 category/rate mismatch is included: the builder refuses it (an E/O line with a non-zero rate
 would otherwise lose its VAT), so approving it would only fail later, at the build."""
 
-_UNREVIEWABLE_CODES = frozenset({ViolationCode.MISSING_MANDATORY})
-"""Values an approved review cannot supply (no correction carries them, e.g. a missing supplier
-TRN) and the e-invoice build refuses. `apply_review` stops them before the build; the API
-already refuses such an approval (`SupplierTrnMissingError`), so this is defence in depth."""
+_UNREVIEWABLE_CODES = frozenset({ViolationCode.MISSING_MANDATORY, ViolationCode.TOTALS_MISMATCH})
+"""Errors the e-invoice build refuses that `apply_review` stops before it, re-checked after the
+corrections: a missing supplier TRN (no correction carries it), a supplier address naming no
+emirate (a corrected address clears it; ADR-0012 amendment 4) and amounts that do not add up
+(no correction carries amounts). The API already refuses such approvals
+(`MissingCorrectionsError` and its subclasses), so this is defence in depth."""
+
+_NEVER_MARKED_FAILED = (
+    DbInvoiceStatus.SENT,
+    DbInvoiceStatus.ARCHIVED,
+    DbInvoiceStatus.BLOCKED,
+    DbInvoiceStatus.FAILED,
+)
+"""Terminal statuses `mark_failed` leaves alone: the invoice already reached the ASP, was kept
+out of payment on purpose, or is already FAILED."""
+_FAILED_ERROR_CHARS = 2000
+"""The failure message is audited; a long activity error chain is cut to this length."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +164,39 @@ def verified_payment_iban(vendor: Vendor | None, claimed: str | None) -> str | N
         return None
 
 
+class ExtractAudit(Frozen):
+    """The `activity:extract` audit payload: the disputed fields, whether an arbiter ran, and
+    each extractor's validity and finish reason, so an invalid Extractor B output (which makes
+    every field disputed and the trust gate hard-reject, rule H1) is visible in the audit."""
+
+    disputed: tuple[str, ...]
+    has_arbiter: bool
+    a_valid: bool
+    b_valid: bool
+    a_finish_reason: str | None
+    b_finish_reason: str | None
+
+
+def extract_audit(result: ExtractionResult) -> ExtractAudit:
+    return ExtractAudit(
+        disputed=tuple(f.value for f in sorted(result.disputed)),
+        has_arbiter=result.arbiter is not None,
+        a_valid=result.a.valid_json,
+        b_valid=result.b.valid_json,
+        a_finish_reason=result.a.finish_reason,
+        b_finish_reason=result.b.finish_reason,
+    )
+
+
+def _activity_event(step: str, invoice_id: str, payload: dict[str, JsonValue]) -> AuditEvent:
+    return AuditEvent(
+        actor="workflow",
+        action=f"activity:{step}",
+        entity=f"invoice:{invoice_id}",
+        payload=payload,
+    )
+
+
 class DefaultInvoiceActivities:
     """Structurally satisfies `apx.workflows.interfaces.InvoiceActivities`. Instances (not the
     class) are registered with the Temporal `Worker`, one bound method per activity, so the
@@ -155,13 +206,19 @@ class DefaultInvoiceActivities:
         self._deps = deps
 
     async def _audit(self, step: str, invoice_id: str, payload: dict[str, JsonValue]) -> None:
-        await self._deps.audit.append(
-            AuditEvent(
-                actor="workflow",
-                action=f"activity:{step}",
-                entity=f"invoice:{invoice_id}",
-                payload=payload,
-            )
+        await self._deps.audit.append(_activity_event(step, invoice_id, payload))
+
+    async def _audit_in(
+        self,
+        session: AsyncSession,
+        step: str,
+        invoice_id: str,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        """`_audit` inside `session`'s transaction: the entry commits with the state writes
+        before it, or neither does (`apx.audit.chain.append_in_transaction`)."""
+        await append_in_transaction(
+            self._deps.audit, session, _activity_event(step, invoice_id, payload)
         )
 
     @activity.defn(name="scan")
@@ -209,13 +266,18 @@ class DefaultInvoiceActivities:
     async def parse(self, inp: InvoiceWorkflowInput) -> ParsedDocumentRef:
         """Parses and stores the document, returning only its ref: page PNGs are raw bytes and
         a multi-page parse exceeds Temporal's payload limit. Retry-safe: the store is
-        content-addressed and `put` is idempotent."""
+        content-addressed and `put` is idempotent. Pages the OCR service cut short are counted
+        in the audit (ADR-0013 amendment 1); `trust_gate` then routes the invoice to review."""
         document = await self._parse(inp.document_sha256)
         ref = self._deps.parsed.put(document)
         await self._audit(
             "parse",
             inp.invoice_id,
-            {"pages": ref.page_count, "content_sha256": ref.content_sha256},
+            {
+                "pages": ref.page_count,
+                "content_sha256": ref.content_sha256,
+                "truncated_pages": len(document.truncated_pages),
+            },
         )
         return ref
 
@@ -223,11 +285,8 @@ class DefaultInvoiceActivities:
     async def extract(self, parsed: ParsedDocumentRef) -> ExtractionResult:
         document = await self._load_parsed(parsed)
         result = await self._deps.extraction.run(document)
-        disputed: list[JsonValue] = [f.value for f in sorted(result.disputed)]
         await self._audit(
-            "extract",
-            document.document_sha256,
-            {"disputed": disputed, "has_arbiter": result.arbiter is not None},
+            "extract", document.document_sha256, extract_audit(result).model_dump(mode="json")
         )
         return result
 
@@ -237,7 +296,11 @@ class DefaultInvoiceActivities:
     ) -> TrustDecision:
         document = await self._load_parsed(parsed)
         features = self._deps.feature_builder.features(result, document)
-        decision = self._deps.trust_gate.decide(features)
+        decision = refuse_truncated_parse(
+            self._deps.trust_gate.decide(features),
+            document.truncated_pages,
+            len(document.pages),
+        )
         await self._audit(
             "trust_gate",
             document.document_sha256,
@@ -276,7 +339,8 @@ class DefaultInvoiceActivities:
     @activity.defn(name="apply_review")
     async def apply_review(self, invoice: Invoice, corrections: ReviewCorrections) -> Invoice:
         """ADR-0012 amendment: the approved reviewer corrections (kind, line VAT category and
-        rate) applied to the invoice before it is re-validated and turned into an e-invoice."""
+        rate, supplier address) applied to the invoice before it is re-validated and turned
+        into an e-invoice."""
         corrected = apply_corrections(invoice, corrections)
         # Re-validated here, not via the `validate` activity, which would move the row's status
         # back from APPROVED. A classified value still unresolved is a non-retryable failure.
@@ -467,7 +531,10 @@ class DefaultInvoiceActivities:
 
     @activity.defn(name="send_to_asp")
     async def send_to_asp(self, key: IdempotencyKey, document: EInvoiceDocument) -> AspReceipt:
-        """Idempotent by `key` (§6.4): a retried call after a worker crash never resubmits."""
+        """Idempotent by `key` (§6.4): a retried call after a worker crash never resubmits. The
+        idempotency record, `SENT` and the audit entry commit in one transaction, so a failed
+        audit append leaves no record and the retry replays `submit` (idempotent by `key`, same
+        receipt) and writes the event: exactly one `send_to_asp` entry per key (M-02)."""
         async with self._deps.session_factory() as session:
             cached = await self._deps.idempotency.get(session, key)
         if cached is not None:
@@ -479,27 +546,34 @@ class DefaultInvoiceActivities:
         )
 
         async with self._deps.session_factory() as session:
-            await self._deps.idempotency.put(
+            recorded = await self._deps.idempotency.put(
                 session,
                 invoice_id=document.invoice_id,
                 step="asp_send",
                 key=key,
                 payload=receipt.model_dump(mode="json"),
             )
-        await self._deps.records.set_status(document.invoice_id, DbInvoiceStatus.SENT)
-
-        await self._audit(
-            "send_to_asp",
-            document.invoice_id,
-            {"receipt_id": receipt.receipt_id, "status": receipt.status},
-        )
+            await session.execute(
+                update(InvoiceRow)
+                .where(InvoiceRow.id == document.invoice_id)
+                .values(status=DbInvoiceStatus.SENT)
+            )
+            if recorded:  # else a concurrent attempt recorded (and audited) this key first
+                await self._audit_in(
+                    session,
+                    "send_to_asp",
+                    document.invoice_id,
+                    {"receipt_id": receipt.receipt_id, "status": receipt.status},
+                )
         return receipt
 
     @activity.defn(name="archive")
     async def archive(self, key: IdempotencyKey, document: EInvoiceDocument) -> ArchiveRecord:
         """Idempotent by `key` (§6.4). The invoice's one terminal payment-state transition --
         `invoices.status` to `ARCHIVED` -- is written only by the attempt that first records
-        `key`, so a retried call never re-applies it (M5.2 crash-recovery test)."""
+        `key`, so a retried call never re-applies it (M5.2 crash-recovery test). The record, the
+        status and the audit entry commit together, so a failed audit append leaves no record
+        and the retry writes the event: exactly one `archive` entry per key (M-02)."""
         async with self._deps.session_factory() as session:
             cached = await self._deps.idempotency.get(session, key)
         if cached is not None:
@@ -521,10 +595,61 @@ class DefaultInvoiceActivities:
                     .where(InvoiceRow.id == document.invoice_id)
                     .values(status=DbInvoiceStatus.ARCHIVED)
                 )
-
-        await self._audit(
-            "archive",
-            document.invoice_id,
-            {"xml_sha256": record.xml_sha256, "retain_until": record.retain_until.isoformat()},
-        )
+                await self._audit_in(
+                    session,
+                    "archive",
+                    document.invoice_id,
+                    {
+                        "xml_sha256": record.xml_sha256,
+                        "retain_until": record.retain_until.isoformat(),
+                    },
+                )
         return record
+
+    @activity.defn(name="mark_failed")
+    async def mark_failed(self, invoice_id: str, error: str) -> None:
+        """Records that the workflow gave up (I4: nothing silently dropped), so the API and the
+        review queue stop showing it as in flight. With an invoice row, writes FAILED to
+        `invoices.status`; a terminal status is never overwritten (a SENT invoice whose archive
+        failed stays SENT, since the ASP already has it). Without one (the run failed before
+        `build_invoice` persisted it), writes `failed_at`/`failure` on the document's
+        `ingested_documents` row (the invoice id is the document sha256), keeping the first
+        failure. Neither row: `FailureNotRecordedError`, retried by the workflow until the
+        ingest commit lands. Idempotent; audited once the record is written."""
+        failure = error[:_FAILED_ERROR_CHARS]
+        async with self._deps.session_factory() as session:
+            has_invoice = await session.scalar(
+                select(InvoiceRow.id).where(InvoiceRow.id == invoice_id)
+            )
+            if has_invoice is not None:
+                await session.execute(
+                    update(InvoiceRow)
+                    .where(
+                        InvoiceRow.id == invoice_id,
+                        InvoiceRow.status.not_in(_NEVER_MARKED_FAILED),
+                    )
+                    .values(status=DbInvoiceStatus.FAILED)
+                )
+                recorded_on = "invoice"
+            else:
+                has_document = await session.scalar(
+                    select(IngestedDocumentRow.sha256).where(
+                        IngestedDocumentRow.sha256 == invoice_id
+                    )
+                )
+                if has_document is None:
+                    raise FailureNotRecordedError(
+                        f"no invoice or ingested document {invoice_id} to record the failure on"
+                    )
+                await session.execute(
+                    update(IngestedDocumentRow)
+                    .where(
+                        IngestedDocumentRow.sha256 == invoice_id,
+                        IngestedDocumentRow.failed_at.is_(None),
+                    )
+                    .values(failed_at=datetime.now(UTC), failure=failure)
+                )
+                recorded_on = "document"
+            await self._audit_in(
+                session, "failed", invoice_id, {"error": failure, "recorded_on": recorded_on}
+            )

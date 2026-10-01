@@ -1,17 +1,20 @@
 """Extractor B promotion gates P1-P5 (ADR-0009 §1.8, measured on the served Q4_K_M + mmproj through
 the llama-swap `extract` group): the sequential warm latency run for A and B on the 200-document
 latency subset with whole-card nvidia-smi sampling, the P5 hygiene checks, the typed
-`GateEvidence` file and `reports/extractor_b_gates.md`. Numbers only ever come from measurements."""
+`GateEvidence` file and `reports/extractor_b_gates.md`, plus the ADR-0019 §9.4 real hold-out check
+(report-only values; a missing report blocks). Numbers only ever come from measurements."""
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Awaitable, Callable, Sequence
+import importlib
+import json
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal, Protocol
 
 import numpy as np
 import yaml
@@ -442,3 +445,111 @@ def gate_tags(evidence: GateEvidence, sha256: str) -> dict[str, str]:
     tags.update({f"gates.{g.gate}": "PASS" if g.passed else "FAIL" for g in evidence.results})
     tags["gates.session_id"] = evidence.report.session_id
     return tags
+
+
+# --- ADR-0019 §9.4: real hold-out reports (report-only; a missing one blocks promotion) --------
+
+
+class RealHoldoutReport(Protocol):
+    """The fields `promote` reads from `evals.real.models.RealEvalReport` (ADR-0019 interface
+    sketch). A local Protocol so `ml.extractor_b` does not import `evals.real` at type-check
+    time; the default loader imports the real model at runtime."""
+
+    @property
+    def set(self) -> str: ...
+    @property
+    def split(self) -> str: ...
+    @property
+    def extractor(self) -> str: ...
+    @property
+    def model_version(self) -> str: ...
+    @property
+    def n_docs(self) -> int: ...
+    @property
+    def identity(self) -> Mapping[str, Any]: ...
+
+
+RealHoldoutLoader = Callable[[Path], Sequence[RealHoldoutReport]]
+REAL_REPORTS_GLOB: Final[str] = "real_*.json"
+REAL_BEFORE_AFTER: Final[str] = "real_before_after.json"
+CORD_HOLDOUT: Final[tuple[str, str]] = ("cord", "test")
+DOCILE_HOLDOUT: Final[tuple[str, str]] = ("docile", "val")
+
+
+class RealHoldoutsMissingError(GateEvidenceError):
+    """The challenger has no real hold-out report for a required set (ADR-0019 §9.4): a missing
+    number blocks promotion, as ADR-0015 requires. The values themselves never gate."""
+
+
+class RealHoldout(BaseModel):
+    """One real hold-out measurement of the challenger, carried for the record only."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    set: str
+    split: str
+    model_version: str
+    n_docs: int = Field(ge=1)
+    report_file: str
+
+
+def load_real_eval_reports(path: Path) -> list[RealHoldoutReport]:
+    """`evals.real.models.RealEvalReport` from a `reports/real_*.json` file (one report or a
+    list). The module is imported at runtime; its absence is a typed refusal, not a pass."""
+    try:
+        model: Any = importlib.import_module("evals.real.models").RealEvalReport
+    except (ImportError, AttributeError) as exc:
+        raise RealHoldoutsMissingError(f"evals.real.models is not available: {exc}") from exc
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    items = payload if isinstance(payload, list) else [payload]
+    return [model.model_validate(item) for item in items]
+
+
+def _identity_strings(value: object) -> set[str]:
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, Mapping):
+        return set().union(*(_identity_strings(v) for v in value.values()))
+    if isinstance(value, (list, tuple)):
+        return set().union(*(_identity_strings(v) for v in value))
+    return set()
+
+
+def require_real_holdouts(
+    reports_dir: Path,
+    *,
+    gguf_sha256: str,
+    docile_present: bool,
+    load: RealHoldoutLoader = load_real_eval_reports,
+) -> tuple[RealHoldout, ...]:
+    """The challenger's real hold-out reports: Extractor B rows whose identity carries the
+    challenger's Q4_K_M sha256, for CORD test and (when DocILE is fetched) DocILE val. A missing
+    or unreadable report raises `RealHoldoutsMissingError`; the values are returned unjudged."""
+    required = [CORD_HOLDOUT, *([DOCILE_HOLDOUT] if docile_present else [])]
+    found: dict[tuple[str, str], RealHoldout] = {}
+    for path in sorted(reports_dir.glob(REAL_REPORTS_GLOB)):
+        if path.name == REAL_BEFORE_AFTER:
+            continue
+        try:
+            reports = load(path)
+        except (OSError, ValueError, ValidationError) as exc:
+            raise RealHoldoutsMissingError(f"cannot read real report {path}: {exc}") from exc
+        for report in reports:
+            key = (report.set, report.split)
+            if report.extractor != "b" or key not in required or report.n_docs < 1:
+                continue
+            if gguf_sha256 not in _identity_strings(report.identity):
+                continue
+            found[key] = RealHoldout(
+                set=report.set,
+                split=report.split,
+                model_version=report.model_version,
+                n_docs=report.n_docs,
+                report_file=path.name,
+            )
+    if missing := [f"{s}/{sp}" for s, sp in required if (s, sp) not in found]:
+        raise RealHoldoutsMissingError(
+            f"no real hold-out report for the challenger (Q4_K_M {gguf_sha256[:12]}) on "
+            f"{', '.join(missing)} in {reports_dir}; run REAL_B_EVAL_QUEUE first (ADR-0019 §9.4)"
+        )
+    return tuple(found[key] for key in required)

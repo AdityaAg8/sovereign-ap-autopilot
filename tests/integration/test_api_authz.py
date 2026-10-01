@@ -225,11 +225,13 @@ _CLASSIFIED_FIELDS: dict[str, str] = {
 }
 # Every model-sourced field row `_create_invoice` seeds: the classified values plus the grounded
 # currency and supplier TRN (BT-31), which an approval requires from the extraction itself
-# (`SupplierTrnMissingError`: a reviewer's edit cannot supply it).
+# (`SupplierTrnMissingError`: a reviewer's edit cannot supply it), and a supplier address naming
+# an emirate (ADR-0012 amendment 4: PINT AE ibr-143-ae).
 _SEEDED_FIELDS: dict[str, str] = {
     **_CLASSIFIED_FIELDS,
     "currency": "AED",
     "supplier_trn": "100000000000003",
+    "supplier_address": "Al Quoz, Dubai",
 }
 
 
@@ -922,6 +924,86 @@ def test_invoice_detail_returns_stored_fraud_flags_with_explanations(api_schema:
     asyncio.run(_fraud_flags_scenario())
 
 
+async def _failed_before_invoice_scenario() -> None:
+    """M5.6: a workflow that failed before `build_invoice` persisted its row. The real
+    `mark_failed` records it on `ingested_documents` and audits it; the detail endpoint then
+    answers FAILED with the error, while a document still in flight stays a 404."""
+    from typing import Any, cast
+
+    from apx.audit.chain import PgAuditLog
+    from apx.db.models import IngestedDocument
+    from apx.workflows.activities import DefaultInvoiceActivities, InvoiceActivityDeps
+    from apx.workflows.idempotency import SqlIdempotencyStore
+    from apx.workflows.sql import SqlInvoiceRecords
+
+    failed_id = _invoice_id("failed-before-invoice")
+    running_id = _invoice_id("still-running")
+    async with get_session() as session:
+        await _seed_roles(session)
+        await _create_user(session, user_id="reviewer5", password="pw", roles=[Role.REVIEWER])
+        for sha in (failed_id, running_id):
+            session.add(
+                IngestedDocument(
+                    sha256=sha,
+                    filename=f"{sha[:8]}.pdf",
+                    media_type="application/pdf",
+                    size_bytes=10,
+                    source="watch",
+                    workflow_id=sha,
+                )
+            )
+
+    unused = cast(Any, None)
+    activities = DefaultInvoiceActivities(
+        InvoiceActivityDeps(
+            documents=unused,
+            scanner=unused,
+            parser=unused,
+            parsed=unused,
+            extraction=unused,
+            invoices=unused,
+            feature_builder=unused,
+            trust_gate=unused,
+            validator=unused,
+            fraud_engine=unused,
+            vendors=unused,
+            policy_engine=unused,
+            ubl_builder=unused,
+            schematron=unused,
+            asp_client=unused,
+            archive=unused,
+            audit=PgAuditLog(),
+            records=SqlInvoiceRecords(get_session),
+            session_factory=get_session,
+            idempotency=SqlIdempotencyStore(),
+        )
+    )
+    error = "ActivityError: Activity task failed <- ModelOutputError: totals missing"
+    await activities.mark_failed(failed_id, error)
+
+    transport = ASGITransport(app=_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "reviewer5", "pw")
+        failed = await client.get(f"/invoices/{failed_id}", headers=_auth(token))
+        running = await client.get(f"/invoices/{running_id}", headers=_auth(token))
+
+    assert failed.status_code == 200, failed.text
+    body = failed.json()
+    assert body["summary"]["id"] == failed_id
+    assert body["summary"]["status"] == "failed"
+    assert body["summary"]["route"] is None
+    assert body["error"] == error
+    assert body["fields"] == []
+    assert running.status_code == 404
+    async with get_session() as session:
+        assert await _audit_entities(session, f"invoice:{failed_id}") == ["activity:failed"]
+    await db_session.get_engine().dispose()
+
+
+def test_a_document_failed_before_its_invoice_row_reads_as_failed(api_schema: str) -> None:
+    asyncio.run(_failed_before_invoice_scenario())
+
+
 async def _ops_dashboard_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
     """M10.3 acceptance: every dashboard number equals an independent check -- the hand-derived
     value for this seed, and a recomputation in Python from raw rows (not the dashboard SQL)."""
@@ -1134,3 +1216,102 @@ async def _review_corrections_scenario() -> None:
 
 def test_approval_needs_resolved_classification_and_carries_corrections(api_schema: str) -> None:
     asyncio.run(_review_corrections_scenario())
+
+
+async def _address_and_totals_scenario() -> None:
+    """ADR-0012 amendment 4: a supplier address naming no emirate refuses the approval until the
+    reviewer fixes it, and the fix travels in the corrections; an invoice whose routing recorded
+    a `totals_mismatch` cannot be approved at all (422, nothing recorded, no signal)."""
+    from apx.db.enums import DecisionAction
+    from apx.db.models import Decision
+
+    signaller = _RecordingSignaller()
+    address_id = _invoice_id("address-invoice")
+    totals_id = _invoice_id("totals-invoice")
+    async with get_session() as session:
+        await _seed_roles(session)
+        await _create_user(session, user_id="reviewer1", password="pw", roles=[Role.REVIEWER])
+        await _create_verified_vendor(
+            session,
+            vendor_id="vendorA",
+            iban="AE070331234567890123456",
+            verified_by="reviewer1",
+            changed_by="reviewer1",
+            changed_at=datetime.now(UTC) - timedelta(days=365),
+        )
+        for invoice_id in (address_id, totals_id):
+            await _create_invoice(
+                session, invoice_id=invoice_id, vendor_id="vendorA", total=Decimal("500.00")
+            )
+        session.add(
+            Field(
+                invoice_id=address_id,
+                name="supplier_address",
+                value="Warehouse 4, Ras Al Khalaimah, United Arab Emirates",
+                normalized_value=None,
+                source=FieldSource.EXTRACTOR_A,
+            )
+        )
+        session.add(
+            Decision(
+                invoice_id=totals_id,
+                action=DecisionAction.POLICY_ROUTE,
+                route=Route.REVIEW,
+                reasons=[
+                    {
+                        "rule": "validation",
+                        "route": "review",
+                        "message": "validation found error-severity violations: totals_mismatch",
+                        "violations": [{"code": "totals_mismatch", "field": "subtotal"}],
+                    },
+                    {"payee": {"refusal": None}},
+                ],
+            )
+        )
+
+    transport = ASGITransport(app=_app(signaller))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "reviewer1", "pw")
+        approve = {"action": "approve"}
+        response = await client.post(
+            f"/invoices/{totals_id}/decisions", json=approve, headers=_auth(token)
+        )
+        assert response.status_code == 422, response.text
+        assert "subtotal" in response.json()["detail"]
+        assert "reject the invoice" in response.json()["detail"]
+
+        response = await client.post(
+            f"/invoices/{address_id}/decisions", json=approve, headers=_auth(token)
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"].endswith("correct these fields first: supplier_address")
+        assert signaller.sent == []
+
+        response = await client.patch(
+            f"/invoices/{address_id}/fields",
+            json={
+                "field": "supplier_address",
+                "value": "Warehouse 4, Ras Al Khaimah",
+                "reason": "per the document",
+            },
+            headers=_auth(token),
+        )
+        assert response.status_code == 204, response.text
+        response = await client.post(
+            f"/invoices/{address_id}/decisions", json=approve, headers=_auth(token)
+        )
+        assert response.status_code == 204, response.text
+
+    assert signaller.sent == [(address_id, True)]
+    corrections = signaller.corrections[0]
+    assert corrections is not None
+    assert corrections.supplier_address == "Warehouse 4, Ras Al Khaimah"
+    async with get_session() as session:
+        refused = await session.get(Invoice, totals_id)
+        assert refused is not None and refused.status == DbInvoiceStatus.AWAITING_REVIEW
+
+
+def test_address_fix_reaches_the_corrections_and_totals_mismatch_refuses_approval(
+    api_schema: str,
+) -> None:
+    asyncio.run(_address_and_totals_scenario())

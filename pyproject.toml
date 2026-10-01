@@ -135,7 +135,7 @@ branch = true
 source = ["apx"]
 
 [tool.coverage.report]
-fail_under = 0
+fail_under = 85  # PRD §11 branch-coverage bar (REVIEW M-04); full suite measured 86%
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

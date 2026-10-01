@@ -1,6 +1,7 @@
 """GPU half of the Extractor B run flow (design §4 steps 4-8 and the probe): check VRAM/RAM
 headroom (ADR-0013), resolve the run, cap VRAM, load the base with LoRA via Unsloth, train with
-`GuardedSFTTrainer` and log to MLflow.
+`GuardedSFTTrainer` and log to MLflow. A model whose Gated DeltaNet layers are off the fast kernels
+is refused at load (ADR-0011 amendment 6).
 Runs only inside the trainer image; imported lazily by `train.py` so CI never needs torch."""
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from ml.extractor_b.config import effective_lora_r, rung_spec
 from ml.extractor_b.evaluator import HfDevEvaluator
 from ml.extractor_b.gpu import query_used_mib
 from ml.extractor_b.interfaces import LadderRung, TrainConfig, TrainingError, TrainingSample
+from ml.extractor_b.kernels import require_deltanet_fast_path
 from ml.extractor_b.loop import (
     LoopController,
     PauseFlag,
@@ -38,11 +40,12 @@ from ml.extractor_b.loop import (
 from ml.extractor_b.prompting import (
     INSTRUCTION_PART,
     LINE_ITEMS_SUFFIX,
+    MASK_FIELDS_KEY,
     MASK_LINE_ITEMS_KEY,
     RESPONSE_PART,
     SAMPLE_IDS_KEY,
     LazyTrainingExamples,
-    mask_line_items_labels,
+    finalize_labels,
 )
 from ml.extractor_b.selection import select_best
 from ml.extractor_b.trainer import guarded_trainer_class, loop_callback_class
@@ -93,6 +96,8 @@ def _load_model(cfg: TrainConfig, env: dict[str, str]) -> tuple[Any, Any]:
         random_state=cfg.optim.seed,
         use_gradient_checkpointing="unsloth",
     )
+    # ADR-0011 amendment 6: never train, probe or eval on the slow DeltaNet reference path.
+    require_deltanet_fast_path(model)
     return model, processor
 
 
@@ -107,14 +112,23 @@ def _collator(model: Any, processor: Any) -> Any:
         instruction_part=INSTRUCTION_PART,
         response_part=RESPONSE_PART,
     )
-    suffix_ids = processor.tokenizer(LINE_ITEMS_SUFFIX, add_special_tokens=False)["input_ids"]
+    tokenizer = processor.tokenizer
+    suffix_ids = tokenizer(LINE_ITEMS_SUFFIX, add_special_tokens=False)["input_ids"]
+
+    def encode(text: str) -> tuple[list[int], list[tuple[int, int]]]:
+        enc = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+        return list(enc["input_ids"]), [(int(s), int(e)) for s, e in enc["offset_mapping"]]
 
     def collate(examples: list[dict[str, Any]]) -> dict[str, Any]:
         batch: dict[str, Any] = inner(examples)
-        for i, example in enumerate(examples):  # ADR-0012 §3: no loss on unlabelled line items
-            if example.get(MASK_LINE_ITEMS_KEY):
-                masked = mask_line_items_labels(
-                    batch["input_ids"][i].tolist(), batch["labels"][i].tolist(), suffix_ids
+        for i, example in enumerate(examples):  # ADR-0012 §3 and ADR-0019 §9.3 loss masks
+            if example.get(MASK_LINE_ITEMS_KEY) or example.get(MASK_FIELDS_KEY):
+                masked = finalize_labels(
+                    example,
+                    batch["input_ids"][i].tolist(),
+                    batch["labels"][i].tolist(),
+                    suffix_ids=suffix_ids,
+                    encode=encode,
                 )
                 batch["labels"][i] = torch.tensor(masked, dtype=batch["labels"].dtype)
         batch[SAMPLE_IDS_KEY] = [e[SAMPLE_IDS_KEY] for e in examples]

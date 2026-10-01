@@ -87,6 +87,10 @@ class ExtractorOutput(Frozen):
     valid_json: bool
     invoice_type_code: InvoiceTypeCode | None = None
     """BT-3 as classified from the document title; None = the model could not tell."""
+    finish_reason: str | None = None
+    """Why decoding stopped as the serving layer reported it (`stop`, `length`, ...); None when
+    the output did not come from a live call or the server sent none. Audited with the extract
+    step so an invalid output's cause (for example a budget cut, `length`) is visible."""
 
 
 class ExtractionResult(Frozen):

@@ -32,6 +32,11 @@ API_PORT = 8000
 LLAMA_SWAP_PORT = 8080
 # Ops UIs, all published by the `gateway` service in infra/compose.yaml (127.0.0.1 only).
 DASHBOARDS: tuple[tuple[str, int], ...] = (("Phoenix", 6006), ("MLflow", 5000), ("Temporal", 8233))
+# Not published by default (REVIEW C-02/C-03): the Temporal UI is served, read-only, by the
+# `devports` profile's gateway only.
+DEVPORTS_ONLY: dict[str, str] = {
+    "Temporal": "read-only, only with the devports profile: `COMPOSE_PROFILES=devports make up`",
+}
 JOB_WINDOW_S = 300  # a log written to within this window counts as a running job
 
 # Returns None when the executable is not installed, so callers can say so plainly.
@@ -150,6 +155,8 @@ def port_rows(probe: Callable[[int], bool] = port_open) -> list[Row]:
     for name, port in ports:
         up = probe(port)
         detail = f"http://localhost:{port} {'up' if up else 'down'}"
+        if not up and name in DEVPORTS_ONLY:
+            detail += " (devports profile)"
         rows.append(Row("ports", name, detail, "ok" if up else "info"))
     return rows
 
@@ -287,9 +294,8 @@ def cmd_dashboard() -> int:
     up = [(n, p) for n, p in DASHBOARDS if port_open(p)]
     for name, port in DASHBOARDS:
         if (name, port) not in up:
-            print(
-                f"{name} is not reachable on :{port} (is the stack up? `make up`)", file=sys.stderr
-            )
+            hint = DEVPORTS_ONLY.get(name, "is the stack up? `make up`")
+            print(f"{name} is not reachable on :{port} ({hint})", file=sys.stderr)
     if not up:
         return 1
     return open_urls([f"http://localhost:{p}" for _, p in up])

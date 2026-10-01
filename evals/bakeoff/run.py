@@ -1,10 +1,14 @@
-"""M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document once into the parse cache,
-then runs each probed, in-budget arm strictly sequentially over the fixed 200-document UAE subset
-(a scanned document as its image-only scan PDF, as the runtime receives it) and ExtractBench
-short, appending identity-stamped rows (resumable) and one whole-card VRAM
-session per invocation under logs/bakeoff/. `evals.bakeoff.report` turns them into the report.
+"""M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document not yet in the shared parse
+cache (`make parse-cache` already holds the UAE subset), then runs each probed, in-budget arm
+strictly sequentially over the fixed 200-document UAE subset (a scanned document as its
+image-only scan PDF, as the runtime receives it) and ExtractBench short, appending
+identity-stamped rows (resumable) and one whole-card VRAM session per invocation under
+logs/bakeoff/. A challenger stops early only under the pre-registered futility rule
+(`evals.bakeoff.sequential`); the baseline may import A test rows of the same identity, serving
+identity and client concurrency 1. `evals.bakeoff.report` turns the rows into the report.
 
 Usage: python -m evals.bakeoff.run [--arms a,q38-27b,...] [--data-dir data/uae/test] [--limit N]
+       [--reuse-a-rows logs/extraction_a.jsonl] [--request-timeout-s 300]
 """
 
 from __future__ import annotations
@@ -25,26 +29,41 @@ from apx.extract.extractor import LlmExtractor
 from apx.extract.interfaces import ExtractorId
 from apx.llm.interfaces import LlmClient
 from apx.parse.interfaces import ParsedDocument
-from evals.bakeoff.arms import Arm, BakeoffError, invoice_prompt_builder
+from evals.bakeoff.arms import BASELINE, Arm, ArmKind, BakeoffError, invoice_prompt_builder
 from evals.bakeoff.extractbench import (
+    REQUEST_TIMEOUT_S,
     ExtractBenchPromptBuilder,
     extractbench_row,
     is_request_rejection,
 )
 from evals.bakeoff.parsed import ParseCache
 from evals.bakeoff.probe import ProbeResult
-from evals.extraction_a import extract_row, load_rows
+from evals.bakeoff.sequential import LookResult, futility, look_sizes
+from evals.extraction_a import CLIENT_CONCURRENCY_KEY, extract_row, is_current_row, load_rows
 from evals.extraction_identity import (
+    IDENTITY_KEYS,
+    SERVING_KEYS,
     RowIdentity,
+    ServingIdentity,
     prompt_version,
     require_identity,
     served_gguf_sha256,
+    serving_args_sha256,
 )
+from evals.parse_cache import DEFAULT_ROOT as SHARED_PARSE_CACHE
 from evals.scan_input import document_input, input_kind, load_truth
 from ml.extractor_b.gates import StrictVramSampler, VramUnavailableError
 
 ROWS_DIR: Final[Path] = Path("logs/bakeoff")
-PARSE_CACHE_DIR: Final[Path] = Path("data/bakeoff/parsed")
+PARSE_CACHE_DIR: Final[Path] = SHARED_PARSE_CACHE
+"""The shared parse cache `make parse-cache` fills (ADR-0016 amdt 2): the 200 UAE subset documents
+are already there from the test split, keyed the same way, so the bake-off never re-OCRs them,
+and every arm, the reused arm a rows included, reads the very same parses."""
+SCAN_INPUTS_DIR: Final[Path] = Path("data/bakeoff/scan_inputs")
+
+MAX_CONSECUTIVE_SERVER_FAILURES: Final[int] = 3
+"""Timeout/5xx rows in a row (each followed by an unload) before the run ends: past this the
+server, not a document, is the likely cause, so the run stops for a human to look."""
 
 SampleFn = Callable[[], float | None]
 UnloadFn = Callable[[], Awaitable[None]]
@@ -166,6 +185,71 @@ def uae_inputs(
     return items, keys
 
 
+def reuse_a_rows(
+    source: Path,
+    target: Path,
+    identity: RowIdentity,
+    shas: Sequence[str],
+    log: Callable[[str], None] = print,
+    *,
+    serving: ServingIdentity,
+) -> int:
+    """Append the A test run's rows (`evals.extraction_a` over the same factory documents) for
+    the bake-off subset to the baseline's UAE row file, so arm a is not re-run (ADR-0016 amdt 1
+    and 2). All or nothing: every row in `source` must carry exactly the baseline's identity
+    (alias, served GGUF sha256, prompt version and whatever else `IDENTITY_KEYS` covers), exactly
+    `serving` (the alias's llama-swap args hash and the parser identity of the parse cache the
+    challengers read, so arm a and the challengers extract from the same parses), the current
+    row schema and a recorded client concurrency of 1 (its latency is a decision input and must
+    be measured one request at a time, as the challengers are); otherwise nothing is imported
+    and arm a runs. Returns how many rows were added."""
+    rows = load_rows(source)
+    if not rows:
+        log(f"a: no A test rows at {source}; arm a runs")
+        return 0
+    want = identity.as_row_fields()
+    want_serving = serving.as_row_fields()
+    foreign = [sha for sha, row in rows.items() if {k: row.get(k) for k in IDENTITY_KEYS} != want]
+    served = [
+        sha for sha, row in rows.items() if {k: row.get(k) for k in SERVING_KEYS} != want_serving
+    ]
+    stale = [sha for sha, row in rows.items() if not is_current_row(row)]
+    concurrent = [sha for sha, row in rows.items() if row.get(CLIENT_CONCURRENCY_KEY) != 1]
+    if foreign or served or stale or concurrent:
+        first = rows[(foreign or served or stale or concurrent)[0]]
+        found = {k: first.get(k) for k in (*IDENTITY_KEYS, *SERVING_KEYS, CLIENT_CONCURRENCY_KEY)}
+        log(
+            f"a: not reusing {source}: {len(foreign)} rows of another identity, {len(served)} "
+            f"served or parsed differently, {len(stale)} of an old row schema, "
+            f"{len(concurrent)} not run at client concurrency 1 (e.g. {found}, expected "
+            f"{ {**want, **want_serving, CLIENT_CONCURRENCY_KEY: 1} }); arm a runs"
+        )
+        return 0
+    present = load_rows(target)
+    require_identity(present, identity, target)
+    new = [sha for sha in shas if sha in rows and sha not in present]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as sink:
+        for sha in new:
+            _write(sink, {**rows[sha], "error": None, "reused_from": source.as_posix()})
+    log(f"a: reused {len(new)} A test rows from {source} ({len(present)} already present)")
+    return len(new)
+
+
+def futility_stop(
+    arm: Arm,
+    arm_rows: Mapping[str, Mapping[str, Any]],
+    baseline_rows: Mapping[str, Mapping[str, Any]] | None,
+    data_dir: Path,
+    shas: Sequence[str],
+) -> LookResult | None:
+    """The look at which the pre-registered futility rule stops a challenger, if any. The
+    baseline and the latency arm never stop; nor does anything without baseline rows."""
+    if arm.kind is not ArmKind.CHALLENGER or baseline_rows is None:
+        return None
+    return futility(arm.key, arm_rows, baseline_rows, data_dir, shas).stopped
+
+
 def _write(sink: TextIO, row: Mapping[str, Any]) -> None:
     sink.write(json.dumps(row, ensure_ascii=False) + "\n")
     sink.flush()
@@ -185,22 +269,31 @@ async def run_arm(
     sample_fn: SampleFn,
     cache: ParseCache,
     uae_cache_keys: Mapping[str, str] | None = None,
+    baseline_rows: Mapping[str, Mapping[str, Any]] | None = None,
+    request_timeout_s: float = REQUEST_TIMEOUT_S,
     log: Callable[[str], None] = print,
     interval_s: float = 0.2,
-) -> None:
+) -> LookResult | None:
     """Every pending UAE then ExtractBench document of `arm`, one at a time, inside one
     whole-card VRAM window that starts from an empty llama-swap (so it includes the load).
-    `uae_cache_keys` maps a factory sha to its parse-cache key (`uae_inputs`; default: itself)."""
+    `uae_cache_keys` maps a factory sha to its parse-cache key (`uae_inputs`; default: itself).
+    With `baseline_rows`, a challenger is tested at each interim look and stops (no further UAE
+    or ExtractBench documents) when the futility rule says it can no longer win; the stopping
+    look is returned. Rows are written in subset order, so a resume re-checks the same looks."""
     uae_rows = load_rows(files.uae)
     require_identity(uae_rows, identities.uae, files.uae)
     eb_rows = load_extractbench_rows(files.extractbench)
     require_identity(eb_rows, identities.extractbench, files.extractbench)
+    stopped = futility_stop(arm, uae_rows, baseline_rows, uae_data_dir, uae_shas)
+    if stopped is not None:
+        log(f"{arm.key}: stopped for futility at look {stopped.look} (n={stopped.n}) earlier")
+        return stopped
     uae_pending = [sha for sha in uae_shas if sha not in uae_rows]
     eb_ids = list(extractbench_records)
     eb_pending = [doc_id for doc_id in eb_ids if doc_id not in eb_rows]
     if not uae_pending and not eb_pending:
         log(f"{arm.key}: all {len(uae_shas)} UAE and {len(eb_ids)} ExtractBench rows present")
-        return
+        return None
     files.uae.parent.mkdir(parents=True, exist_ok=True)
     await unload()
     idle = sample_fn()
@@ -210,6 +303,7 @@ async def run_arm(
     eb_builder = ExtractBenchPromptBuilder(images=arm.images)
     started = datetime.now(UTC).isoformat()
     uae_done, eb_done = len(uae_shas) - len(uae_pending), len(eb_ids) - len(eb_pending)
+    looks = set(look_sizes(len(uae_shas)))
     sampler = StrictVramSampler(sample_fn, interval_s=interval_s)
     try:
         with sampler:
@@ -218,23 +312,53 @@ async def run_arm(
                     document = cache.get((uae_cache_keys or {}).get(sha, sha))
                     row = await uae_row(sha, document, uae_data_dir, extractor)
                     _write(sink, {**row, **identities.uae.as_row_fields()})
+                    uae_rows[sha] = row
                     uae_done += 1
                     log(
                         f"[{uae_done}/{len(uae_shas)}] {arm.key} uae {sha[:12]} "
                         f"valid={row['valid_json']} {row['latency_ms'] or 0:.0f} ms"
                     )
+                    if uae_done not in looks:
+                        continue
+                    stopped = futility_stop(arm, uae_rows, baseline_rows, uae_data_dir, uae_shas)
+                    if stopped is not None:
+                        log(
+                            f"{arm.key}: stopped for futility at look {stopped.look} "
+                            f"(n={stopped.n}): {'; '.join(stopped.reasons)}"
+                        )
+                        return stopped
+            failures: list[str] = []
             with files.extractbench.open("a", encoding="utf-8") as sink:
                 for doc_id in eb_pending:
                     document = cache.get(extractbench_shas[doc_id])
                     row = await extractbench_row(
-                        extractbench_records[doc_id], document, client, eb_builder, arm.alias
+                        extractbench_records[doc_id],
+                        document,
+                        client,
+                        eb_builder,
+                        arm.alias,
+                        timeout_s=request_timeout_s,
                     )
                     _write(sink, {**row, **identities.extractbench.as_row_fields()})
                     eb_done += 1
+                    kind = row.get("error_kind")
                     log(
                         f"[{eb_done}/{len(eb_ids)}] {arm.key} extractbench {doc_id} "
                         f"valid={row['valid_json']} {row['latency_ms'] or 0:.0f} ms"
+                        + (f" {kind}" if kind else "")
                     )
+                    if kind not in ("timeout", "server_error"):
+                        failures.clear()
+                        continue
+                    failures.append(doc_id)
+                    await unload()  # a stalled or crashed slot must not delay the next document
+                    if len(failures) >= MAX_CONSECUTIVE_SERVER_FAILURES:
+                        raise BakeoffError(
+                            f"{arm.key}: {len(failures)} ExtractBench requests in a row timed "
+                            f"out or got HTTP 5xx ({', '.join(failures)}); check llama-swap, "
+                            f"then delete those rows from {files.extractbench} if the server "
+                            "was at fault, and resume"
+                        )
     finally:
         await unload()  # arm done or interrupted: free the card for the next arm
         try:
@@ -249,9 +373,11 @@ async def run_arm(
             "misses": sampler.misses,
             "uae_done": uae_done,
             "extractbench_done": eb_done,
+            "stopped_at_look": None if stopped is None else stopped.look,
         }
         with files.vram.open("a", encoding="utf-8") as sink:
             _write(sink, session)
+    return None
 
 
 def extractbench_inputs(
@@ -301,16 +427,34 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
     cache = ParseCache(args.parse_cache)
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
-    items, uae_keys = uae_inputs(uae_shas, args.data_dir, args.parse_cache / "scan_inputs")
+    items, uae_keys = uae_inputs(uae_shas, args.data_dir, args.scan_dir)
     items += [(eb_shas[doc_id], eb_paths[doc_id]) for doc_id in records]
     if await cache.fill(items, parser.parse):
         await parse_client.unload()  # parse stage over before any arm's VRAM window opens
 
     probe = load_probe(PROBE_PATH)
-    arms = parse_arms(args.arms)
+    # The baseline first: challengers are tested against its rows at every interim look.
+    arms = sorted(parse_arms(args.arms), key=lambda arm: arm.kind is not ArmKind.BASELINE)
     client = LlamaSwapClient(
         LlmSettings(base_url=args.base_url, allowed_models=frozenset(a.alias for a in arms))
     )
+
+    def identities(arm: Arm) -> ArmIdentities:
+        return arm_identities(
+            arm,
+            llama_swap_config=args.llama_swap_config,
+            models_lock=args.models_lock,
+            models_root=args.models_root,
+        )
+
+    def baseline_rows() -> dict[str, dict[str, Any]] | None:
+        path = arm_files(args.rows_dir, BASELINE).uae
+        rows = load_rows(path)
+        if not rows:
+            return None
+        require_identity(rows, identities(BASELINE).uae, path)
+        return rows
+
     skipped = 0
     try:
         for arm in arms:
@@ -320,6 +464,17 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
                 print(f"skip {arm.key}: {exc}", flush=True)
                 skipped += 1
                 continue
+            files = arm_files(args.rows_dir, arm)
+            if arm.kind is ArmKind.BASELINE and args.reuse_a_rows is not None:
+                serving = ServingIdentity(
+                    serving_args_sha256=serving_args_sha256(
+                        arm.alias, llama_swap_config=args.llama_swap_config
+                    ),
+                    parser_identity=cache.parser_id,
+                )
+                reuse_a_rows(
+                    args.reuse_a_rows, files.uae, identities(arm).uae, uae_shas, serving=serving
+                )
             await run_arm(
                 arm,
                 uae_shas=uae_shas,
@@ -327,17 +482,14 @@ async def _live(args: argparse.Namespace) -> int:  # pragma: no cover - needs GP
                 uae_cache_keys=uae_keys,
                 extractbench_records=records,
                 extractbench_shas=eb_shas,
-                files=arm_files(args.rows_dir, arm),
-                identities=arm_identities(
-                    arm,
-                    llama_swap_config=args.llama_swap_config,
-                    models_lock=args.models_lock,
-                    models_root=args.models_root,
-                ),
+                files=files,
+                identities=identities(arm),
                 client=client,
                 unload=client.unload,
                 sample_fn=sample_vram_gb,
                 cache=cache,
+                baseline_rows=baseline_rows(),
+                request_timeout_s=args.request_timeout_s,
             )
     finally:
         await client.aclose()
@@ -353,9 +505,23 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wr
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--rows-dir", type=Path, default=ROWS_DIR)
     parser.add_argument("--parse-cache", type=Path, default=PARSE_CACHE_DIR)
+    parser.add_argument(
+        "--scan-dir",
+        type=Path,
+        default=SCAN_INPUTS_DIR,
+        help="where the image-only scan PDFs of has_scan documents are written for the parse",
+    )
     parser.add_argument("--llama-swap-config", type=Path, default=Path("infra/llama-swap.yaml"))
     parser.add_argument("--models-lock", type=Path, default=Path("infra/models.lock.json"))
     parser.add_argument("--models-root", type=Path, default=Path("models"))
+    parser.add_argument(
+        "--reuse-a-rows",
+        type=Path,
+        default=None,
+        help="A test rows (evals.extraction_a) to import as arm a when their identity, serving "
+        "identity and recorded client concurrency 1 match exactly (ADR-0016 amendments 1-2)",
+    )
+    parser.add_argument("--request-timeout-s", type=float, default=REQUEST_TIMEOUT_S)
     args = parser.parse_args(argv)
     try:
         return asyncio.run(_live(args))

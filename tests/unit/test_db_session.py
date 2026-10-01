@@ -7,6 +7,7 @@ in `tests/integration/test_migrations.py`.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
@@ -45,10 +46,30 @@ def _patch_session_factory(
     monkeypatch.setattr(session_module, "_session_factory", factory)
 
 
-def test_get_database_url_default_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_database_url_raises_config_error_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No baked-in default credential (REVIEW C-02): nothing configured is a typed error."""
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
-    assert session_module.get_database_url() == session_module.DEFAULT_DATABASE_URL
+    with pytest.raises(ConfigError, match=r"DATABASE_URL.*POSTGRES_PASSWORD"):
+        session_module.get_database_url()
+
+
+def test_get_database_url_treats_empty_values_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "")
+    with pytest.raises(ConfigError, match="no database configured"):
+        session_module.get_database_url()
+
+
+def test_no_default_password_is_shipped() -> None:
+    """The old dev password must not survive in the module or the Alembic config."""
+    repo = Path(__file__).resolve().parents[2]
+    old = "apx-dev" + "-only"
+    assert old not in Path(session_module.__file__).read_text(encoding="utf-8")
+    ini = (repo / "alembic.ini").read_text(encoding="utf-8")
+    assert old not in ini
+    url_lines = [ln for ln in ini.splitlines() if ln.startswith("sqlalchemy.url")]
+    assert url_lines == ["sqlalchemy.url ="]
 
 
 def test_get_database_url_follows_compose_postgres_overrides(

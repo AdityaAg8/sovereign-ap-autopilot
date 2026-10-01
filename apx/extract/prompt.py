@@ -114,7 +114,7 @@ SYSTEM_PROMPT = (
 
 @dataclass(frozen=True)
 class PromptSettings:
-    """Context budget for one Extractor A slot (12288 tokens: ctx 24576 over --parallel 2).
+    """Context budget for Extractor A's slot (12288 tokens: ctx 12288, --parallel 1, ADR-0013).
     The text keeps its head and tail when trimmed (header fields and totals); images are the
     first and last pages."""
 

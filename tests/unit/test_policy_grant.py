@@ -317,6 +317,9 @@ class _FakeWriterSession:
     async def scalars(self, _statement: object) -> SimpleNamespace:
         return SimpleNamespace(all=lambda: [Role.APPROVER])
 
+    async def scalar(self, _statement: object) -> None:
+        return None  # the REJECT-decision lookup: this invoice was never rejected
+
     def add(self, row: object) -> None:
         self.added.append(row)
 

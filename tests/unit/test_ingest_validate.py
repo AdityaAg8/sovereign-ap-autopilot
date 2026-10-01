@@ -12,6 +12,7 @@ import pypdfium2 as pdfium
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from PIL import Image
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.pdfencrypt import StandardEncryption
 from reportlab.pdfgen import canvas
@@ -139,5 +140,13 @@ def test_validate_checks_size_before_media_type() -> None:
 
 
 def test_validate_checks_pdf_pages_only_for_pdfs() -> None:
-    # A PNG well under the page-relevant code path never opens pdfium at all.
-    assert validate(PNG_MAGIC + b"rest", max_bytes=20 * 1024 * 1024, max_pages=1) == "image/png"
+    # A PNG never opens pdfium; only its header dimensions are checked (REVIEW H-03).
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4)).save(buf, format="PNG")
+    assert validate(buf.getvalue(), max_bytes=20 * 1024 * 1024, max_pages=1) == "image/png"
+
+
+def test_validate_rejects_magic_bytes_without_a_readable_image_header() -> None:
+    # Size unknown, so never accepted (fail closed; before H-03 these passed on magic alone).
+    with pytest.raises(UnsupportedMediaTypeError):
+        validate(PNG_MAGIC + b"rest", max_bytes=20 * 1024 * 1024, max_pages=1)

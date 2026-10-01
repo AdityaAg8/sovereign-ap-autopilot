@@ -18,7 +18,7 @@ from ml.extractor_b.interfaces import (
     TrainingDivergedError,
     VramBudgetError,
 )
-from ml.extractor_b.loop import LoopController, read_loop_state, vram_over_cap
+from ml.extractor_b.loop import LoopController, PhaseClock, read_loop_state, vram_over_cap
 from ml.extractor_b.prompting import SAMPLE_IDS_KEY
 
 PRIVATE_TRAINER_HOOKS: Final[Mapping[str, tuple[str, ...]]] = {
@@ -204,10 +204,12 @@ def loop_callback_class() -> type:
             self.log_metrics = log_metrics
             self.for_inference = for_inference
             self.for_training = for_training
+            self.clock = PhaseClock()
 
         def on_train_begin(self, args: Any, state: Any, control: Any, **kw: Any) -> Any:
             if self.resume_dir is not None:
                 self.loop.resumed(read_loop_state(self.resume_dir))
+            self.clock.mark()
             return control
 
         def on_pre_optimizer_step(self, args: Any, state: Any, control: Any, **kw: Any) -> Any:
@@ -230,16 +232,23 @@ def loop_callback_class() -> type:
 
         def on_step_end(self, args: Any, state: Any, control: Any, **kw: Any) -> Any:
             step = state.global_step
+            timings = self.clock.step_seconds()
             plan = self.loop.plan_step_end(step)
             model = kw["model"]
             if plan.dev_loss:
-                self.loop.record_eval(self.evaluator.dev_loss(model, step))
+                with self.clock.timed("dev_loss_eval_seconds", timings):
+                    self.loop.record_eval(self.evaluator.dev_loss(model, step))
             if plan.generative:
                 self.for_inference(model)
                 try:
-                    self.loop.record_eval(self.evaluator.generative(model, self.processor, step))
+                    with self.clock.timed("generative_eval_seconds", timings):
+                        result = self.evaluator.generative(model, self.processor, step)
+                    self.loop.record_eval(result)
                 finally:
                     self.for_training(model)
+            if timings:
+                self.log_metrics(timings, step)
+            self.clock.mark()
             plan = self.loop.plan_step_end(step)  # an eval may have requested a stop
             control.should_save = control.should_save or plan.save
             if plan.stop:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -14,21 +15,23 @@ import pytest
 
 from apx.extract.identity import ExtractorIdentity, ServedBuilds, ServedModelError
 from apx.extract.interfaces import FieldName
-from apx.trust.artifact import CalibratorStore
+from apx.trust.artifact import CalibratorArtifact, CalibratorStore
 from apx.trust.gate import ArtifactTrustGate
-from apx.trust.interfaces import FIELD_KINDS
+from apx.trust.interfaces import FIELD_KINDS, FieldDecision, TrustDecision
 from evals.extraction_a import ROW_SCHEMA
 from evals.trust_gate import (
     AlphaOutcome,
     CalibrateResult,
+    TrustExtractors,
     anova_icc,
     calibrate,
+    evaluate_test,
     evidence,
     main,
     render_report,
     verify,
 )
-from evals.trust_rows import TrustRowsError
+from evals.trust_rows import TrustRowsError, load_split_rows
 from ml.extractor_b.promote import FileCalibratorInvalidator
 from ml.promotion.retrain import ModelVersion
 from tests.unit import _trust_fixtures as tf
@@ -97,7 +100,13 @@ def _champions(a: ExtractorIdentity = A_ID, b: ExtractorIdentity = B_ID) -> Any:
     return lambda: ServedBuilds(a, b.model_copy(update={"model": "extractor-b"}), None)
 
 
-def _run(splits: Path, trust: Path, champions: Any = None, **paths: Path) -> CalibrateResult:
+def _run(
+    splits: Path,
+    trust: Path,
+    champions: Any = None,
+    extractors: TrustExtractors = TrustExtractors.BOTH,
+    **paths: Path,
+) -> CalibrateResult:
     return calibrate(
         cal_a=paths.get("cal_a", splits / "cal" / "a.jsonl"),
         cal_b=paths.get("cal_b", splits / "cal" / "b.jsonl"),
@@ -110,6 +119,7 @@ def _run(splits: Path, trust: Path, champions: Any = None, **paths: Path) -> Cal
         store=CalibratorStore(trust),
         champions=champions or _champions(),
         now=tf.NOW,
+        extractors=extractors,
     )
 
 
@@ -323,3 +333,127 @@ def test_failed_test_gate_keeps_the_artifact_inactive_and_the_marker_stale(
     store = CalibratorStore(trust)
     assert store.invalidation() is not None and not store.active_path.exists()
     assert result.artifact_path.is_file()  # saved for the record, never active
+
+
+# --- champion-only mode (ADR-0018 §5) --------------------------------------------------------
+
+
+def _run_a(splits: Path, trust: Path, champions: Any = None, **paths: Path) -> CalibrateResult:
+    """Champion-only run whose B row paths do not exist: they must never be read."""
+    nowhere = trust.parent / "no-such-b.jsonl"
+    return _run(
+        splits,
+        trust,
+        champions,
+        **{"cal_b": nowhere, "test_b": nowhere, **paths},
+        extractors=TrustExtractors.CHAMPION_ONLY,
+    )
+
+
+def test_missing_b_rows_without_the_explicit_mode_still_raise(splits: Path, tmp_path: Path) -> None:
+    with pytest.raises(TrustRowsError, match="cal B"):
+        _run(splits, tmp_path / "trust", cal_b=tmp_path / "no-such-b.jsonl")
+    assert not (tmp_path / "trust").exists()
+
+
+def test_champion_only_fits_and_gates_a_without_activating(
+    splits: Path, fitted: tuple[CalibrateResult, Path], tmp_path: Path
+) -> None:
+    trust = tmp_path / "trust"
+    shutil.copytree(fitted[1], trust)
+    FileCalibratorInvalidator(trust / "calibrator_invalidation.json").invalidate(
+        ModelVersion("6"), "promoted"
+    )
+    active_before = CalibratorStore(trust).active_path.read_bytes()
+    result = _run_a(splits, trust)
+    art = result.calibration.artifact
+    two = fitted[0].calibration.artifact
+    assert art.champion_only and art.extractor_b is None and art.extractor_a == A_ID
+    assert set(art.rows_sha256) == {"a"} and art.version != two.version
+    # Same LTT settings as the two-extractor calibrator: alphas, delta, k_min.
+    assert [(t.alpha, t.delta) for t in art.thresholds] == [
+        (t.alpha, t.delta) for t in two.thresholds
+    ]
+    assert art.ltt_min_accepted == two.ltt_min_accepted
+    assert result.test is not None
+    assert result.test.outcomes[0.01].n_fields == N_TEST * len(HEADER)
+    assert result.gate_passed, result.gate_detail
+    # Never activated, the active calibrator and the ADR-0015 marker are left alone.
+    assert not result.activation.activated and result.activation.champion_a_served is True
+    assert "champion-only" in result.activation.note
+    store = CalibratorStore(trust)
+    assert store.active_path.read_bytes() == active_before
+    assert store.invalidation() is not None
+    assert CalibratorArtifact.model_validate_json(result.artifact_path.read_bytes()) == art
+    data = evidence(result)
+    assert data["extractors"] == "a" and data["extractor_b"] is None
+    assert data["champion_a_served"] is True and data["activated"] is False
+    assert "champion-only" in render_report(result)
+
+
+def test_champion_only_records_a_foreign_champion(splits: Path, tmp_path: Path) -> None:
+    other_a = A_ID.model_copy(update={"gguf_sha256": "f" * 64})
+    result = _run_a(splits, tmp_path / "trust", champions=_champions(a=other_a))
+    assert result.activation.champion_a_served is False
+    assert not result.activation.activated and "served" in result.activation.note
+
+
+def test_evaluate_test_refuses_a_mode_mismatch(
+    splits: Path, fitted: tuple[CalibrateResult, Path], tmp_path: Path
+) -> None:
+    a_rows = load_split_rows(splits / "test" / "a.jsonl", TEST_SHAS, "test A")
+    b_rows = load_split_rows(splits / "test" / "b.jsonl", TEST_SHAS, "test B")
+    two = fitted[0].calibration.artifact
+    with pytest.raises(TrustRowsError, match="missing for a two-extractor"):
+        evaluate_test(two, a_rows, None, splits / "test")
+    alone = _run_a(splits, tmp_path / "trust").calibration.artifact
+    with pytest.raises(TrustRowsError, match="given for a champion-only"):
+        evaluate_test(alone, a_rows, b_rows, splits / "test")
+
+
+def test_runtime_gate_refuses_a_champion_only_artifact(splits: Path, tmp_path: Path) -> None:
+    """Even if activated by hand, the runtime never scores served B output with it: REVIEW."""
+    trust = tmp_path / "trust"
+    art = _run_a(splits, trust).calibration.artifact
+    store = CalibratorStore(trust)
+    store.activate(art)
+
+    class _AcceptAll:
+        def decide(self, features: Any) -> TrustDecision:
+            return TrustDecision(
+                fields=tuple(
+                    FieldDecision(field=f, p_correct=1.0, accepted=True) for f in features
+                ),
+                all_accepted=True,
+            )
+
+    gate = ArtifactTrustGate(
+        store, type("S", (), {"current": staticmethod(_champions())})(), _AcceptAll()
+    )
+    decision = gate.decide({f: tf.field_features(True, random.Random(1)) for f in HEADER})
+    assert decision.refusal is not None and decision.refusal.startswith("calibrator_champion_only")
+    assert not decision.all_accepted and not any(f.accepted for f in decision.fields)
+
+
+def test_cli_extractors_flag(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    base = [
+        "calibrate",
+        "--cal-a-rows",
+        str(tmp_path / "cal_a.jsonl"),
+        "--trust-dir",
+        str(tmp_path / "trust"),
+        "--report",
+        str(tmp_path / "report.md"),
+        "--evidence",
+        str(tmp_path / "evidence.json"),
+    ]
+    with pytest.raises(SystemExit) as exc:
+        main([*base, "--extractors", "b"])
+    assert exc.value.code == 2
+    capsys.readouterr()
+    assert main([*base, "--extractors", "a"]) == 2
+    err = capsys.readouterr().err
+    assert "TrustRowsError" in err and "cal A" in err and "cal B" not in err
+    assert TrustExtractors.parse(["a", "b"]) is TrustExtractors.BOTH
+    assert TrustExtractors.parse(["b", "a", "a"]) is TrustExtractors.BOTH
+    assert TrustExtractors.parse(["a"]) is TrustExtractors.CHAMPION_ONLY

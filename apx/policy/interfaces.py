@@ -31,7 +31,7 @@ from apx.common.types import (
 from apx.fraud.interfaces import FraudReport
 from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import TrustDecision
-from apx.validate.interfaces import ValidationReport
+from apx.validate.interfaces import ValidationReport, ViolationCode
 
 ProposalKind = Literal["edit_field", "route", "request_info", "approve_payment", "change_bank"]
 ProposalOrigin = Literal["agent", "chat", "mcp"]
@@ -154,6 +154,15 @@ class RoutedPayee(Frozen):
     """SHA-256 (hex) of `Payee.iban` in electronic format, UTF-8."""
 
 
+class ValidationFinding(Frozen):
+    """An error-severity violation behind a VALIDATION reason: the validator's code and field
+    path, both system text (never document text or amounts). Persisted with the routing
+    decision so the API can refuse an approval no correction can fix (ADR-0012 amendment 4)."""
+
+    code: ViolationCode
+    field: str | None
+
+
 class PolicyReason(Frozen):
     rule: PolicyRule
     route: Route
@@ -163,6 +172,9 @@ class PolicyReason(Frozen):
     """Set on a P1 reason when `select_payee` refused (ADR-0014)."""
     payee_match: PayeeMatch | None = None
     """Set on a P1 reason raised for a non-trivial payee selection (ADR-0014)."""
+    violations: tuple[ValidationFinding, ...] = ()
+    """Set on a VALIDATION reason: its error-severity violations (ADR-0012 amendment 4). The
+    default keeps route results recorded before it deserializable on workflow replay."""
 
 
 class RoutingInput(Frozen):
@@ -270,8 +282,12 @@ class PaymentStateWriter(Protocol):
         """Store the change as an unverified account (P1) and start the P2 window."""
         ...
 
-    async def verify_bank_account(self, vendor_id: VendorId, iban: str, grant: Grant) -> None:
-        """Record the admin callback verification: `verified=True`, `source="admin_callback"`."""
+    async def verify_bank_account(
+        self, vendor_id: VendorId, iban: str, grant: Grant, *, method: str, reference: str
+    ) -> None:
+        """Record the admin's out-of-band verification (`method` and its `reference` kept on the
+        `bank_verifications` row): `verified=True`, `source="admin_callback"`. Raises
+        SegregationOfDutiesError if the verifier is the account's changer (REVIEW.md M-01)."""
         ...
 
     async def execute_proposal(self, proposal_id: str, grant: Grant) -> None: ...
@@ -325,12 +341,12 @@ def required_capabilities(
             caps.add(mapped)
     if is_approval_action(request):
         invoice = request.invoice
-        if invoice is None or _above_limit(invoice.total, thresholds.approval_limit):
+        if invoice is None or above_limit(invoice.total, thresholds.approval_limit):
             caps.add(Capability.APPROVE_ABOVE_LIMIT)
     return frozenset(caps)
 
 
-def _above_limit(total: Money, limit: Money) -> bool:
+def above_limit(total: Money, limit: Money) -> bool:
     """True when `total` cannot be covered by the plain approval capability (P3): a different
     currency is always treated as above limit, since the two amounts cannot be compared."""
     return total.currency != limit.currency or total.amount > limit.amount
@@ -478,6 +494,10 @@ def reasons_payload(reasons: tuple[PolicyReason, ...]) -> list[JsonValue]:
             item["payee_refusal"] = r.payee_refusal.value
         if r.payee_match is not None:
             item["payee_match"] = r.payee_match.value
+        if r.violations:
+            item["violations"] = [
+                {"code": finding.code.value, "field": finding.field} for finding in r.violations
+            ]
         payload.append(item)
     return payload
 

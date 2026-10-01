@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Literal, Protocol
 
-from pydantic import JsonValue
+from pydantic import Field, JsonValue
 
 from apx.common.master import User
 from apx.common.types import BBox, Frozen, InvoiceId, Role, Route, Sha256Hex, UserId, VendorId
@@ -64,6 +64,9 @@ class InvoiceDetail(Frozen):
     reasons: tuple[str, ...]
     proposals: tuple[Proposal, ...]
     flags: tuple[FlagView, ...] = ()
+    error: str | None = None
+    """Why the workflow failed, when it failed before its invoice row existed (status FAILED,
+    no fields); None otherwise."""
 
 
 class InvoicePage(Frozen):
@@ -135,9 +138,14 @@ class InvoiceDocument(Frozen):
     filename: str
 
 
+FIELD_VALUE_MAX_LENGTH = 1000
+"""Longest value a reviewer's field edit may carry (422 beyond it); the supplier address has its
+own, tighter cap in `apx.workflows.corrections` (ADR-0012 amendment 4)."""
+
+
 class FieldEdit(Frozen):
     field: str
-    value: str
+    value: str = Field(max_length=FIELD_VALUE_MAX_LENGTH)
     reason: str
 
 

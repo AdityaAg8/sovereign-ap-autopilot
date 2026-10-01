@@ -1,20 +1,25 @@
 """ExtractBench short arm of the M3.4 bake-off (PRD §5 ExtractBench row, §10 M3.4): builds one
 schema-constrained request per document from its own `data_schema` (parse text, page images when
 the arm reads images, a size-capped schema digest), turns the answer into an identity-stamped
-row and scores rows through `evals.scorers.extractbench` (the official framework if cloned)."""
+row and scores rows through `evals.scorers.extractbench` (the official framework if cloned). A
+request has a hard wall-clock bound: a timeout or HTTP 5xx on one document is a recorded failed
+row (`error_kind`) scored as misses against the arm; only a down or busy server ends a run."""
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
+import httpx
 from pydantic import JsonValue
 
-from apx.common.errors import ModelContextError, ModelServingError
+from apx.common.errors import ModelBusyError, ModelContextError, ModelServingError
 from apx.extract.prompt import document_text, estimate_tokens, page_image_data_url
 from apx.llm.interfaces import ChatMessage, ImagePart, LlmClient, StructuredRequest, TextPart
 from apx.parse.interfaces import ParsedDocument
@@ -32,6 +37,13 @@ EXTRACTBENCH_SYSTEM_PROMPT: Final[str] = (
 )
 _SCHEMA_DROP_KEYS: Final[frozenset[str]] = frozenset({"title", "default", "examples"})
 _DESCRIPTION_CAPS: Final[tuple[int | None, ...]] = (None, 240, 120, 60, 0)
+REQUEST_TIMEOUT_S: Final[float] = 300.0
+"""Wall-clock bound of one ExtractBench request, cold load included (~90 s for the 9B, so a
+request after the post-failure unload still fits). A huge schema once made llama-server stall
+or 5xx; the bound turns that into a failed row within minutes instead of a hung run."""
+_HTTP_5XX: Final[re.Pattern[str]] = re.compile(r"returned HTTP 5\d\d")
+
+FailureKind = Literal["rejected", "timeout", "server_error"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,9 +160,26 @@ def _user_text(text: str, digest: str | None) -> str:
 
 def is_request_rejection(exc: ModelServingError) -> bool:
     """llama-server answered HTTP 400 for this one request (e.g. a schema its grammar converter
-    refuses): deterministic for the document, so it is a failed row, not a failed run. Every
-    other serving error (server down, 5xx, timeouts) aborts the run."""
+    refuses): deterministic for the document, so it is a failed row, not a failed run."""
     return isinstance(exc, ModelContextError) or "returned HTTP 400" in str(exc)
+
+
+def failure_kind(exc: BaseException) -> FailureKind | None:
+    """How one ExtractBench request failed, when the failure belongs to the document: a 400
+    rejection, the wall-clock bound or a read timeout, or an HTTP 5xx answer. None for failures
+    of the server itself (unreachable, still busy after the client's backoff): those end the
+    run, since no document caused them."""
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if not isinstance(exc, ModelServingError) or isinstance(exc, ModelBusyError):
+        return None
+    if is_request_rejection(exc):
+        return "rejected"
+    if isinstance(exc.__cause__, httpx.TimeoutException):
+        return "timeout"
+    if _HTTP_5XX.search(str(exc)):
+        return "server_error"
+    return None
 
 
 async def extractbench_row(
@@ -159,17 +188,29 @@ async def extractbench_row(
     client: LlmClient,
     builder: ExtractBenchPromptBuilder,
     model: str,
+    timeout_s: float = REQUEST_TIMEOUT_S,
 ) -> dict[str, Any]:
-    """One row: the parsed JSON answer (or why there is none) and the call's latency."""
+    """One row: the parsed JSON answer (or why there is none, with its `error_kind`) and the
+    call's latency. A failed request is a row with `valid_json` False, never a skipped one."""
     doc_id = Path(str(record["id"])).name
     schema = json.loads(record["data_schema"])
     row: dict[str, Any] = {"doc_id": doc_id, "sha": document.document_sha256}
+    request = builder.build(document, schema, model)
     try:
-        result = await client.complete_structured(builder.build(document, schema, model))
-    except ModelServingError as exc:
-        if not is_request_rejection(exc):
+        result = await asyncio.wait_for(client.complete_structured(request), timeout=timeout_s)
+    except (TimeoutError, ModelServingError) as exc:
+        kind = failure_kind(exc)
+        if kind is None:
             raise
-        return {**row, "valid_json": False, "latency_ms": None, "output": None, "error": str(exc)}
+        error = str(exc) or f"no answer within {timeout_s:.0f} s"
+        return {
+            **row,
+            "valid_json": False,
+            "latency_ms": None,
+            "output": None,
+            "error": error,
+            "error_kind": kind,
+        }
     try:
         output = json.loads(result.content)
     except ValueError:
@@ -181,6 +222,7 @@ async def extractbench_row(
         "latency_ms": result.latency_ms,
         "output": output if valid else None,
         "error": None if valid else f"not a JSON object (finish_reason={result.finish_reason})",
+        "error_kind": None if valid else "invalid_output",
     }
 
 

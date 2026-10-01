@@ -4,6 +4,7 @@ raises the matching typed error instead of returning partial data (PRD §10 M5.2
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ import pytest
 from apx.common.errors import ParsedArtifactIntegrityError, ParsedArtifactMissingError
 from apx.common.types import Language
 from apx.parse.interfaces import ParsedDocument, ParsedDocumentRef
-from apx.parse.store import FileParsedDocumentStore
+from apx.parse.store import FileParsedDocumentStore, canonical_manifest
 from tests.unit import _payload_fixtures as fx
 
 
@@ -100,3 +101,36 @@ def test_ref_with_other_metadata_is_an_integrity_error(
 
     with pytest.raises(ParsedArtifactIntegrityError):
         store.load(ref.model_copy(update={"parser_version": "other/2"}))
+
+
+def test_untruncated_parse_hashes_as_before_the_flag_existed(document: ParsedDocument) -> None:
+    """ADR-0013 amendment 1: `Page.truncated` is written only when True, so a complete parse's
+    manifest bytes (and so every stored ref and every re-parse check) are unchanged."""
+    assert all(not page.truncated for page in document.pages)
+    assert b'"truncated"' not in canonical_manifest(document)
+
+
+def test_old_manifest_without_the_flag_loads_as_untruncated(
+    tmp_path: Path, document: ParsedDocument
+) -> None:
+    store = FileParsedDocumentStore(tmp_path)
+    ref = store.put(document)
+    body = json.loads((_entry(tmp_path, ref) / "document.json").read_bytes())
+    assert all("truncated" not in page for page in body["document"]["pages"])
+
+    loaded = store.load(ref)
+    assert loaded.truncated_pages == ()
+
+
+def test_truncated_page_round_trips_and_changes_the_content_address(
+    tmp_path: Path, document: ParsedDocument
+) -> None:
+    store = FileParsedDocumentStore(tmp_path)
+    pages = list(document.pages)
+    pages[1] = pages[1].model_copy(update={"truncated": True})
+    cut = document.model_copy(update={"pages": tuple(pages)})
+
+    ref = store.put(cut)
+
+    assert ref.content_sha256 != store.put(document).content_sha256
+    assert store.load(ref).truncated_pages == (pages[1].index,)

@@ -1,6 +1,7 @@
 """Torch-free control logic of the Extractor B loop (ADR-0011, design §4): run-dir resolution and
 resume checks, the SIGTERM pause flag, the per-step save/eval plan, the spike log and the
-`LoopController` that the thin HF `LoopCallback` delegates to, so every decision is CPU-tested."""
+`LoopController` that the thin HF `LoopCallback` delegates to, so every decision is CPU-tested,
+plus the `PhaseClock` that splits wall-clock time into train steps and evals for MLflow."""
 
 from __future__ import annotations
 
@@ -8,7 +9,9 @@ import json
 import math
 import signal
 import threading
-from collections.abc import Callable, Iterable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -373,6 +376,33 @@ class LoopController:
             self.store.prune()
         self.state = self.state.model_copy(update={"best_step": self.store.best_step()})
         return self.store.best_step()
+
+
+@dataclass
+class PhaseClock:
+    """Where a run's wall-clock goes (ADR-0011 amendment 5): `step_seconds` is the time from the
+    end of one step's hook to the next (data loading, forward, backward, optimizer and any
+    checkpoint save in between); `timed` measures an eval phase. The callback logs both to MLflow,
+    so the next run's time budget is read from the run, not reconstructed from notes."""
+
+    now: Callable[[], float] = time.monotonic
+    _mark: float | None = None
+
+    def mark(self) -> None:
+        self._mark = self.now()
+
+    def step_seconds(self) -> dict[str, float]:
+        """`{"step_seconds": s}` since the last `mark`, or empty before the first one."""
+        return {} if self._mark is None else {"step_seconds": self.now() - self._mark}
+
+    @contextmanager
+    def timed(self, name: str, into: dict[str, float]) -> Iterator[None]:
+        """Store the seconds the block took under `into[name]`, also when it raises."""
+        start = self.now()
+        try:
+            yield
+        finally:
+            into[name] = self.now() - start
 
 
 def read_loop_state(checkpoint_dir: Path) -> LoopState:
