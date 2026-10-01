@@ -17,10 +17,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
 
+from pydantic import ValidationError
+
 from apx.common.errors import ApxError
-from ml.extractor_b.checkpoints import atomic_write_bytes
+from ml.extractor_b.checkpoints import COMPLETE_NAME, atomic_write_bytes, sha256_file
 from ml.extractor_b.config import DEFAULT_CONFIG_PATH, load_config
-from ml.extractor_b.interfaces import TrainingError
+from ml.extractor_b.interfaces import CheckpointMeta, TrainingError
+from ml.extractor_b.loop import read_loop_state
 
 F1_TOLERANCE: Final[float] = 0.1
 """ADR-0011 amendment 6 item 5: dev_f1 must reproduce within ± 0.1 points."""
@@ -50,27 +53,39 @@ class Verdict:
     passed: bool
 
 
-def recorded_eval(checkpoint: Path) -> Recorded:
-    """The checkpoint's own generative eval, read from its `loop_state.json`."""
+def checkpoint_meta(checkpoint: Path) -> CheckpointMeta:
+    """The checkpoint's `COMPLETE.json` (its step and per-file sha256s)."""
     try:
-        state = json.loads((checkpoint / "loop_state.json").read_text(encoding="utf-8"))
-        step = int(state["step"])
-        hits = [
-            e
-            for e in state["evals"]
-            if e.get("kind") == "generative"
-            and e.get("step") == step
-            and e.get("dev_f1") is not None
-        ]
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise TrainingError(f"cannot read the recorded eval of {checkpoint}: {exc!r}") from exc
+        return CheckpointMeta.model_validate_json((checkpoint / COMPLETE_NAME).read_bytes())
+    except (OSError, ValidationError) as exc:
+        raise TrainingError(f"{checkpoint / COMPLETE_NAME} missing or invalid: {exc!r}") from exc
+
+
+def verify_adapter(checkpoint: Path, meta: CheckpointMeta) -> None:
+    """The adapter must be the one `COMPLETE.json` sealed: same sha256."""
+    expected = meta.files.get(ADAPTER_FILE)
+    path = checkpoint / ADAPTER_FILE
+    if expected is None or not path.is_file():
+        raise TrainingError(f"no sealed {ADAPTER_FILE} in {checkpoint}")
+    if sha256_file(path) != expected:
+        raise TrainingError(f"{path} does not match the sha256 in {COMPLETE_NAME}")
+
+
+def recorded_eval(checkpoint: Path) -> Recorded:
+    """The checkpoint's own generative eval: its step from `COMPLETE.json`, the eval at that
+    step from `loop_state.json`."""
+    step = checkpoint_meta(checkpoint).step
+    hits = [
+        e
+        for e in read_loop_state(checkpoint).evals
+        if e.kind == "generative" and e.step == step and e.dev_f1 is not None
+    ]
     if len(hits) != 1:
         raise TrainingError(f"{checkpoint} records {len(hits)} generative evals at step {step}")
-    return Recorded(
-        step=step,
-        dev_f1=float(hits[0]["dev_f1"]),
-        valid_json_rate=float(hits[0]["valid_json_rate"]),
-    )
+    hit = hits[0]
+    if hit.dev_f1 is None or hit.valid_json_rate is None:
+        raise TrainingError(f"{checkpoint}: the step-{step} eval has no valid-JSON rate")
+    return Recorded(step=step, dev_f1=hit.dev_f1, valid_json_rate=hit.valid_json_rate)
 
 
 def judge(recorded: Recorded, dev_f1: float, valid_json_rate: float, n_dev: int) -> Verdict:
@@ -129,8 +144,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from ml.extractor_b.train import GPU_LOCK_PATH
 
         recorded = recorded_eval(args.checkpoint)
-        if not (args.checkpoint / ADAPTER_FILE).is_file():
-            raise TrainingError(f"no {ADAPTER_FILE} in {args.checkpoint}")
+        verify_adapter(args.checkpoint, checkpoint_meta(args.checkpoint))
         cfg = load_config(args.config)
         with gpu_lock(cfg.vram, lock_path=GPU_LOCK_PATH, job="extractor_b_reeval"):
             dev_f1, valid_json, n_dev = _measure(args.checkpoint, args.config)
