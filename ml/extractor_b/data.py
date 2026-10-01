@@ -55,9 +55,10 @@ SAMPLE_SEED: Final[int] = 3407
 UAE_MIN_SHARE: Final[float] = 0.45
 FATURA_ANNOTATIONS: Final[str] = "fatura/invoices_dataset_final/Annotations/Original_Format"
 CORD_DATASET: Final[str] = "cord"
-CORD_TRUTH_SUFFIX: Final[str] = ".json"
-"""Each CORD image `<stem>.<ext>` listed in the manifest has its HF `ground_truth` JSON (with
-`gt_parse`) beside it as `<stem>.json` (the `evals/datasets/cord_fetcher.py` layout)."""
+CORD_INDEX: Final[str] = "index.jsonl"
+"""Each CORD split folder holds the images and `index.jsonl`, one line per receipt row with its
+`sha256` and HF `ground_truth` (with `gt_parse`): the `evals/datasets/cord_fetcher.py` layout.
+The manifest lists each image once (`doc_id` names its first row)."""
 
 RealMix = Literal["v1", "r1", "r2"]
 REAL_MIXES: Final[tuple[RealMix, ...]] = ("v1", "r1", "r2")
@@ -246,11 +247,33 @@ def _manifest_cord_train(data_root: Path) -> list[tuple[str, str, Path]]:
     return [(f.doc_id, f.sha256, Path(f.path)) for f in files if f.doc_id and f.split == "train"]
 
 
+def _cord_index(path: Path) -> dict[str, Any]:
+    """`gt_parse` per image sha256 from a split's `index.jsonl`; the first row of a duplicated
+    image wins (as in `evals.real.cord.unique_docs`). A missing or unreadable index raises."""
+    by_sha: dict[str, Any] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            if line.strip():
+                record = json.loads(line)
+                by_sha.setdefault(str(record["sha256"]), record["ground_truth"]["gt_parse"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise TrainingError(f"unreadable CORD index {path}: {exc!r}") from exc
+    return by_sha
+
+
+def cord_trees(data_root: Path) -> dict[str, Any]:
+    """Raw `gt_parse` per CORD train image sha256, for the CORD label guard (ADR-0019
+    amendment 1): the same index `cord_docs` builds the targets from."""
+    return _cord_index(data_root / CORD_DATASET / "train" / CORD_INDEX)
+
+
 def cord_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc]:
-    """Every CORD v2 train image in the manifest (ADR-0019 §9.2: all 800, no sampling or
-    upsampling) with its `gt_parse` target. A manifest train image off the `evals/splits.json`
-    train split means the splits predate the CORD fetch, which stops prep (DataLeakError).
-    Yields nothing while CORD is absent; the mix check then names the missing source."""
+    """Every CORD v2 train image in the manifest (ADR-0019 §9.2: all 800 rows, 798 distinct
+    images, no sampling or upsampling) with its `gt_parse` target from the split's index. A
+    manifest train image off the `evals/splits.json` train split means the splits predate the
+    CORD fetch, which stops prep (DataLeakError). Yields nothing while CORD is absent; the mix
+    check then names the missing source."""
     files = _manifest_cord_train(data_root)
     stray = sorted(sha for _, sha, _ in files if sha not in train_shas)
     if stray:
@@ -258,13 +281,17 @@ def cord_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc
             f"{len(stray)}/{len(files)} CORD train images are not on the evals/splits.json "
             f"train split (first {stray[0]}); regenerate the splits after the CORD fetch"
         )
+    indexes: dict[Path, dict[str, Any]] = {}
     for doc_id, sha, rel in sorted(files):
         image = rel if rel.is_absolute() else data_root.parent / rel
-        truth_path = image.with_suffix(CORD_TRUTH_SUFFIX)
-        try:
-            gt_parse = json.loads(truth_path.read_text(encoding="utf-8"))["gt_parse"]
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise TrainingError(f"no gt_parse for CORD train doc {doc_id}: {exc!r}") from exc
+        if image.parent not in indexes:
+            indexes[image.parent] = _cord_index(image.parent / CORD_INDEX)
+        gt_parse = indexes[image.parent].get(sha)
+        if gt_parse is None:
+            raise TrainingError(
+                f"no gt_parse for CORD train doc {doc_id}: {sha} is not in "
+                f"{image.parent / CORD_INDEX}"
+            )
         if not isinstance(gt_parse, dict):
             raise TrainingError(f"CORD train doc {doc_id}: gt_parse is not an object")
         yield SourceDoc(

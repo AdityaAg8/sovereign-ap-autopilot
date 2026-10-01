@@ -35,6 +35,7 @@ from ml.extractor_b.interfaces import (
     QuarantineRateError,
     QuarantineReason,
     QuarantineRecord,
+    SampleSource,
     SpikeGuardState,
     TrainingError,
     TrainingSample,
@@ -122,6 +123,87 @@ def label_sanity(target_json: str, cfg: GuardConfig) -> QuarantineReason | None:
 
 
 # ---------------------------------------------------------------------------------------------
+# CORD label sanity (ADR-0019 amendment 1, §9.3a "Data guards per source"). UAE, FATURA and
+# DocILE rows keep `label_sanity` above, unchanged.
+# ---------------------------------------------------------------------------------------------
+
+_CORD_RATE: Final[re.Pattern[str]] = re.compile(r"\S*%")
+"""A rate token (`10%`, `10.000%`) printed beside a tax amount; never the amount itself."""
+_CORD_EXTRA: Final[tuple[str, ...]] = ("service_price", "othersvc_price", "discount_price")
+"""`sub_total` components the target does not map but the receipt's identity needs."""
+
+
+def cord_amount(raw: str | Sequence[str]) -> Decimal | None:
+    """A CORD amount as a `Decimal` (Indonesian receipts: `61.500`, `1.234.500`, `Rp 12,000`,
+    `@12.000`), read with the frozen real-track rule `evals.real.normalise.normalise_amount`
+    after dropping rate tokens; a list of annotated pieces is joined in order. None when no
+    digit is printed (`-` for "none")."""
+    from evals.real.normalise import normalise_amount as real_amount
+
+    text = _CORD_RATE.sub(" ", raw if isinstance(raw, str) else " ".join(raw))
+    if not any(ch.isdigit() for ch in text):
+        return None
+    value = real_amount(text)
+    try:
+        return Decimal(value) if value is not None else None
+    except ArithmeticError:
+        return None
+
+
+def _cord_component(gt_parse: Mapping[str, Any], key: str) -> Decimal:
+    """The first annotated `sub_total.<key>` as a magnitude; 0 when absent or printed as `-`."""
+    groups = gt_parse.get("sub_total") or []
+    for group in groups if isinstance(groups, list) else [groups]:
+        value = group.get(key) if isinstance(group, Mapping) else None
+        if isinstance(value, str) or (
+            isinstance(value, list) and all(isinstance(v, str) for v in value)
+        ):
+            amount = cord_amount(value)
+            return abs(amount) if amount is not None else Decimal(0)
+    return Decimal(0)
+
+
+def cord_label_sanity(
+    target_json: str, gt_parse: Mapping[str, Any], cfg: GuardConfig
+) -> QuarantineReason | None:
+    """The CORD form of `label_sanity`, on the target and the receipt's raw `gt_parse`:
+    - empty: CORD annotates only the totals and line items, so a sane row has `total` and at
+      least one line item (the UAE "3 header fields" rule would reject every receipt);
+    - format: `subtotal`, `vat_total` and `total` must read as amounts under `cord_amount`;
+    - arithmetic (when `subtotal` and `total` are labelled): `total` equals subtotal + service
+      + other service, with the tax added unless the receipt is tax-inclusive and the discount
+      subtracted unless the subtotal already nets it, within the UAE tolerances."""
+    try:
+        target = json.loads(target_json)
+    except json.JSONDecodeError:
+        return QuarantineReason.LABEL_FORMAT
+    if not isinstance(target, dict):
+        return QuarantineReason.LABEL_FORMAT
+    if _present(target, "total") is None or not target.get("line_items"):
+        return QuarantineReason.LABEL_EMPTY
+
+    amounts: dict[str, Decimal] = {}
+    for key in _AMOUNT_FIELDS:
+        if (raw := _present(target, key)) is not None:
+            if (amount := cord_amount(raw)) is None:
+                return QuarantineReason.LABEL_FORMAT
+            amounts[key] = amount
+    if "subtotal" not in amounts:
+        return None
+    total = amounts["total"]
+    tolerance = max(
+        Decimal(cfg.amount_abs_tolerance), Decimal(cfg.amount_rel_tolerance) * abs(total)
+    )
+    service, other, discount = (_cord_component(gt_parse, k) for k in _CORD_EXTRA)
+    tax = abs(amounts.get("vat_total", Decimal(0)))
+    base = amounts["subtotal"] + service + other
+    candidates = (base + tax - discount, base + tax, base - discount, base)
+    if all(abs(c - total) > tolerance for c in candidates):
+        return QuarantineReason.LABEL_ARITHMETIC
+    return None
+
+
+# ---------------------------------------------------------------------------------------------
 # Pre-run guards.
 # ---------------------------------------------------------------------------------------------
 
@@ -204,6 +286,7 @@ def run_guards(
     image_root: Path = Path("."),
     quarantine_path: Path | None = None,
     pre_quarantined: Sequence[QuarantineRecord] = (),
+    cord_trees: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[list[TrainingSample], list[QuarantineRecord], GuardReport]:
     """Apply leakage, schema, image, label, dedup and length checks in that order. Raises
     `DataLeakError` on any non-train sha256 and `QuarantineRateError` above the per-source rate
@@ -211,7 +294,9 @@ def run_guards(
 
     `page1_phash` maps `sample_id` to the page-1 64-bit pHash as an int; `pre_quarantined` are
     rows that already failed `TrainingSample` validation (see `parse_raw_rows`) and count toward
-    the rate. Kept rows come back sorted by `sample_id`."""
+    the rate. `cord_trees` maps a CORD row's `document_sha256` to its raw `gt_parse`; CORD rows
+    are checked by `cord_label_sanity` and one without its tree stops the run (`TrainingError`).
+    Kept rows come back sorted by `sample_id`."""
     check_leakage((r.document_sha256 for r in rows), train_split_sha256)
     check_leakage((q.document_sha256 for q in pre_quarantined), train_split_sha256)
 
@@ -241,7 +326,16 @@ def run_guards(
         if (problem := _image_problem(row.image_paths, image_root, cfg)) is not None:
             reject(row, *problem)
             continue
-        if (reason := label_sanity(row.target_json, cfg)) is not None:
+        if row.source is SampleSource.CORD:
+            tree = (cord_trees or {}).get(row.document_sha256)
+            if tree is None:
+                raise TrainingError(
+                    f"CORD row {row.sample_id} has no raw gt_parse; pass cord_trees to the guards"
+                )
+            reason = cord_label_sanity(row.target_json, tree, cfg)
+        else:
+            reason = label_sanity(row.target_json, cfg)
+        if reason is not None:
             reject(row, reason, "label sanity")
             continue
         survivors.append(row)

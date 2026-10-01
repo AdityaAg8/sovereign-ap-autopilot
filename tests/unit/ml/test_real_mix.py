@@ -36,15 +36,25 @@ GT: dict[str, Any] = {
 def _cord_doc(
     root: Path, doc_id: str, *, split: str = "train", truth: bool = True
 ) -> dict[str, Any]:
+    """One receipt in the `evals/datasets/cord_fetcher.py` layout: `<sha256>.png` plus a line in
+    the split's `index.jsonl` (unless `truth` is False)."""
     folder = root / "cord" / split
     folder.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (480, 960), (240, 240, 230)).save(folder / f"{doc_id}.png")
+    digest = sha(f"cord-{split}-{doc_id}")
+    Image.new("RGB", (480, 960), (240, 240, 230)).save(folder / f"{digest}.png")
     if truth:
         ground_truth = {"gt_parse": GT, "meta": {"split": split}, "valid_line": []}
-        (folder / f"{doc_id}.json").write_text(json.dumps(ground_truth), encoding="utf-8")
+        record = {
+            "row": 0,
+            "sha256": digest,
+            "image": f"{digest}.png",
+            "ground_truth": ground_truth,
+        }
+        with (folder / "index.jsonl").open("a", encoding="utf-8") as index:
+            index.write(json.dumps(record) + "\n")
     return {
-        "path": f"data/cord/{split}/{doc_id}.png",
-        "sha256": sha(f"cord-{split}-{doc_id}"),
+        "path": f"data/cord/{split}/{digest}.png",
+        "sha256": digest,
         "bytes": 1,
         "split": split,
         "doc_id": doc_id,
@@ -97,8 +107,26 @@ def test_cord_train_image_off_the_split_stops_prep(root: Path) -> None:
 def test_cord_image_without_ground_truth_stops_prep(root: Path) -> None:
     files = [_cord_doc(root, "receipt_00000", truth=False)]
     _manifest(root, [], files)
-    with pytest.raises(TrainingError, match="no gt_parse"):
-        list(data.cord_docs(root, frozenset({str(files[0]["sha256"])})))
+    shas = frozenset({str(files[0]["sha256"])})
+    with pytest.raises(TrainingError, match="unreadable CORD index"):
+        list(data.cord_docs(root, shas))
+    _cord_doc(root, "receipt_99999", split="train")  # an index without this receipt's row
+    with pytest.raises(TrainingError, match="no gt_parse for CORD train doc receipt_00000"):
+        list(data.cord_docs(root, shas))
+
+
+def test_cord_duplicate_image_takes_its_first_row(root: Path) -> None:
+    """CORD train has 800 rows but 798 images: the manifest lists each image once and its
+    target comes from the first index row with that sha256."""
+    files = [_cord_doc(root, "receipt_00000")]
+    _manifest(root, [], files)
+    second = {**GT, "total": {"total_price": "99.000"}}
+    record = {"row": 1, "sha256": files[0]["sha256"], "image": "x.png",
+              "ground_truth": {"gt_parse": second}}  # fmt: skip
+    with (root / "cord" / "train" / "index.jsonl").open("a", encoding="utf-8") as index:
+        index.write(json.dumps(record) + "\n")
+    docs = list(data.cord_docs(root, frozenset({str(files[0]["sha256"])})))
+    assert len(docs) == 1 and docs[0].target["total"] == "55.000"
 
 
 def test_cord_absent_yields_nothing(root: Path) -> None:

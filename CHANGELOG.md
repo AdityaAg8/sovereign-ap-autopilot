@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CORD data guards per source (ADR-0019 amendment 1, §9.3a). `cord_docs` now reads `gt_parse` from the split's `index.jsonl`, which is the fetcher's real layout: the old `<sha>.json` lookup could not start prep. CORD rows are checked by `cord_label_sanity`: `total` plus a line item, amounts read with the frozen real-track normaliser, and the receipt identity on the raw `gt_parse` (tax-inclusive, netted discount, service). This took the quarantine on 798 CORD train receipts from 599 (75%) to 30 (3.8%). UAE, FATURA and DocILE guard results are byte-identical, and the 5% cap is unchanged.
+
 - `make parse-cache` no longer dies on one document: a `ParseError` (a 240 s page timeout under contention, as at test 191/750 on 2026-09-29) is recorded under `failed/<key>.json` with its error and the pass continues; a rerun retries only the failed documents and clears their records, and three transient failures in a row stop the pass as `ParseServiceDownError` (the service is down). Evals that read the cache still parse a missing document live and count its failure.
 
 - Scan strip re-read lost a table row and emitted rows bottom-up with cells right to left (invoice 165d017b0a90 page 2). Merged strip zones are now put in geometric reading order (rows top to bottom, cells in the row's reading direction), and a strip that does not finish is re-read as two half-bands inside the same 90 s page deadline; pages whose first pass finishes are unchanged (`SERVICE_PARSER_VERSION` 4, ADR-0013 amendment 4; GPU validation pending).

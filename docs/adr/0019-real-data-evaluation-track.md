@@ -518,3 +518,45 @@ def masked_labels(
   - R1 training passes the probe and the P1-P5 gates, or fails them visibly.
   - `REAL_B_EVAL_QUEUE` writes `reports/real_before_after.md` with n and paired CIs.
   - `make real-report` updates the scoreboard.
+
+## Amendment 1 (2026-10-01): §9.3a Data guards per source
+
+**Problem.** Building the R1 mix showed two defects on CORD v2 train (rev `7f0115a4`):
+- `cord_docs` read a `<sha>.json` file beside each image, but `cord_fetcher` writes the labels
+  only to the split's `index.jsonl` (800 rows, 798 distinct images). Prep could not start. It
+  now reads `gt_parse` from the index by image sha256, and the first row of a duplicated image
+  wins, as in `evals.real.cord.unique_docs`.
+- The ADR-0011 §5 label checks were written for invoices. On the 798 CORD train receipts they
+  quarantined 599 (75%): 456 `label_empty` (the "3 non-null header fields" floor, while CORD
+  annotates only the totals and line items), 125 `label_arithmetic` (`subtotal + vat = total`
+  fails on tax-inclusive receipts, service charges and netted discounts) and 18 `label_format`
+  (`normalize_amount` refuses `1.234.500`, `Rp 12,000`, `@12.000`). That is far above the 5% cap.
+
+**Decision.** The guards are applied per source. UAE, FATURA and DocILE keep `label_sanity`
+unchanged, and their guard results are byte-identical, which a test checks. CORD rows go through
+`cord_label_sanity` on the target plus the receipt's raw `gt_parse`:
+- **Empty**: `total` and at least one line item must be present.
+- **Format**: `subtotal`, `vat_total` and `total` must read as amounts under `cord_amount`. That is
+  the frozen real-track rule `evals.real.normalise.normalise_amount` (unchanged, so
+  `RULES_SHA256` stands), after dropping rate tokens such as `10%`. A value with no digit (`-`)
+  fails.
+- **Arithmetic**: when `subtotal` and `total` are labelled, `total` must equal subtotal + service
+  + other service, plus the tax unless the receipt is tax-inclusive, minus the discount unless
+  the subtotal already nets it. Service, other service and discount come from the raw
+  `sub_total` group; a printed `-` counts as 0. The tolerances are unchanged (0.02 absolute,
+  0.5% relative).
+- A CORD row whose raw tree is missing stops the guards (`TrainingError`). It is never skipped.
+
+Target values stay as printed, `max_quarantine_rate` stays at 5%, and no threshold changes.
+
+**Measured on CORD train before any training** (798 distinct images): 768 kept and 30
+quarantined (3.8%). The 30 are 21 `label_empty` (no annotated total), 3 `label_format` (tax
+printed as `-`) and 6 `label_arithmetic` (for example `98,180 + 9,818 = 107,998`, where the
+"discount" is really the tax, and `45,545.45 + 4,454.55 ≠ 49,000.00`). Each of them is a label
+the run should not learn.
+
+**Consequences.** R1 trains on 768 CORD receipts rather than the 800 in §9.2's table. The
+dedup and length guards run afterwards, and the final mix counts are in PROGRESS.md and
+`guard_report.json`. The four arithmetic forms accept only identities that receipts actually
+print. Accidental agreement within 0.5% stays possible, and that risk is accepted for a
+training-data filter.
