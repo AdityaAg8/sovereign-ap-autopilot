@@ -11,18 +11,22 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
-from apx.common.errors import ParsedArtifactIntegrityError
+from apx.common.errors import ParsedArtifactIntegrityError, ParseError
 from apx.parse.parser import PaddleOcrDocumentParser
 from evals.extraction_a import _run_one, parse_input
 from evals.parse_cache import (
+    MAX_CONSECUTIVE_TRANSIENT_FAILURES,
     PARSER_SOURCE_DIRS,
     REPO_ROOT,
     ParseCache,
     ParseCacheError,
     ParseCacheMissError,
+    ParseServiceDownError,
     cache_key,
+    failure_path,
     parser_identity,
     warm,
 )
@@ -75,8 +79,8 @@ async def test_warm_parses_each_input_once(tmp_path: Path) -> None:
     cache = ParseCache(tmp_path / "cache", PARSER_ID)
     logs: list[str] = []
     inputs = [(SHA, hashlib.sha256(data).hexdigest(), data)]
-    assert await warm(cache, inputs, parser.parse, logs.append) == 1
-    assert await warm(cache, inputs, parser.parse, logs.append) == 0
+    assert (await warm(cache, inputs, parser.parse, logs.append)).parsed == 1
+    assert (await warm(cache, inputs, parser.parse, logs.append)).parsed == 0
     assert len(client.calls) == 1 and "parsed" in logs[0] and "cached" in logs[1]
 
 
@@ -172,3 +176,95 @@ def test_split_inputs_builds_one_document_per_access(
     assert inputs[1] == ("b", hashlib.sha256(b"b").hexdigest(), b"b")
     assert built == ["b"]
     assert len(inputs[:2]) == 2 and built == ["b"]
+
+
+def _timeout() -> ParseError:
+    try:
+        raise httpx.ReadTimeout("page timed out after 240 s")
+    except httpx.ReadTimeout as cause:
+        error = ParseError("parse service request failed")
+        error.__cause__ = cause
+        return error
+
+
+def _inputs(count: int) -> list[tuple[str, str, bytes]]:
+    out = []
+    for i in range(count):
+        data = f"document {i}".encode()
+        sha = hashlib.sha256(data).hexdigest()
+        out.append((sha, sha, data))
+    return out
+
+
+@pytest.mark.asyncio
+async def test_warm_records_a_failed_document_continues_and_a_rerun_retries_it(
+    tmp_path: Path,
+) -> None:
+    """One document whose page times out (the 09-29 queue death at 191/750) is recorded with its
+    error and the pass goes on; the next pass retries only that document and clears the record."""
+    inputs = _inputs(3)
+    bad = inputs[1][1]
+    real = PaddleOcrDocumentParser(_FakeOcrClient())  # type: ignore[arg-type]
+    template = None
+    calls: list[str] = []
+    failing = {bad}
+
+    async def parse(document_sha256: str, data: bytes) -> Any:
+        nonlocal template
+        calls.append(document_sha256)
+        if document_sha256 in failing:
+            raise _timeout()
+        if template is None:
+            data_dir = tmp_path / "uae"
+            data_dir.mkdir()
+            _write_doc(data_dir, has_scan=False)
+            _, pdf = document_input(data_dir, SHA, load_truth(data_dir, SHA))
+            template = await real.parse(SHA, pdf)
+        return template.model_copy(update={"document_sha256": document_sha256})
+
+    cache = ParseCache(tmp_path / "cache", PARSER_ID)
+    logs: list[str] = []
+    first = await warm(cache, inputs, parse, logs.append)
+    assert first.parsed == 2
+    assert [label for label, _ in first.failed] == [bad]
+    assert "ParseError" in first.failed[0][1] and "FAILED" in logs[1]
+    record = failure_path(cache, cache_key(bad, inputs[1][2]))
+    assert bad in record.read_text(encoding="utf-8")
+    assert cache_key(bad, inputs[1][2]) not in cache
+
+    failing.clear()
+    calls.clear()
+    second = await warm(cache, inputs, parse, logs.append)
+    assert calls == [bad]  # only the failed document is parsed again
+    assert second.parsed == 1 and second.failed == ()
+    assert not record.exists()
+    assert cache_key(bad, inputs[1][2]) in cache
+
+
+@pytest.mark.asyncio
+async def test_warm_stops_when_the_parse_service_is_down(tmp_path: Path) -> None:
+    """A run of transient failures means the service is down: stop, don't mark every input."""
+    inputs = _inputs(MAX_CONSECUTIVE_TRANSIENT_FAILURES + 2)
+    calls: list[str] = []
+
+    async def parse(document_sha256: str, data: bytes) -> Any:
+        calls.append(document_sha256)
+        raise _timeout()
+
+    cache = ParseCache(tmp_path / "cache", PARSER_ID)
+    with pytest.raises(ParseServiceDownError):
+        await warm(cache, inputs, parse, lambda _m: None)
+    assert len(calls) == MAX_CONSECUTIVE_TRANSIENT_FAILURES
+
+
+@pytest.mark.asyncio
+async def test_warm_keeps_going_past_deterministic_failures(tmp_path: Path) -> None:
+    """Deterministic failures (an unreadable document) never count as the service being down."""
+    inputs = _inputs(MAX_CONSECUTIVE_TRANSIENT_FAILURES + 2)
+
+    async def parse(document_sha256: str, data: bytes) -> Any:
+        raise ParseError("unreadable document")
+
+    cache = ParseCache(tmp_path / "cache", PARSER_ID)
+    result = await warm(cache, inputs, parse, lambda _m: None)
+    assert result.parsed == 0 and len(result.failed) == len(inputs)

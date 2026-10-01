@@ -11,11 +11,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import json
 import os
 import re
 import sys
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, overload
 
@@ -210,24 +212,75 @@ class ParseCache:
         return len(pending)
 
 
+MAX_CONSECUTIVE_TRANSIENT_FAILURES: Final = 3
+"""Transient failures in a row (after each one's retries) that mean the parse service itself is
+down, not one hard document: `warm` stops instead of recording every remaining input as failed."""
+
+
+class ParseServiceDownError(ParseCacheError):
+    """`warm` saw `MAX_CONSECUTIVE_TRANSIENT_FAILURES` transient parse failures in a row."""
+
+
+@dataclass(frozen=True)
+class WarmResult:
+    """What one `warm` pass did: inputs parsed now, and the (label, error) of each input whose
+    parse failed (recorded under `failed/`, retried by the next pass)."""
+
+    parsed: int
+    failed: tuple[tuple[str, str], ...]
+
+
+def failure_path(cache: ParseCache, key: str) -> Path:
+    """The failure record of `key`: written when its parse fails, removed when one succeeds."""
+    return cache.directory / "failed" / f"{cache._entry(key).name}"
+
+
 async def warm(
     cache: ParseCache,
     inputs: Sequence[tuple[str, str, bytes]],
     parse: ParseFn,
     log: Callable[[str], None] = print,
-) -> int:
-    """Parse every (label, document sha256, bytes) input into `cache` ahead of the GPU evals;
-    returns how many were parsed now (the rest were cached)."""
+) -> WarmResult:
+    """Parse every (label, document sha256, bytes) input into `cache` ahead of the GPU evals.
+    A `ParseError` on one input (a page timeout under contention, an unreadable scan) is recorded
+    in `failed/<key>.json` with its error and the pass continues: the input stays uncached, so
+    the next pass retries it and the evals that read the cache parse it live and count its
+    failure in their denominators. Only a run of transient failures (the service is down) stops
+    the pass, raised as `ParseServiceDownError`."""
     parsed = 0
+    failed: list[tuple[str, str]] = []
+    transient_run = 0
     for position, (label, document_sha256, data) in enumerate(inputs, start=1):
-        hit = cache_key(document_sha256, data) in cache
-        document = await cache.parse(document_sha256, data, parse)
+        key = cache_key(document_sha256, data)
+        hit = key in cache
+        record = failure_path(cache, key)
+        try:
+            document = await cache.parse(document_sha256, data, parse)
+        except ParseError as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            failed.append((label, error))
+            record.parent.mkdir(parents=True, exist_ok=True)
+            _write_atomic(
+                record,
+                json.dumps(
+                    {"label": label, "document_sha256": document_sha256, "error": error}
+                ).encode("utf-8"),
+            )
+            log(f"[{position}/{len(inputs)}] {label[:12]} FAILED {error}")
+            transient_run = transient_run + 1 if is_transient_parse_error(exc) else 0
+            if transient_run >= MAX_CONSECUTIVE_TRANSIENT_FAILURES:
+                raise ParseServiceDownError(
+                    f"parse service failed {transient_run} times in a row; stopping the pass"
+                ) from exc
+            continue
+        transient_run = 0
+        record.unlink(missing_ok=True)
         parsed += not hit
         log(
             f"[{position}/{len(inputs)}] {label[:12]} {'cached' if hit else 'parsed'} "
             f"pages={len(document.pages)}"
         )
-    return parsed
+    return WarmResult(parsed=parsed, failed=tuple(failed))
 
 
 class SplitInputs(Sequence[tuple[str, str, bytes]]):
@@ -281,6 +334,7 @@ async def _run(args: argparse.Namespace) -> int:  # pragma: no cover - needs the
     client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(client)
     parsed = 0
+    failed: list[tuple[str, str]] = []
     try:
         for split in args.splits.split(","):
             inputs = split_inputs(args.data_root / split, split, args.limit)
@@ -288,11 +342,15 @@ async def _run(args: argparse.Namespace) -> int:  # pragma: no cover - needs the
                 print(f"no UAE {split} documents in {args.data_root / split}", file=sys.stderr)
                 return 2
             print(f"==> {split}: {len(inputs)} documents -> {cache.directory}", flush=True)
-            parsed += await warm(cache, inputs, retrying(parser.parse, log=_log), _log)
+            result = await warm(cache, inputs, retrying(parser.parse, log=_log), _log)
+            parsed += result.parsed
+            failed.extend(result.failed)
     finally:
         if parsed:
             await client.unload()  # free the OCR model's VRAM before the GPU evals start
-    print(f"parse cache {cache.parser_id}: {parsed} parsed now")
+    print(f"parse cache {cache.parser_id}: {parsed} parsed now, {len(failed)} failed")
+    for label, error in failed:  # recorded under failed/; a rerun retries them
+        print(f"  failed {label[:12]}: {error}")
     return 0
 
 

@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `make parse-cache` no longer dies on one document: a `ParseError` (a 240 s page timeout under contention, as at test 191/750 on 2026-09-29) is recorded under `failed/<key>.json` with its error and the pass continues; a rerun retries only the failed documents and clears their records, and three transient failures in a row stop the pass as `ParseServiceDownError` (the service is down). Evals that read the cache still parse a missing document live and count its failure.
+
 - Scan strip re-read lost a table row and emitted rows bottom-up with cells right to left (invoice 165d017b0a90 page 2). Merged strip zones are now put in geometric reading order (rows top to bottom, cells in the row's reading direction), and a strip that does not finish is re-read as two half-bands inside the same 90 s page deadline; pages whose first pass finishes are unchanged (`SERVICE_PARSER_VERSION` 4, ADR-0013 amendment 4; GPU validation pending).
 - PaddleOCR-VL looped on 16 of 16 Arabic-first scans and spent the whole 3072-token page budget. A loop or budget stop now re-reads the page as 4 overlapping strips with a loop breaker, and pages that finish are unchanged (`SERVICE_PARSER_VERSION` 3, ADR-0013 amendment 2; 1ec8d8c).
 - M11 pass-2 findings (1ec8d8c): a review signal that arrives before the review wait is buffered, with pre-fix histories replay-tested (N-01). Reject re-sends like approve (N-02). The audit row is written in the same transaction (N-07). `review_hold` never reopens (N-09). Raster errors are non-retryable (N-11). A stale approval ends FAILED with a typed reason (N-13).
