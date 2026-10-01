@@ -20,7 +20,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate archive-stale-rows \
-        train-b-reeval guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
+        train-b-reeval test-trainer-gpu guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
         real-fetch-cord real-parse-cord real-cord-dev real-cord real-cord-b real-extractbench \
         real-docile real-reality-template real-reality real-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
@@ -332,9 +332,15 @@ train-b-pause:
 	docker stop --time 180 extractor-b-trainer
 
 test-trainer:
-	@echo "==> trainer-image tests on CPU (pytest -m trainer)"
+	@echo "==> trainer-image tests on CPU (pytest -m 'trainer and not gpu')"
 	cd infra && $(COMPOSE) --profile train run --rm --no-deps -e CUDA_VISIBLE_DEVICES= trainer \
-		python -m pytest -m trainer -p no:cacheprovider --no-cov tests/trainer
+		python -m pytest -m "trainer and not gpu" -p no:cacheprovider --no-cov tests/trainer
+
+# ADR-0011 amendment 6 item 3: the DeltaNet fast-path tests need the GPU visible (~2 min).
+test-trainer-gpu: gpu-free
+	@echo "==> trainer-image GPU tests (pytest -m 'trainer and gpu')"
+	cd infra && $(COMPOSE) --profile train run --rm --no-deps trainer \
+		python -m pytest -m "trainer and gpu" -p no:cacheprovider --no-cov tests/trainer
 
 ## --- Extractor B export and report (ADR-0009 §1.7, training-loop.md step 13) ----------
 EXPORTER_RUN = cd infra && GIT_SHA=$$(git rev-parse HEAD) \

@@ -81,7 +81,8 @@ Guide: [Training Extractor B](training.md).
 | `make gates-b` | GPU, needs `make up`: P1-P5 → `reports/extractor_b_gates.md`; exit 1 if a gate fails |
 | `make promote-b` | CPU: only if every gate passed, move `champion` (calibrator, models.lock, llama-swap, alias) |
 | `make test-export` | Exporter-image tests on CPU |
-| `make test-trainer` | Trainer-image tests on CPU |
+| `make test-trainer` | Trainer-image tests on CPU (`trainer and not gpu`) |
+| `make test-trainer-gpu` | Trainer-image GPU tests (DeltaNet fast path, ADR-0011 amdt 6 item 3) |
 | `make retrain` | Challenger vs champion on gates G1-G11; promote only if nothing regresses ([ADR-0015](adr/0015-promotion-gates.md)). Not usable yet: exits 2 with `RetrainPrerequisiteError` until the production adapters land |
 
 ## Useful one-liners

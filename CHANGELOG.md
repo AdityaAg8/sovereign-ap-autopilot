@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `make test-trainer` selected `-m trainer` with the GPU hidden, so the two GPU-marked DeltaNet fast-path tests could never pass there. It now runs `trainer and not gpu` (12 pass), and the new `make test-trainer-gpu` runs `trainer and gpu` with the GPU visible: 2/2 pass on trainer image 2026.9.28 (ADR-0011 amendment 6 item 3).
+
 - CORD hold-out leakage through photo copies (ADR-0019 amendment 2). CORD v2 re-releases receipt photos with the anonymisation blur redone, and 27 CORD train photos are copies of validation (13) or test (14) receipts that the sha256 leakage check could not see. `cord_docs` now drops, by image pHash alone (Hamming ≤ 4): train copies of a hold-out photo, redundant train copies with the same label (keeping one), and copies whose labels conflict (all of them). Every drop is logged, and prep stops if the hold-out indexes are missing. 798 photos -> 709. Guards and the 5% cap are unchanged.
 
 - `evals.real --b-version` pins each B round to its own llama-swap alias: `v1` -> the new `extractor-b-v1` (the v1 export, never repointed), `r1`/`r2` -> `extractor-b-r1`/`-r2`, which are added when that round's export is registered. Before this, `v1` read `extractor-b-challenger`, which would have scored R1 as "v1" once the challenger moved. A version whose alias is missing fails typed.
