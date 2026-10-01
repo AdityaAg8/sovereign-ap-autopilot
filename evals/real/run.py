@@ -51,8 +51,14 @@ BEFORE_AFTER_NAME: Final = "real_before_after"
 
 A_ALIAS: Final = "extractor-a"
 A_VERSION: Final = "base"
-B_ALIASES: Final[Mapping[str, str]] = {"v1": "extractor-b-challenger"}
-"""B version -> llama-swap alias. Phase 2 adds r1/r2 when their exports are registered."""
+B_ALIASES: Final[Mapping[str, str]] = {
+    "v1": "extractor-b-v1",
+    "r1": "extractor-b-r1",
+    "r2": "extractor-b-r2",
+}
+"""B version -> llama-swap alias, each pinned to one export (never `extractor-b-challenger`, which
+moves between rounds). A round's alias is added to infra/llama-swap.yaml when its export is
+registered; until then a run on it fails typed (`ServedModelError`) instead of scoring v1."""
 B_ORDER: Final[tuple[str, ...]] = ("v1", "r1", "r2")
 B_TRAINED_ON: Final[Mapping[str, frozenset[str]]] = {
     "v1": frozenset({"fatura"}),

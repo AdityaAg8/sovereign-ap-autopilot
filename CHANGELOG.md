@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `evals.real --b-version` pins each B round to its own llama-swap alias: `v1` -> the new `extractor-b-v1` (the v1 export, never repointed), `r1`/`r2` -> `extractor-b-r1`/`-r2`, which are added when that round's export is registered. Before this, `v1` read `extractor-b-challenger`, which would have scored R1 as "v1" once the challenger moved. A version whose alias is missing fails typed.
+
 - CORD data guards per source (ADR-0019 amendment 1, §9.3a). `cord_docs` now reads `gt_parse` from the split's `index.jsonl`, which is the fetcher's real layout: the old `<sha>.json` lookup could not start prep. CORD rows are checked by `cord_label_sanity`: `total` plus a line item, amounts read with the frozen real-track normaliser, and the receipt identity on the raw `gt_parse` (tax-inclusive, netted discount, service). This took the quarantine on 798 CORD train receipts from 599 (75%) to 30 (3.8%). UAE, FATURA and DocILE guard results are byte-identical, and the 5% cap is unchanged.
 
 - `make parse-cache` no longer dies on one document: a `ParseError` (a 240 s page timeout under contention, as at test 191/750 on 2026-09-29) is recorded under `failed/<key>.json` with its error and the pass continues; a rerun retries only the failed documents and clears their records, and three transient failures in a row stop the pass as `ParseServiceDownError` (the service is down). Evals that read the cache still parse a missing document live and count its failure.

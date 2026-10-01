@@ -369,3 +369,24 @@ def test_rows_path_and_row_schema(tmp_path: Path) -> None:
 def test_set_docs_refuses_cord_train(cord_root: Path) -> None:
     with pytest.raises(RealTrackError, match="never run"):
         real_run.set_docs("cord", "train", cord_root)
+
+
+def test_b_versions_pin_their_own_export_never_the_moving_challenger() -> None:
+    """`--b-version v1` must keep scoring v1 after `extractor-b-challenger` moves to R1: each
+    version has its own alias, v1's serves the v1 export, and every configured version alias
+    sits in the exclusive `extract` swap group."""
+    import yaml
+
+    from apx.extract.identity import served_paths
+
+    config_path = Path("infra/llama-swap.yaml")
+    assert set(real_run.B_ALIASES) == set(real_run.B_ORDER)
+    assert "extractor-b-challenger" not in real_run.B_ALIASES.values()
+    model, mmproj = served_paths(config_path, real_run.B_ALIASES["v1"])
+    assert model.startswith("/models/extractor_b/b-20260923T2025-eb0aea7d/export/")
+    assert mmproj is not None and "b-20260923T2025-eb0aea7d" in mmproj
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    members = config["routing"]["router"]["settings"]["groups"]["extract"]["members"]
+    for alias in real_run.B_ALIASES.values():
+        if alias in config["models"]:
+            assert alias in members
