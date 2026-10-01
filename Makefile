@@ -20,7 +20,7 @@ COMPOSE = docker compose $(if $(wildcard .env),--env-file ../.env,)
         train-b-data train-b-probe train-b train-b-new train-b-pause test-trainer \
         report-b export-b export-b-image test-export smoke-b test-integration test-artifacts \
         extraction-a-adr0012 extraction-a-compare cal-rows-a cal-rows-b calibrate archive-stale-rows \
-        guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
+        train-b-reeval guard-data train-guard guard-report bakeoff-probe bakeoff bakeoff-report parse-cache gpu-queue \
         real-fetch-cord real-parse-cord real-cord-dev real-cord real-cord-b real-extractbench \
         real-docile real-reality-template real-reality real-report \
         verify-m0 verify-m1 verify-m2 verify-m3 verify-m4 verify-m5 verify-m6 \
@@ -306,6 +306,13 @@ train-b-probe: gpu-free
 	@echo "==> Extractor B VRAM probe (foreground) -> data/ml/extractor_b/probe.json"
 	mkdir -p models/extractor_b data/ml
 	$(TRAINER_RUN) python -m ml.extractor_b.train --probe
+
+# ADR-0011 amendment 6 item 5: re-run a checkpoint's dev eval on the current trainer image; it
+# must reproduce the recorded dev F1 (± 0.1) and valid-JSON rate (± 1 row). GPU, foreground.
+REEVAL_CHECKPOINT ?= models/extractor_b/b-20260923T2025-eb0aea7d/checkpoints/checkpoint-000383
+train-b-reeval: gpu-free
+	@echo "==> Extractor B dev re-eval of $(REEVAL_CHECKPOINT) on $(TRAINER_IMAGE) -> data/ml/extractor_b/reeval.json"
+	$(TRAINER_RUN) python -m ml.extractor_b.reeval --checkpoint $(REEVAL_CHECKPOINT)
 
 train-b: gpu-free
 	@echo "==> Extractor B training, resuming the newest run (detached; log: logs/extractor_b_train.log)"
