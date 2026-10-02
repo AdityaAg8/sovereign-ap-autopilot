@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The parse-cache warm pass and `evals.real` unloaded the OCR model only when a document had been parsed, so a pass whose every parse failed (or that stopped on a service failure) left the model resident in VRAM next to the following GPU eval. Both now unload whenever any page reached the parse service (`Contacted`); an all-cached pass still skips it. Found in the session code review.
+
 - CI: the artifacts pytest step (35 tests) was judged on its own against the 85% coverage bar (REVIEW M-04) and failed at 46%. It now appends to the unit step's coverage data (`--cov-append`), so the unchanged 85% bar is checked on everything CI ran.
 
 - `make test-trainer` selected `-m trainer` with the GPU hidden, so the two GPU-marked DeltaNet fast-path tests could never pass there. It now runs `trainer and not gpu` (12 pass), and the new `make test-trainer-gpu` runs `trainer and gpu` with the GPU visible: 2/2 pass on trainer image 2026.9.28 (ADR-0011 amendment 6 item 3).
