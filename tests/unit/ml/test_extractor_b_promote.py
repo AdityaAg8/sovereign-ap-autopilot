@@ -19,6 +19,7 @@ import httpx
 import pytest
 import yaml
 
+from apx.extract.identity import served_paths
 from evals.extraction_identity import RowIdentity
 from evals.scorers.perf import LatencyStats
 from ml.extractor_b.export import (
@@ -69,7 +70,16 @@ from tests.unit.ml.conftest import sha
 from tests.unit.ml.test_real_holdouts import load_fake_reports, write_real_report
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-RUN_ID = "b-20260923T2025-eb0aea7d"
+
+
+def _challenger_run_id() -> str:
+    """The run the committed `extractor-b-challenger` entry serves (`/models/extractor_b/<run>/
+    export/...`): the tests copy that config, so they follow it when a new round is exported."""
+    model, _ = served_paths(REPO_ROOT / "infra" / "llama-swap.yaml", "extractor-b-challenger")
+    return model.split("/")[3]
+
+
+RUN_ID = _challenger_run_id()
 MLFLOW_RUN = "62d8e2ab796c45d482a1063876eb69d5"
 BASE_REV = "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
 

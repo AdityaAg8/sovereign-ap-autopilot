@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Extractor B R1 (ADR-0019 §9) exported: run `b-20261001T1641-eb0aea7d`, best step 594 (dev F1 97.25, valid JSON 0.955 on 178 UAE dev docs; v1 97.17 / 0.955), Q4_K_M sha256 `11ce0660…`. `extractor-b-challenger` now serves R1 for smoke, eval-b and gates, and the new pinned `extractor-b-r1` alias serves `evals.real --b-version r1`. The champion is unchanged. The promote tests read the challenger run from the config instead of hardcoding v1.
+
 - `make train-b-reeval` (`python -m ml.extractor_b.reeval`) re-runs a saved checkpoint's generative dev eval on the current trainer image, under the GPU lock and with the same model load as training. It passes only when dev F1 is within ± 0.1 and the valid-JSON rate within one dev row of the recorded values: ADR-0011 amendment 6 GPU validation item 5, which had no command before.
 
 - Real-data evaluation track, phase 1 (ADR-0019): `python -m evals.real run|parse|report|before-after|reality-template` runs Extractor A or B on CORD v2, ExtractBench short, DocILE val and the owner's reality set. Every failure (timeout, 5xx, 400, parse error, invalid JSON) is a row that stays in every denominator, three server failures in a row stop the run, protected splits refuse an uncommitted `evals/real`, `apx/extract` or `ml/extractor_b/mappings.py`, and reports carry n, bootstrap/Wilson CIs, labelled baselines (Donut, ExtractBench 92.31) and a paired B before/after. The scoreboard gets a report-only real-data section.
