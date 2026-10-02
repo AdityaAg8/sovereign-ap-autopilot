@@ -23,7 +23,7 @@ Run `b-20260923T2025-eb0aea7d` (MLflow `62d8e2ab796c45d482a1063876eb69d5`). Gene
 | base_revision | `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` |
 | image_digest | `sha256:7c46bc897a4d3ea09b7e4b83bd09d33c3356da67cdc209a82df579134af069e8` |
 | rung | L0 |
-| git_sha (run start; recorded, not compared) | `48cc8657745427c666601ab317e4bcea52ab89b9` |
+| git_sha (run start; recorded, not compared) | `68fedc078c39b50973b4572db1fdf9a20510a271` |
 
 ## Dev curve
 

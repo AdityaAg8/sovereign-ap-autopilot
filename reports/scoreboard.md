@@ -40,7 +40,7 @@ Runs with a no-model predictor (`dummy`) prove `evals/run.py` loads, predicts an
 each set end to end. Their numbers measure the harness, not a model, so they never fill
 a row above.
 
-- Latest: `20260922T144335749079-dummy` (git `c9b5a24`, 2026-09-22 14:43 UTC), 3 run(s) total
+- Latest: `20260922T144335749079-dummy` (git `41bb9db`, 2026-09-22 14:43 UTC), 3 run(s) total
 - Scored end to end: fatura, extractbench, pint_ae
 - Deferred: docile (needs DOCILE_TOKEN (see docs/runbook.md)); uae (uae present in manifest but M1.4 does not yet wire the UAE field-F1 gold loader)
 
