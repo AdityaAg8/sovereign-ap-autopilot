@@ -182,6 +182,19 @@ def test_normalize_amount_and_date_are_idempotent_on_their_own_canonical_form() 
         assert once == twice
 
 
+def test_an_amount_too_long_for_cents_compares_as_text_not_a_crash() -> None:
+    """A 27+ integer-digit "amount" (joined account digits, a hostile model output) overflowed
+    the cents quantize with `decimal.InvalidOperation`; it is now an unparseable amount: the
+    `~` text form, idempotent, and never equal to a real amount."""
+    widest = "9" * 26
+    assert normalize_for_compare(FieldKind.AMOUNT, widest) == f"{widest}.00"
+    for raw in ("1" * 27, "(" + "1" * 27 + ".50)", "1 331 234 567 890 123 456 789 012 345"):
+        once = normalize_for_compare(FieldKind.AMOUNT, raw)
+        assert once is not None and once.startswith("~")
+        assert normalize_for_compare(FieldKind.AMOUNT, once) == once
+    assert is_correct(FieldName.TOTAL, "1" * 27, "1" * 26) is False
+
+
 # --------------------------------------------------------------------------------------------
 # is_correct
 # --------------------------------------------------------------------------------------------

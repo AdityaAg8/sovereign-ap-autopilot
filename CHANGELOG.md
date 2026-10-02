@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A digit run of 27 or more integer digits (three 9-digit account groups the grounder joins into one amount candidate, or a hostile model output) overflowed the 28-digit decimal context at the cents quantize and raised `decimal.InvalidOperation`: it crashed the 2026-10-02 Extractor A eval at document 133/750, and `normalize_for_compare` (A/B agreement, trust features, field F1) had the same crash. `normalize_amount` now raises `NormalizationError` ("amount out of range") past `MAX_AMOUNT_INTEGER_DIGITS` = 26, and the comparator treats such a value as an unparseable amount (`~` text form). Amounts up to 26 integer digits are unchanged.
+
 - The parse-cache warm pass and `evals.real` unloaded the OCR model only when a document had been parsed, so a pass whose every parse failed (or that stopped on a service failure) left the model resident in VRAM next to the following GPU eval. Both now unload whenever any page reached the parse service (`Contacted`); an all-cached pass still skips it. Found in the session code review.
 
 - CI: the artifacts pytest step (35 tests) was judged on its own against the 85% coverage bar (REVIEW M-04) and failed at 46%. It now appends to the unit step's coverage data (`--cov-append`), so the unchanged 85% bar is checked on everything CI ran.

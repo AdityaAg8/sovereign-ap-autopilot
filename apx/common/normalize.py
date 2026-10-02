@@ -88,6 +88,10 @@ _NAMED_MONTH_DATE_RE: Final[re.Pattern[str]] = re.compile(r"^(\d{1,2})\s+([^\d\s
 _TRN_STRIP_RE: Final[re.Pattern[str]] = re.compile(r"[\s\-]")
 _WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 _AMOUNT_RE: Final[re.Pattern[str]] = re.compile(r"^\d+(\.\d+)?$")
+MAX_AMOUNT_INTEGER_DIGITS: Final[int] = 26
+"""Integer digits an amount may have and still quantize to cents in the default 28-digit decimal
+context. A longer digit run (account or IBAN digits the grounder joined into one word run) is not
+an amount: `NormalizationError`, never `decimal.InvalidOperation` at the caller's quantize."""
 
 
 class NormalizationError(ApxError):
@@ -163,6 +167,8 @@ def normalize_amount(raw: str) -> Decimal:
         value = Decimal(text)
     except InvalidOperation as exc:
         raise NormalizationError(f"unparseable amount: {raw!r}") from exc
+    if value.adjusted() >= MAX_AMOUNT_INTEGER_DIGITS:
+        raise NormalizationError(f"amount out of range: {raw!r}")
     return -value if negative else value
 
 
