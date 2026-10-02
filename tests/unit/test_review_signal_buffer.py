@@ -20,6 +20,7 @@ from apx.common.types import Route
 from apx.fraud.interfaces import FraudReport
 from apx.parse.interfaces import ParsedDocumentRef
 from apx.policy.interfaces import RoutingDecision
+from apx.workflows.corrections import ReviewCorrections
 from apx.workflows.interfaces import InvoiceStatus, InvoiceWorkflowInput, InvoiceWorkflowState
 from apx.workflows.review_guard import StaleApprovalError
 from apx.workflows.workflow import REVIEW_BUFFER_PATCH, InvoiceWorkflow, ReviewDecision
@@ -158,7 +159,13 @@ async def test_an_early_signal_is_never_read_when_the_route_is_auto(
 @dataclass
 class _StaleApproval(FakeInvoiceActivities):
     @activity.defn(name="confirm_review")
-    async def confirm_review(self, invoice_id: str, approved: bool) -> bool:
+    async def confirm_review(
+        self,
+        invoice_id: str,
+        approved: bool,
+        corrections: ReviewCorrections | None = None,
+        check_corrections: bool = False,
+    ) -> bool:
         self.calls.append("confirm_review")
         raise StaleApprovalError("approval digest does not match the current invoice or payee")
 

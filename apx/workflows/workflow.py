@@ -4,7 +4,8 @@ Deterministic by construction: activities (in `apx.workflows.activities`) do eve
 external side effect and wall-clock read; this file only sequences them and holds in-memory
 state for the `status` query (PRD §3, §6.4, §10 M5.2). A `review` signal is acted on only once
 `confirm_review` finds it backed by the database (REVIEW.md C-03); an unbacked one is ignored, and
-one that arrives before the review wait is buffered for it (REVIEW.md N-01)."""
+one that arrives before the review wait is buffered for it (REVIEW.md N-01). An approval's
+corrections are checked there too: they must be the ones recorded with the approval (N-03)."""
 
 from __future__ import annotations
 
@@ -159,6 +160,10 @@ routing and without `confirm_review` after the review signal (REVIEW.md C-03, H-
 REVIEW_BUFFER_PATCH = "m11-review-signal-buffer"
 """`workflow.patched` id: histories recorded before M11.3 replay a `review` signal that arrived
 before the review wait as dropped; new executions buffer it for the wait (REVIEW.md N-01)."""
+REVIEW_SIGNAL_CORRECTIONS_PATCH = "m11-review-signal-corrections"
+"""`workflow.patched` id: histories recorded before M11.4 replay `confirm_review` with the invoice
+id and the decision only; new executions also pass the signal's corrections and ask the activity
+to check them against the approval's recorded corrections digest (REVIEW.md N-03, KI-02)."""
 _BEFORE_REVIEW_WAIT: Final = frozenset(
     {
         InvoiceStatus.RECEIVED,
@@ -402,7 +407,9 @@ class InvoiceWorkflow:
         dropped, and the invoice stays awaiting review for a real decision. An approval the API
         did record but whose digest or payee has since moved raises `StaleApprovalError`
         (non-retryable), so the run ends FAILED with that reason instead of waiting forever for
-        a decision nobody can send again (N-13)."""
+        a decision nobody can send again (N-13). N-03: the signal's corrections, which
+        `apply_review` applies next, must digest to those recorded with the approval, and an edit
+        of the invoice's corrections since the approval makes it stale."""
         guarded = workflow.patched(REVIEW_GUARD_PATCH)
         while True:
             await workflow.wait_condition(lambda: self._review is not None)
@@ -410,9 +417,12 @@ class InvoiceWorkflow:
             assert decision is not None  # narrows for type-checking; set by wait_condition
             if not guarded:
                 return decision
+            confirm_args: list[object] = [invoice_id, decision.approved]
+            if workflow.patched(REVIEW_SIGNAL_CORRECTIONS_PATCH):
+                confirm_args += [decision.corrections, True]
             backed: bool = await workflow.execute_activity(
                 "confirm_review",
-                args=[invoice_id, decision.approved],
+                args=confirm_args,
                 result_type=bool,
                 start_to_close_timeout=_ACTIVITY_TIMEOUT,
                 retry_policy=_retry_policy("confirm_review"),

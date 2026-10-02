@@ -37,6 +37,7 @@ from apx.policy.interfaces import PolicyReason, PolicyRule, RoutedPayee, Routing
 from apx.scan.interfaces import ScanReport
 from apx.trust.interfaces import TrustDecision
 from apx.validate.interfaces import ValidationReport
+from apx.workflows.corrections import ReviewCorrections
 from apx.workflows.interfaces import InvoiceStatus, InvoiceWorkflowInput, InvoiceWorkflowState, Step
 from apx.workflows.workflow import OUTAGE_ATTEMPTS, InvoiceWorkflow, ReviewDecision
 
@@ -169,6 +170,8 @@ class FakeInvoiceActivities:
     """`confirm_review` finds this many review signals unbacked before one is backed."""
     confirmed: list[bool] = field(default_factory=list)
     """The `approved` flag of every signal `confirm_review` checked."""
+    confirm_corrections: list[tuple[ReviewCorrections | None, bool]] = field(default_factory=list)
+    """The `(corrections, check_corrections)` arguments of every `confirm_review` call."""
 
     @activity.defn(name="scan")
     async def scan(self, inp: InvoiceWorkflowInput) -> ScanReport:
@@ -232,9 +235,16 @@ class FakeInvoiceActivities:
         return Route.REVIEW if self.held_for_review and route is Route.AUTO else route
 
     @activity.defn(name="confirm_review")
-    async def confirm_review(self, invoice_id: str, approved: bool) -> bool:
+    async def confirm_review(
+        self,
+        invoice_id: str,
+        approved: bool,
+        corrections: ReviewCorrections | None = None,
+        check_corrections: bool = False,
+    ) -> bool:
         self.calls.append("confirm_review")
         self.confirmed.append(approved)
+        self.confirm_corrections.append((corrections, check_corrections))
         if self.unbacked_signals > 0:
             self.unbacked_signals -= 1
             return False

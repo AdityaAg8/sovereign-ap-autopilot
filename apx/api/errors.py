@@ -10,12 +10,13 @@ import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from apx.api.signals import WorkflowSignalError
+from apx.api.signals import WorkflowAlreadyCompletedError, WorkflowSignalError
 from apx.common.errors import (
     ApxError,
     ConfigError,
     InvoiceStateConflictError,
     PolicyDeniedError,
+    ProposalInvoiceMismatchError,
     ProposalNotExecutableError,
     SegregationOfDutiesError,
 )
@@ -54,6 +55,12 @@ def install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(InvoiceStateConflictError)
     async def _state_conflict(_request: Request, exc: InvoiceStateConflictError) -> JSONResponse:
+        return _error_response(status.HTTP_409_CONFLICT, str(exc))
+
+    @app.exception_handler(ProposalInvoiceMismatchError)
+    async def _proposal_mismatch(
+        _request: Request, exc: ProposalInvoiceMismatchError
+    ) -> JSONResponse:
         return _error_response(status.HTTP_409_CONFLICT, str(exc))
 
     @app.exception_handler(ProposalNotExecutableError)
@@ -96,6 +103,12 @@ def install_exception_handlers(app: FastAPI) -> None:
     async def _workflow_start_failed(_request: Request, exc: WorkflowStartError) -> JSONResponse:
         logger.error("workflow_start_failed", error=str(exc))
         return _error_response(status.HTTP_502_BAD_GATEWAY, "could not start the invoice workflow")
+
+    @app.exception_handler(WorkflowAlreadyCompletedError)
+    async def _workflow_completed(
+        _request: Request, exc: WorkflowAlreadyCompletedError
+    ) -> JSONResponse:
+        return _error_response(status.HTTP_409_CONFLICT, str(exc))
 
     @app.exception_handler(WorkflowSignalError)
     async def _signal_failed(_request: Request, exc: WorkflowSignalError) -> JSONResponse:

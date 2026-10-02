@@ -260,7 +260,7 @@ change needs an ADR with evidence ([ADR-0005](docs/adr/0005-eval-protocol.md)).
 | Field accuracy, EN and AR | UAE test | Report | 99.24% overall, Extractor A; Extractor B in training | 🚧 In progress |
 | Error among auto-accepted fields | UAE test | ≤ 1% at δ = 5% | Calibration and Learn-then-Test code merged; fit waits for Extractor B | 🚧 In progress |
 | Straight-through rate | UAE test | Report at α = 0.5, 1, 2% | Waits for the trust gate | ⏳ Pending |
-| Payment-changing attack success | Attack suite, end to end | 0 | 2 of 2 attack PDFs held in each live run so far; full 312-case run pending | ⏳ Pending |
+| Payment-changing attack success | Attack suite, end to end | 0 | Committed live run: 0 of 2 attack PDFs confirmed kept out of payment (both still `pending`, [report](reports/e2e_pipeline.md)); full 312-case run pending | ⏳ Pending |
 | Guard precision, recall, F1 | Attack suite + public sets | Report | Our ModernBERT-base fine-tune: F1 0.800 (precision 1.000, recall 0.667, 0 of 406 hard negatives flagged) vs best baseline `siberiancat/modernbert-prompt-injection` F1 0.658; zero-width recall 0/10 is covered by the scanner's normalisation, not the guard ([report](reports/guard.md)) | ✅ Reported |
 | Tool-call accuracy, citation faithfulness | 100 scripted chat tasks | Report | Stock Qwen3.5-9B: 65.0% exact tool calls, 92.4% citation faithfulness, 88.2% refusal accuracy ([report](reports/chat_evals.md)) | ✅ Reported |
 | AgentDojo banking utility and attack success | AgentDojo | Report | Stock: utility 87.5%, 76.4% under attack, attack success 22.2% on AgentDojo's own tools (uncensored: 30.6%). In this system the agent can only propose, so payments still need P1-P5 and a human ([report](reports/chat_evals.md)) | ✅ Reported |
