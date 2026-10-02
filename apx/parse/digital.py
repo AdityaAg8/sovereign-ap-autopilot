@@ -210,21 +210,27 @@ def _parse_digital_page(
     )
 
 
+def _is_mark(text: str) -> bool:
+    """A glyph is a combining mark when its text is all non-spacing marks. pdfplumber gives one
+    char per glyph, but a ligature (a font mapping one glyph to "fi") carries several code points
+    and an unmapped glyph none, which `unicodedata.bidirectional` (one code point only) cannot
+    take: both are bases. For a single code point this is exactly `bidirectional(c) == "NSM"`."""
+    return bool(text) and all(unicodedata.bidirectional(ch) == "NSM" for ch in text)
+
+
 def _visual_text(raw: _RawWord) -> str:
     """The word's glyphs left to right, with each combining mark placed directly after the base
     glyph it is drawn on. Marks are zero-width and positioned at or inside their base's span,
     so pdfplumber's x-sort can land a mark after the wrong neighbour (a damma read onto the
     letter beside it); this re-attaches each mark to the base whose [x0, x1) holds it."""
     chars = raw.get("chars")
-    if not chars or not any(unicodedata.bidirectional(c["text"]) == "NSM" for c in chars):
+    if not chars or not any(_is_mark(c["text"]) for c in chars):
         return raw["text"]
-    bases = sorted(
-        (c for c in chars if unicodedata.bidirectional(c["text"]) != "NSM"), key=lambda c: c["x0"]
-    )
+    bases = sorted((c for c in chars if not _is_mark(c["text"])), key=lambda c: c["x0"])
     if not bases:
         return raw["text"]
     marks: list[list[str]] = [[] for _ in bases]
-    for mark in (c for c in chars if unicodedata.bidirectional(c["text"]) == "NSM"):
+    for mark in (c for c in chars if _is_mark(c["text"])):
         owner = next(
             (
                 i
