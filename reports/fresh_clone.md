@@ -1,6 +1,6 @@
 # Fresh-clone check
 
-Commit `98a05336166fdceb63234f25412ec45ce3df005e`, cloned into an empty directory with no untracked files.
+Commit `4c7ae1e597bfacfee64083a03565e8ac2af887b4`, cloned into an empty directory with no untracked files.
 
 | Step | Result | Seconds |
 |---|---|---|

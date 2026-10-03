@@ -96,7 +96,7 @@ secrets and makes no outbound calls; it is one more fixed `proxy_pass` target, a
 
 ## Amendment 3 (2026-09-27): Postgres and the Temporal UI move to an opt-in `devports` profile
 
-M11 audit pass 1 (REVIEW.md C-02, C-03; commit dab25f3) narrowed the first amendment. The
+M11 audit pass 1 (REVIEW.md C-02, C-03; commit 6971630) narrowed the first amendment. The
 default `gateway` no longer publishes Postgres (5432) or Temporal's Web UI (8233): a direct
 Postgres login is the schema owner, and from the Temporal UI anyone on the host could send a
 `review` signal. Both are served only by a second gateway under the Compose `devports` profile

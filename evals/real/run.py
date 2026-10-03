@@ -915,7 +915,7 @@ async def run_set(
     from evals.bakeoff.extractbench import ExtractBenchPromptBuilder, extractbench_row, failure_kind
     from evals.extraction_a import prompt_builder_for
     from evals.extraction_identity import serving_args_sha256
-    from evals.parse_cache import ParseCache, is_transient_parse_error, retrying
+    from evals.parse_cache import Contacted, ParseCache, is_transient_parse_error, retrying
     from evals.run import _load_extractbench_records
 
     if not parse_only:
@@ -935,7 +935,7 @@ async def run_set(
     parse_failed: dict[str, str] = {}
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
-    parse = retrying(parser.parse, log=_print)
+    parse = Contacted(retrying(parser.parse, log=_print))
     parsed_now = 0
     transient_run: list[str] = []
     try:
@@ -958,7 +958,7 @@ async def run_set(
                         f"parse service failed {len(transient_run)} times in a row"
                     ) from exc
     finally:
-        if parsed_now:
+        if parse.called:
             await parse_client.unload()
     if parse_only:
         _print(f"parse: {parsed_now} parsed now, {len(parse_failed)} failed")

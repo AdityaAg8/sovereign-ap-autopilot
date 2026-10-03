@@ -21,6 +21,7 @@ from evals.parse_cache import (
     MAX_CONSECUTIVE_TRANSIENT_FAILURES,
     PARSER_SOURCE_DIRS,
     REPO_ROOT,
+    Contacted,
     ParseCache,
     ParseCacheError,
     ParseCacheMissError,
@@ -268,3 +269,40 @@ async def test_warm_keeps_going_past_deterministic_failures(tmp_path: Path) -> N
     cache = ParseCache(tmp_path / "cache", PARSER_ID)
     result = await warm(cache, inputs, parse, lambda _m: None)
     assert result.parsed == 0 and len(result.failed) == len(inputs)
+
+
+@pytest.mark.asyncio
+async def test_contacted_marks_any_pass_that_reached_the_parse_service(tmp_path: Path) -> None:
+    """The unload decision: a pass whose every parse failed (parsed == 0) still loaded the OCR
+    model, and so did one stopped by `ParseServiceDownError`; only an all-cached pass did not."""
+
+    async def unreadable(document_sha256: str, data: bytes) -> Any:
+        raise ParseError("unreadable document")
+
+    failing = Contacted(unreadable)
+    result = await warm(ParseCache(tmp_path / "a", PARSER_ID), _inputs(2), failing, lambda _m: None)
+    assert result.parsed == 0 and failing.called
+
+    async def down(document_sha256: str, data: bytes) -> Any:
+        raise _timeout()
+
+    stopped = Contacted(down)
+    with pytest.raises(ParseServiceDownError):
+        await warm(
+            ParseCache(tmp_path / "b", PARSER_ID),
+            _inputs(MAX_CONSECUTIVE_TRANSIENT_FAILURES),
+            stopped,
+            lambda _m: None,
+        )
+    assert stopped.called
+
+    data_dir = tmp_path / "uae"
+    data_dir.mkdir()
+    _write_doc(data_dir, has_scan=False)
+    _, data = document_input(data_dir, SHA, load_truth(data_dir, SHA))
+    inputs = [(SHA, hashlib.sha256(data).hexdigest(), data)]
+    cache = ParseCache(tmp_path / "c", PARSER_ID)
+    await warm(cache, inputs, PaddleOcrDocumentParser(_FakeOcrClient()).parse, lambda _m: None)  # type: ignore[arg-type]
+    cached = Contacted(unreadable)
+    assert (await warm(cache, inputs, cached, lambda _m: None)).parsed == 0
+    assert not cached.called

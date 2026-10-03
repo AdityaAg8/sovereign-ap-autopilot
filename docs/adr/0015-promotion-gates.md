@@ -2,7 +2,7 @@
 
 This ADR fixes which gates the M10.2 promotion decider enforces, where each number comes from,
 what happens when an eval set is deferred, when two shadow evals are comparable, how ties are
-broken, and the side effects of a promotion. It amends the M10.2 decider at 86a5b24
+broken, and the side effects of a promotion. It amends the M10.2 decider at 5a1b9b9
 (`ml/promotion/decide.py`, `ml/promotion/retrain.py`).
 
 - Status: accepted
@@ -20,7 +20,7 @@ broken, and the side effects of a promotion. It amends the M10.2 decider at 86a5
 
 PRD §10 M10.2: "`make retrain`: LoRA on new labels, shadow eval against `champion` on all sets,
 promote only if no gate regresses. Done when a deliberately degraded challenger is
-auto-rejected (test)." The decider at 86a5b24 derives its gates only from `evals.run.RunReport`:
+auto-rejected (test)." The decider at 5a1b9b9 derives its gates only from `evals.run.RunReport`:
 the fatura and extractbench F1 blocks plus the pint_ae MIN gate. Review found:
 
 1. **H1, wrong gate set.** It enforces none of ADR-0009 §1.8 P1 (UAE F1 ≥ F1_A − 3, EN and AR),
@@ -93,7 +93,7 @@ session); `extract_peak_vram_gb` and `sequential_fallback_recorded: bool`; `leak
 
 "Abs" means an absolute threshold on the challenger. "Rel" means the challenger must be no
 worse than the champion measured in the same shadow-eval session (strict, no tolerance, as at
-86a5b24). "Both" means both must hold.
+5a1b9b9). "Both" means both must hold.
 
 | Gate | Source (producer entry point) | Direction | Rule | Required evidence |
 |---|---|---|---|---|
@@ -207,7 +207,7 @@ completed, in order. The `promotion.failed` audit payload also records `applied`
 4. In both cases the audit chain records the outcome: a later `promotion.applied`, or the
    recalibration's own audit entries.
 
-**Production adapters.** None exist at 86a5b24. The exporter wraps
+**Production adapters.** None exist at 5a1b9b9. The exporter wraps
 `apx.learning.export.export_training_manifest`; the trainer wraps the ADR-0011 detached job; the
 shadow evaluator is the P1-P5 measurement run that ADR-0009 build item 10
 (`ml/extractor_b/promote.py`) owns; the registry, lock writer and invalidator need MLflow and the

@@ -331,7 +331,7 @@ Rules that apply to every tool:
 
 ### Dependency on ADR-0008 (M6.5)
 
-`main` (9120b01) does not have `ProposalSink`, `ProposalOrigin="mcp"`, `SPOTLIGHT_RULE` or
+`main` (f39d7e4) does not have `ProposalSink`, `ProposalOrigin="mcp"`, `SPOTLIGHT_RULE` or
 `render_untrusted` yet; they arrive with M6.5 from branch `m6-security`. For now,
 `apx/agent/interfaces.py` restates `ToolOrigin` and a structurally identical `ProposalSink`
 Protocol. Any ADR-0008 implementation satisfies it.

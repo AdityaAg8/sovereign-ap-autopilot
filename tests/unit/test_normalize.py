@@ -15,6 +15,7 @@ from apx.extract.normalize import (
     convert_digits,
     normalize_amount,
     normalize_date,
+    normalize_field,
     normalize_iban,
     normalize_trn,
 )
@@ -131,6 +132,19 @@ def test_normalize_amount_bare_comma_is_thousands_separator() -> None:
 def test_normalize_amount_rejects_unparseable_text() -> None:
     with pytest.raises(NormalizationError):
         normalize_amount("not an amount")
+
+
+def test_normalize_amount_rejects_a_digit_run_too_long_for_cents() -> None:
+    """The grounder joins word runs (an IBAN or account digits beside an amount); a run past the
+    decimal context's 28 digits once quantized to cents is not an amount and must raise the typed
+    `NormalizationError`, never `decimal.InvalidOperation` (the 2026-10-02 A eval crash)."""
+    widest = "9" * 26
+    assert normalize_field("total", widest) == f"{widest}.00"
+    for raw in ("9" * 27, "1" * 27 + ".50", "1331 2345 6789 0123 4567 8901 2345"):
+        with pytest.raises(NormalizationError, match="out of range"):
+            normalize_amount(raw)
+        with pytest.raises(NormalizationError):
+            normalize_field("total", raw)
 
 
 def test_normalize_amount_rejects_empty_text() -> None:

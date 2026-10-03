@@ -79,6 +79,20 @@ def retrying(
     return call
 
 
+class Contacted:
+    """`parse` that remembers whether it was ever called. A pass that sent any page to the parse
+    service (parsed or failed, or stopped by an exception) must unload the OCR model before the
+    GPU evals start; only a pass served wholly from the cache may skip the unload."""
+
+    def __init__(self, parse: ParseFn) -> None:
+        self._parse = parse
+        self.called = False
+
+    async def __call__(self, document_sha256: str, data: bytes) -> ParsedDocument:
+        self.called = True
+        return await self._parse(document_sha256, data)
+
+
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
 DEFAULT_ROOT: Final[Path] = Path("data/cache/parse")
 PARSER_SOURCE_DIRS: Final[tuple[str, ...]] = ("apx/parse", "infra/docker/parse")
@@ -333,6 +347,7 @@ async def _run(args: argparse.Namespace) -> int:  # pragma: no cover - needs the
     cache = ParseCache(args.root)
     client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(client)
+    parse = Contacted(retrying(parser.parse, log=_log))
     parsed = 0
     failed: list[tuple[str, str]] = []
     try:
@@ -342,11 +357,11 @@ async def _run(args: argparse.Namespace) -> int:  # pragma: no cover - needs the
                 print(f"no UAE {split} documents in {args.data_root / split}", file=sys.stderr)
                 return 2
             print(f"==> {split}: {len(inputs)} documents -> {cache.directory}", flush=True)
-            result = await warm(cache, inputs, retrying(parser.parse, log=_log), _log)
+            result = await warm(cache, inputs, parse, _log)
             parsed += result.parsed
             failed.extend(result.failed)
     finally:
-        if parsed:
+        if parse.called:
             await client.unload()  # free the OCR model's VRAM before the GPU evals start
     print(f"parse cache {cache.parser_id}: {parsed} parsed now, {len(failed)} failed")
     for label, error in failed:  # recorded under failed/; a rerun retries them
