@@ -1,0 +1,72 @@
+{
+  "generated_at": "2026-10-03T06:41:05.604603+00:00",
+  "artifact_version": "f79cf6350572",
+  "artifact_sha256": "dc59ae7ce07156a8869d07ced85588fc869c8035cb7b51d235daef6a24378ae3",
+  "method": "isotonic",
+  "extractor_a": {
+    "model": "extractor-a",
+    "gguf_sha256": "6f5d30666c2d8ae16a306e616d95341dcf3cc46810df84d7e6f5a7d1e4c1b293",
+    "prompt_version": "cdcd2832034c55e3"
+  },
+  "extractors": "a",
+  "extractor_b": null,
+  "activated": false,
+  "champion_a_served": true,
+  "activation": "not activated: champion-only calibrator (ADR-0018 \u00a75), test gate passed; fitted on the served champion A; the runtime serves Extractor B, which it does not calibrate",
+  "ece_ltt": 0.0035874770922939172,
+  "ece_test": 0.0014218230289713234,
+  "thresholds": [
+    {
+      "alpha": 0.005,
+      "delta": 0.05,
+      "lambda_hat": 0.6018928294465027,
+      "ltt_accepted": 6177,
+      "ltt_wrong": 19
+    },
+    {
+      "alpha": 0.01,
+      "delta": 0.05,
+      "lambda_hat": 0.49881276637272753,
+      "ltt_accepted": 6188,
+      "ltt_wrong": 23
+    },
+    {
+      "alpha": 0.02,
+      "delta": 0.05,
+      "lambda_hat": 0.49881276637272753,
+      "ltt_accepted": 6188,
+      "ltt_wrong": 23
+    }
+  ],
+  "test": {
+    "0.005": {
+      "lambda_hat": 0.6018928294465027,
+      "accepted": 10305,
+      "wrong": 54,
+      "n_fields": 10500,
+      "error": 0.005240174672489083,
+      "stp": 0.9814285714285714
+    },
+    "0.01": {
+      "lambda_hat": 0.49881276637272753,
+      "accepted": 10318,
+      "wrong": 56,
+      "n_fields": 10500,
+      "error": 0.005427408412483039,
+      "stp": 0.9826666666666667
+    },
+    "0.02": {
+      "lambda_hat": 0.49881276637272753,
+      "accepted": 10318,
+      "wrong": 56,
+      "n_fields": 10500,
+      "error": 0.005427408412483039,
+      "stp": 0.9826666666666667
+    }
+  },
+  "gate": {
+    "alpha": 0.01,
+    "passed": true,
+    "detail": "PASS: 56/10318 = 0.5427% (gate <= 1%)"
+  }
+}
