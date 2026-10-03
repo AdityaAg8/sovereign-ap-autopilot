@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ExtractBench: the gateway's HTTP 413 (one document's request, page images included, over the nginx body cap) ended the 2026-10-03 run at document 131/252 instead of recording that document. A 413 is now a `rejected` row like llama-server's 400, kept in every denominator; the body cap is runtime config and stays unchanged.
+
 - The digital PDF parser crashed (`TypeError` in `unicodedata.bidirectional`) on any word holding a glyph whose text is not one code point: a ligature that a font maps to "fi", or an unmapped glyph. 22 of ExtractBench's 151 born-digital PDFs hit it, stopping the 2026-10-02 ExtractBench run at document 26. Such glyphs are now base letters (`_is_mark`); for one code point the check is unchanged, and a page that parsed before parses byte-identically (any word with such a glyph used to crash), so only the parser identity changes. All 252 ExtractBench PDFs now parse (151 digital, 101 to OCR).
 
 - A digit run of 27 or more integer digits (three 9-digit account groups the grounder joins into one amount candidate, or a hostile model output) overflowed the 28-digit decimal context at the cents quantize and raised `decimal.InvalidOperation`: it crashed the 2026-10-02 Extractor A eval at document 133/750, and `normalize_for_compare` (A/B agreement, trust features, field F1) had the same crash. `normalize_amount` now raises `NormalizationError` ("amount out of range") past `MAX_AMOUNT_INTEGER_DIGITS` = 26, and the comparator treats such a value as an unparseable amount (`~` text form). Amounts up to 26 integer digits are unchanged.
