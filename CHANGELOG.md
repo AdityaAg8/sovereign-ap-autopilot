@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The digital PDF parser crashed (`TypeError` in `unicodedata.bidirectional`) on any word holding a glyph whose text is not one code point: a ligature that a font maps to "fi", or an unmapped glyph. 22 of ExtractBench's 151 born-digital PDFs hit it, stopping the 2026-10-02 ExtractBench run at document 26. Such glyphs are now base letters (`_is_mark`); for one code point the check is unchanged, and a page that parsed before parses byte-identically (any word with such a glyph used to crash), so only the parser identity changes. All 252 ExtractBench PDFs now parse (151 digital, 101 to OCR).
+
 - A digit run of 27 or more integer digits (three 9-digit account groups the grounder joins into one amount candidate, or a hostile model output) overflowed the 28-digit decimal context at the cents quantize and raised `decimal.InvalidOperation`: it crashed the 2026-10-02 Extractor A eval at document 133/750, and `normalize_for_compare` (A/B agreement, trust features, field F1) had the same crash. `normalize_amount` now raises `NormalizationError` ("amount out of range") past `MAX_AMOUNT_INTEGER_DIGITS` = 26, and the comparator treats such a value as an unparseable amount (`~` text form). Amounts up to 26 integer digits are unchanged.
 
 - The parse-cache warm pass and `evals.real` unloaded the OCR model only when a document had been parsed, so a pass whose every parse failed (or that stopped on a service failure) left the model resident in VRAM next to the following GPU eval. Both now unload whenever any page reached the parse service (`Contacted`); an all-cached pass still skips it. Found in the session code review.
