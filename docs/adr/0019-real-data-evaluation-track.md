@@ -665,5 +665,9 @@ The IBAN is the payment field, so a confident invented IBAN is the worst error B
   difference.
 - The base `extractor-b` alias and any older export served after this change get the new page
   rule. Their recorded results stay tied to their old `prompt_version`.
+- Found during R1b (KNOWN_ISSUES KI-05): the training collator shrinks pages to 512 px wide,
+  while serving sends the prepared size. v1, R1 and R1b all share this, so R1 vs R1b still
+  differs by the page rule alone. The fix (`resize="max"` plus a new VRAM probe) is for the
+  next round.
 - B's latency (P2) is not addressed here. The page count and image budget are the same, so P2
   is expected to move only by the shorter outputs on long invoices.

@@ -10,6 +10,7 @@ incomplete.
 | KI-02 | Medium | M11 audit pass 1, open note; REVIEW.md N-03, P3-01, P3-06 | Mitigated (residual open) |
 | KI-03 | Low | ADR-0020 | Deferred features (arbiter, teacher, live retrain loop) |
 | KI-04 | Low | REVIEW.md P3-07, P4-03, P4-04 | Accepted, each fails closed |
+| KI-05 | Medium | Found 2026-10-04 (R1b run) | Open: B trains at 512 px wide, serves full size; fix next round |
 
 ## KI-01: two blobs over 1 MB in git history (REVIEW.md M-05)
 
@@ -111,3 +112,22 @@ each pass only from workflows actually waiting in review, rotating through the c
 - **P4-04.** The reconciler audits a re-sent approval that has no digest (written before
   migration 0012) as `stale`, but `confirm_review` treats it as unbacked and the workflow keeps
   waiting. The audit label is wrong; the outcome is safe, and KI-02 lists the manual step.
+
+## KI-05: Extractor B trains on smaller page images than it is served (found 2026-10-04)
+
+- **What.** `ml/extractor_b/gpu_job.py` builds `UnslothVisionDataCollator` with its default
+  `resize="min"`. The Qwen3.5 vision config has no `image_size`, so the collator falls back to
+  512 (`unsloth_zoo/vision_utils.py`) and shrinks every page wider than 512 px to 512 px wide
+  before tokenising. Prepared pages are stored at the serving size (`BImageSettings`, rung L0),
+  and 96% are wider than 512 px. So v1, R1 and R1b all trained on pages at roughly a quarter of
+  the pixels B sees at serving time. ADR-0009 §1.6 intends training and serving at the same
+  resolution.
+- **Impact.** B still measures above A on UAE test field accuracy (R1: 97.92% vs 97.80%), so
+  the model transfers across the resolution gap. Small print such as IBAN digits is where the
+  gap most plausibly costs accuracy. Most of R1's IBAN errors were long invoices whose last page
+  B never saw, which ADR-0019 amendment 3 addresses.
+- **Why R1b keeps it.** R1b changes one thing against R1 (the page rule), so its gate results
+  attribute cleanly. Training at the serving size makes sequences ~1.7x longer, so it needs a
+  new VRAM probe (`make train-b-probe`) and ~4-5 h more training.
+- **Fix (next round).** Pass `resize="max"` (no resize; pages are already at the serving size),
+  re-run the probe against the ADR-0009 §1.6 ladder, and retrain with an ADR-0019 amendment.
