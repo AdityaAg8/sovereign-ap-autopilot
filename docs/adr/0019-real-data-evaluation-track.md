@@ -644,6 +644,17 @@ The IBAN is the payment field, so a confident invented IBAN is the worst error B
    prep still showed pages 0-2 while masking targets to [0, 1, last]. It now renders every page
    and `build_row` selects; `tests/unit/ml/test_b_long_pdf_pages.py` builds a row from a real
    5-page PDF. The R1b data was prepared again after this fix.
+7. **Evaluation inputs.** R1b's eval-b, gates-b and real-cord-b read the parse snapshot
+   `a8832889e65c7fd5`, pinned read-only (`PARSER_ID`, `evals.parse_cache.open_cache`): the
+   parses that A's test rows, B R1's rows and CORD v1/r1/A were all measured on, so every arm
+   of the comparison reads the same inputs. The only parser change since (13023ef, a glyph of
+   several or no code points is a base letter) gives identical output for every page that parsed
+   before, since for one code point `_is_mark` equals the old `bidirectional(c) == "NSM"`; the
+   inputs it changes crashed the old parser and are in none of these splits. Re-parsing them
+   would have cost ~4.5 h of OCR for the same bytes. A pinned snapshot is never written to:
+   a missing input stops the run (`ParseCacheMissError`) rather than being parsed by the
+   current build. Before the run, every input was checked present: UAE test 750/750, the P2
+   latency subset 200/200, CORD test 100/100.
 
 **Measured on the R1 data** (`data/uae/train`): with pages [0, 1, last], the IBAN is visible on
 315 of 315 long invoices (was 0 of 315), and the totals block on 271 of 315 (was 164 of 315).

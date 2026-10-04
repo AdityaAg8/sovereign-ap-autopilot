@@ -155,9 +155,14 @@ class ParseCache:
     the index entry only after its store entry, so concurrent readers and writers (two eval jobs
     on the same split) never see a torn entry; two writers of one key write the same parse."""
 
-    def __init__(self, root: Path = DEFAULT_ROOT, parser_id: str | None = None) -> None:
+    def __init__(
+        self, root: Path = DEFAULT_ROOT, parser_id: str | None = None, *, read_only: bool = False
+    ) -> None:
         self.parser_id = parser_id or parser_identity()
         self.directory = root / self.parser_id
+        self.read_only = read_only
+        """A pinned snapshot (`open_cache`): answered from, never written to, so another parser
+        build's output can never be stored under this identity."""
         self._store = FileParsedDocumentStore(self.directory / "store")
         self._index = self.directory / "index"
 
@@ -192,6 +197,8 @@ class ParseCache:
         return document
 
     def put(self, key: str, document: ParsedDocument) -> None:
+        if self.read_only:
+            raise ParseCacheError(f"parse cache {self.directory} is a pinned read-only snapshot")
         entry = self._entry(key)
         ref = self._store.put(document)
         entry.parent.mkdir(parents=True, exist_ok=True)
@@ -204,6 +211,11 @@ class ParseCache:
         cached = self.lookup(key)
         if cached is not None:
             return cached
+        if self.read_only:
+            raise ParseCacheMissError(
+                f"{key[:12]} is not in the pinned parse cache {self.directory}; a pinned snapshot "
+                "is never filled by the current parser build"
+            )
         document = await parse(document_sha256, data)
         self.put(key, document)
         return document
@@ -217,6 +229,11 @@ class ParseCache:
         """Parse every (key, file) not cached yet, keyed by the name the caller gives it (the
         bake-off's form); returns how many were parsed now."""
         pending = [(key, path) for key, path in items if key not in self]
+        if pending and self.read_only:
+            raise ParseCacheMissError(
+                f"{len(pending)} of {len(items)} inputs are not in the pinned parse cache "
+                f"{self.directory} (e.g. {pending[0][0][:12]})"
+            )
         done = len(items) - len(pending)
         for key, path in pending:
             document = await parse(key, path.read_bytes())
@@ -224,6 +241,29 @@ class ParseCache:
             done += 1
             log(f"[{done}/{len(items)}] parse {key[:12]} pages={len(document.pages)}")
         return len(pending)
+
+
+_PARSER_ID: Final = re.compile(r"[0-9a-f]{16}")
+
+
+def open_cache(
+    parser_id: str | None = None,
+    root: Path = DEFAULT_ROOT,
+    log: Callable[[str], None] = print,
+) -> ParseCache:
+    """The shared cache of the current parser build, or, with `parser_id`, an earlier build's
+    snapshot pinned so an eval reads exactly the parses the arms it is compared with were
+    measured on (ADR-0019 amendment 3). A pinned snapshot of another build is read-only: a miss
+    raises instead of parsing, and the pin is logged with both identities."""
+    current = parser_identity()
+    if parser_id is None or parser_id == current:
+        return ParseCache(root)
+    if not _PARSER_ID.fullmatch(parser_id):
+        raise ParseCacheError(f"parser id {parser_id!r} is not 16 lowercase hex characters")
+    if not (root / parser_id / "index").is_dir():
+        raise ParseCacheError(f"no parse cache snapshot {parser_id} under {root}")
+    log(f"parse cache PINNED to {parser_id} (read-only); the current parser build is {current}")
+    return ParseCache(root, parser_id, read_only=True)
 
 
 MAX_CONSECUTIVE_TRANSIENT_FAILURES: Final = 3

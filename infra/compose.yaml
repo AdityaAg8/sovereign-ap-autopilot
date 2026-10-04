@@ -74,7 +74,9 @@ services:
       - --ui-port
       - "8233"
       - --db-filename
-      - /home/temporal/temporal.db
+      # TEMPORAL_DB_FILE gives a run on a second database (e.g. the attack suite with
+      # POSTGRES_DB=apx_attacks) its own workflow history; workflow ids reject duplicates.
+      - /home/temporal/${TEMPORAL_DB_FILE:-temporal.db}
     volumes:
       - temporal-data:/home/temporal
     # No `ports:` here: `app` is internal, so a direct publish never worked (see the network

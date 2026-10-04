@@ -582,6 +582,13 @@ def test_eval_b_reuses_the_extraction_harness_on_the_challenger_alias() -> None:
     assert argv[argv.index("--rows") + 1] == str(Path("logs/extractor_b_test.jsonl"))
     assert argv[argv.index("--report") + 1] == str(Path("reports/extractor_b_test.md"))
     assert argv[-2:] == ["--limit", "5"]
+    assert "--parser-id" not in argv
+
+
+def test_eval_b_passes_a_pinned_parse_snapshot_through() -> None:
+    args = parse_args(["eval-b", "--export-dir", "x", "--parser-id", "a8832889e65c7fd5"])
+    argv = eval_b_argv(args)
+    assert argv[argv.index("--parser-id") + 1] == "a8832889e65c7fd5"
 
 
 # --- review fixes: served build, row identity, second compare-and-set ------------------------

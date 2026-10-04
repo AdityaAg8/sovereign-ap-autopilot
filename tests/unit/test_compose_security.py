@@ -110,6 +110,16 @@ def test_temporal_is_reachable_only_inside_the_app_network() -> None:
     assert temporal["networks"] == ["app"]
 
 
+def test_temporal_store_is_a_file_on_its_volume_named_by_an_optional_override() -> None:
+    """The default keeps the live history file; TEMPORAL_DB_FILE only picks another file on the
+    same volume, so a run on a second Postgres database gets a second workflow history."""
+    temporal = _compose()["services"]["temporal"]
+    command = temporal["command"]
+    store = command[command.index("--db-filename") + 1]
+    assert store == "/home/temporal/${TEMPORAL_DB_FILE:-temporal.db}"
+    assert "temporal-data:/home/temporal" in temporal["volumes"]
+
+
 def test_app_services_get_the_agent_password_not_a_literal_url() -> None:
     env = _compose()["services"]["migrate"]["environment"]
     assert "AGENT_DATABASE_URL" not in env

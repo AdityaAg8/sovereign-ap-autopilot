@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `--parser-id` on `evals.extraction_a`, `ml.extractor_b.promote` (eval-b, gates) and `evals.real run` (Makefile `PARSER_ID`) reads an earlier parser build's cache snapshot, read-only: a miss stops the run instead of parsing. R1b's eval queue reads `a8832889e65c7fd5`, the snapshot A and R1 were measured on (ADR-0019 amendment 3 item 7), and `gates-b` is now `+` so a failed gate still lets the CORD hold-out and the report run.
+
 - `cadence.first_generative_eval_epoch` (default 1): R1b skips the two epoch-1 generative dev evals (~3.2 h of ~13 h), keeping both of epoch 2, where v1's and R1's best checkpoints were. ADR-0020 records the v1.0 scope (teacher skipped, arbiter and live retrain deferred); KNOWN_ISSUES KI-03, KI-04.
 
 - Extractor B R1 (ADR-0019 §9) exported: run `b-20261001T1641-eb0aea7d`, best step 594 (dev F1 97.25, valid JSON 0.955 on 178 UAE dev docs; v1 97.17 / 0.955), Q4_K_M sha256 `11ce0660…`. `extractor-b-challenger` now serves R1 for smoke, eval-b and gates, and the new pinned `extractor-b-r1` alias serves `evals.real --b-version r1`. The champion is unchanged. The promote tests read the challenger run from the config instead of hardcoding v1.

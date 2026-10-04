@@ -244,6 +244,7 @@ async def test_harness_refuses_to_resume_rows_served_with_other_args(tmp_path: P
         models_root=tmp_path,
         parse_cache=tmp_path / "cache",
         no_parse_cache=False,
+        parser_id=None,
     )
     with pytest.raises(ServingIdentityError, match="served or parsed differently"):
         await run(args)

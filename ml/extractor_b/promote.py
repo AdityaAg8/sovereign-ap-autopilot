@@ -808,12 +808,12 @@ async def _live_latency(
     from apx.llm.client import LlamaSwapClient, LlmSettings
     from apx.parse.client import ParseServiceClient
     from apx.parse.parser import PaddleOcrDocumentParser
-    from evals.parse_cache import ParseCache, retrying
+    from evals.parse_cache import open_cache, retrying
     from ml.extractor_b.gates import StrictVramSampler, llm_extract_fn, run_latency
 
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
-    cache = ParseCache()  # shared with the eval harness: a parse is never redone per session
+    cache = open_cache(args.parser_id)  # shared with the eval harness: never re-parsed per session
     parse = retrying(parser.parse)  # transient OCR timeouts retried; a persistent one aborts P2
     documents = [
         await cache.parse(sha, (args.data_dir / f"{sha}.pdf").read_bytes(), parse) for sha in shas
@@ -918,6 +918,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "--real-reports-dir", type=Path, default=Path("reports"), help="real_*.json reports"
         )
         cmd.add_argument("--manifest", type=Path, default=MANIFEST_PATH, help="data manifest")
+        cmd.add_argument(
+            "--parser-id",
+            default=None,
+            help="eval-b/gates: pinned parse cache snapshot, read-only (default: current build)",
+        )
     args = parser.parse_args(argv)
     if args.export_dir is None:
         args.export_dir = _default_export_dir()
@@ -934,6 +939,7 @@ def eval_b_argv(args: argparse.Namespace) -> list[str]:
         "--rows", str(args.b_rows),
         "--report", str(B_TEST_REPORT),
     ]  # fmt: skip
+    argv += ["--parser-id", args.parser_id] if args.parser_id else []
     return argv + (["--limit", str(args.limit)] if args.limit else [])
 
 
