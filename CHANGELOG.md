@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The gateway's llama-swap port (8080, used by the host-run evals; the runtime calls llama-swap directly) had no `client_max_body_size`, so nginx's 1 MB default rejected requests with two dense page images (HTTP 413 on 3 ExtractBench documents). It now sets 25m explicitly; a static test pins it.
+
 - Extractor B was trained on values it could not see (ADR-0019 amendment 3). Data prep cut a 4-5 page invoice to its first 3 pages but kept the whole document's labels, so all 315 long UAE training invoices taught B an IBAN printed on a page it never saw (and 142 a totals block). B R1 then invented IBANs on long invoices (0/71 right on the UAE test, A 70/71). B now sees a long document's first 2 pages and its last (`b_page_indices`, one function for serving, data prep and training), and targets hold only labels on those pages (`visible_pages`); a label without a page index stops prep. Retraining as round R1b (`--b-version r1b`, alias `extractor-b-r1b`); gates unchanged.
 
 - ExtractBench: the gateway's HTTP 413 (one document's request, page images included, over the nginx body cap) ended the 2026-10-03 run at document 131/252 instead of recording that document. A 413 is now a `rejected` row like llama-server's 400, kept in every denominator; the body cap is runtime config and stays unchanged.

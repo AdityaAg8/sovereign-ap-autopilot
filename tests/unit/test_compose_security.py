@@ -84,6 +84,14 @@ def test_the_default_gateway_proxies_neither_postgres_nor_temporal() -> None:
     assert "temporal:" not in code and "postgres:" not in code
 
 
+def test_the_llama_swap_listener_sets_an_explicit_body_cap() -> None:
+    # Without one nginx caps bodies at 1 MB, and host-run evals got HTTP 413 on requests with
+    # two dense page images that the runtime (which calls llama-swap directly) accepts.
+    conf = GATEWAY_CONF.read_text(encoding="utf-8")
+    block = conf.split("listen 8080;", 1)[1].split("server {", 1)[0]
+    assert "client_max_body_size 25m;" in block
+
+
 def test_devports_temporal_ui_proxy_is_read_only() -> None:
     conf = DEVPORTS_CONF.read_text(encoding="utf-8")
     server = conf[conf.index("listen 8233;") :]
