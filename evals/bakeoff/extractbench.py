@@ -20,7 +20,12 @@ import httpx
 from pydantic import JsonValue
 
 from apx.common.errors import ModelBusyError, ModelContextError, ModelServingError
-from apx.extract.prompt import document_text, estimate_tokens, page_image_data_url
+from apx.extract.prompt import (
+    TOKEN_ESTIMATOR_VERSION,
+    document_text,
+    estimate_tokens,
+    page_image_data_url,
+)
 from apx.llm.interfaces import ChatMessage, ImagePart, LlmClient, StructuredRequest, TextPart
 from apx.parse.interfaces import ParsedDocument
 from evals.run import _gold_extractbench_examples, _predicted_extractbench_examples
@@ -112,6 +117,7 @@ class ExtractBenchPromptBuilder:
             "drop": sorted(_SCHEMA_DROP_KEYS),
             "caps": list(_DESCRIPTION_CAPS),
             "template": _user_text("{text}", "{schema}"),
+            "token_estimator": TOKEN_ESTIMATOR_VERSION,
         }
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()[:16]

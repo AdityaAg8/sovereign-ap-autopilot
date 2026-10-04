@@ -243,8 +243,9 @@ def test_schema_digest_drops_noise_then_cuts_descriptions_to_fit() -> None:
     full = schema_digest(SCHEMA, 10_000)
     assert full is not None and "title" not in full and "default" not in full
     assert "Vendor name as printed." in full
-    short = schema_digest(SCHEMA, 60)
+    short = schema_digest(SCHEMA, 100)  # fits only with every description dropped
     assert short is not None and len(short) < len(full) and '"anyOf"' in short
+    assert "Vendor name" not in short
     assert schema_digest(SCHEMA, 5) is None
 
 
@@ -269,7 +270,7 @@ def test_extractbench_prompt_is_constrained_by_the_record_schema() -> None:
 
 
 def test_extractbench_text_is_budgeted_but_never_below_the_floor() -> None:
-    long_doc = document(E1, texts=("word " * 20_000,))  # ~28.6k estimated tokens of text
+    long_doc = document(E1, texts=("word " * 20_000,))  # ~48k estimated tokens of text
     settings = ExtractBenchPromptSettings(slot_tokens=5000, min_text_tokens=1000)
     request = ExtractBenchPromptBuilder(images=False, settings=settings).build(
         long_doc, SCHEMA, "m"
@@ -277,7 +278,9 @@ def test_extractbench_text_is_budgeted_but_never_below_the_floor() -> None:
     text = "".join(p.text for p in request.messages[1].content if isinstance(p, TextPart))
     assert "[... middle of document omitted ...]" in text
     document_part = text.split("</document_text>")[0]
-    assert 3000 < len(document_part) < 4000  # the 1000-token floor, not the negative remainder
+    # The 1000-token floor (~2.1k characters of "word " at 2.4 estimated tokens per word), not
+    # the negative remainder of a 5000-token slot.
+    assert 1800 < len(document_part) < 2600
 
 
 async def test_extractbench_row_flags_non_object_output() -> None:
