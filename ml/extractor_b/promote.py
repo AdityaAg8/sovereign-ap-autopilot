@@ -44,6 +44,7 @@ from evals.extraction_identity import (
     require_identity,
     served_paths,
 )
+from evals.parse_cache import parser_identity
 from ml.extractor_b.checkpoints import sha256_file
 from ml.extractor_b.export import (
     EXPORT_DIR_NAME,
@@ -607,6 +608,7 @@ class UaeScores:
     b_rows_sha256: str
     a_identity: RowIdentity
     b_identity: RowIdentity
+    parser_identity: str | None = None
 
 
 def require_challenger_serves(
@@ -669,14 +671,24 @@ def score_row_files(
     test_ids: Sequence[str],
     a_identity: RowIdentity,
     b_identity: RowIdentity,
+    parser_id: str | None = None,
 ) -> UaeScores:
-    """P1/P3 inputs. Every row of each file must carry the expected identity (review H2/M1)."""
+    """P1/P3 inputs. Every row of each file must carry the expected identity (review H2/M1)
+    and, given `parser_id` (the snapshot the P2 run reads), that parse snapshot, so A, B and P2
+    are measured on the same parses (REVIEW.md P5-02)."""
     scored = {}
     loaded = {}
     for name, path, identity in (("A", a_rows, a_identity), ("B", b_rows, b_identity)):
         if not path.is_file():
             raise GateEvidenceError(f"Extractor {name} rows {path} do not exist")
         rows = load_rows(path)
+        if parser_id is not None:
+            other = sorted({str(r.get("parser_identity")) for r in rows.values()} - {parser_id})
+            if other:
+                raise GateEvidenceError(
+                    f"Extractor {name} rows {path} were parsed by {', '.join(other)}, not the "
+                    f"snapshot {parser_id} the P2 run reads; rerun them with --parser-id"
+                )
         try:
             require_identity(rows, identity, path)
             scored[name] = score_rows(rows, data_dir, test_ids, f"Extractor {name} rows {path}")
@@ -701,6 +713,7 @@ def score_row_files(
         b_rows_sha256=sha256_file(b_rows),
         a_identity=a_identity,
         b_identity=b_identity,
+        parser_identity=parser_id,
     )
 
 
@@ -768,6 +781,7 @@ def assemble_evidence(
         b_rows_sha256=scores.b_rows_sha256,
         a_rows_identity=scores.a_identity,
         b_rows_identity=scores.b_identity,
+        parser_identity=scores.parser_identity,
         leakage_detail=hygiene.leakage_detail,
         results=evaluate_gates(report),
     )
@@ -859,6 +873,7 @@ def run_gates(
         test_ids=test_ids,
         a_identity=a_identity,
         b_identity=b_identity,
+        parser_id=args.parser_id or parser_identity(),
     )
     hygiene = check_hygiene(args.export_dir.parent, args.train_data_dir, lock_path=MODELS_LOCK)
     swap = extract_group_swaps(LLAMA_SWAP_CONFIG, (A_ALIAS, args.model))

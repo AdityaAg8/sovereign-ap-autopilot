@@ -166,6 +166,25 @@ async def test_a_pinned_snapshot_answers_hits_and_never_parses_or_writes(tmp_pat
     ]
 
 
+@pytest.mark.asyncio
+async def test_a_pinned_miss_stops_the_harness_instead_of_becoming_a_failure_row(
+    tmp_path: Path,
+) -> None:
+    """REVIEW.md P5-03: the harness worker records only `DocumentParseFailedError` as a failure
+    row; a pinned miss is a `ParseCacheMissError`, so it escapes `_run_one` and stops the run."""
+    data_dir = tmp_path / "uae"
+    data_dir.mkdir()
+    _write_doc(data_dir, has_scan=False)
+    (tmp_path / "cache" / PARSER_ID / "index").mkdir(parents=True)
+    pinned = open_cache(PARSER_ID, tmp_path / "cache", log=lambda _m: None)
+    extractor: Any = _StubExtractor()
+    parser: Any = PaddleOcrDocumentParser(_RaisingClient())  # type: ignore[arg-type]
+
+    with pytest.raises(ParseCacheMissError, match="pinned parse cache"):
+        await _run_one(SHA, data_dir, extractor, parser, pinned)
+    assert not any((tmp_path / "cache" / PARSER_ID / "index").iterdir())
+
+
 def test_open_cache_pins_only_an_existing_snapshot_of_another_build(tmp_path: Path) -> None:
     current = open_cache(None, tmp_path, log=pytest.fail)
     assert current.parser_id == parser_identity() and not current.read_only

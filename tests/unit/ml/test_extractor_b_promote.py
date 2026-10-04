@@ -683,6 +683,42 @@ def test_row_files_must_carry_the_expected_identity(tmp_path: Path) -> None:
         score_row_files(a_rows=tmp_path / "none.jsonl", b_rows=b_rows, **kwargs)  # type: ignore[arg-type]
 
 
+def test_a_b_and_p2_must_read_one_parse_snapshot(tmp_path: Path) -> None:
+    """REVIEW.md P5-02: rows parsed by another build than the P2 run's snapshot are refused."""
+    shas = [sha("d1"), sha("d2")]
+    data = _gold_dir(tmp_path, shas)
+    a_id = RowIdentity(model="extractor-a", gguf_sha256=sha("a"), prompt_version="pa")
+    b_id = RowIdentity(model="extractor-b-challenger", gguf_sha256=sha("b"), prompt_version="pb")
+    a_rows = _rows_file(tmp_path / "a.jsonl", shas, a_id)
+    b_rows = _rows_file(tmp_path / "b.jsonl", shas, b_id)
+
+    def stamp(path: Path, parser: str) -> None:
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        path.write_text(
+            "".join(json.dumps({**r, "parser_identity": parser}) + "\n" for r in rows), "utf-8"
+        )
+
+    stamp(a_rows, "a8832889e65c7fd5")
+    stamp(b_rows, "a8832889e65c7fd5")
+    kwargs = {"data_dir": data, "test_ids": shas, "a_identity": a_id, "b_identity": b_id}
+    scores = score_row_files(
+        a_rows=a_rows,
+        b_rows=b_rows,
+        parser_id="a8832889e65c7fd5",
+        **kwargs,  # type: ignore[arg-type]
+    )
+    assert scores.parser_identity == "a8832889e65c7fd5"
+
+    stamp(b_rows, "66f415c5490d9e5b")
+    with pytest.raises(GateEvidenceError, match=r"b\.jsonl were parsed by 66f415c5490d9e5b"):
+        score_row_files(
+            a_rows=a_rows,
+            b_rows=b_rows,
+            parser_id="a8832889e65c7fd5",
+            **kwargs,  # type: ignore[arg-type]
+        )
+
+
 def test_expected_identities_use_the_served_a_gguf_and_the_export(env: Env) -> None:
     a_id, b_id = expected_identities(
         manifest_of(env.export_dir),

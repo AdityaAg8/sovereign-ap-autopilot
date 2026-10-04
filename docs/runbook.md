@@ -188,3 +188,21 @@ artifact) and record the exception in `KNOWN_ISSUES.md`.
 ```bash
 make seed          # ERP restored and invoices cleared; the append-only audit log keeps its history
 ```
+
+## A second database (attack suite, demo)
+
+`make seed` replaces the ERP tables and every invoice in its database, so never run it (or
+`make demo`, which seeds) against the live database `apx`. To run against a separate one, create
+it and point the stack at it through the shell (shell variables win over `.env`):
+
+```bash
+docker compose -f infra/compose.yaml exec postgres psql -U apx -c "CREATE DATABASE apx_attacks"
+POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db make up
+POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db make seed
+```
+
+`TEMPORAL_DB_FILE` is a bare file name on the `temporal-data` volume (default `temporal.db`).
+Each database needs its own: workflow ids reject duplicates, so a document already processed
+in the live history would collide. Switching the file while the live database is attached
+leaves its waiting approval workflows in the other file, so always switch both together, and
+run `make up` with neither variable set to return to the live stack.
