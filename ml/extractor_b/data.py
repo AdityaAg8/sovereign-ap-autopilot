@@ -456,6 +456,11 @@ def build_row(
     rels: list[Path] = []
     visual = 0
     pages = doc.pages()
+    if len(pages) != doc.n_pages:  # the target was masked for doc.n_pages (REVIEW.md P5-06)
+        raise TrainingError(
+            f"{doc.source.value} {doc.document_sha256}: {len(pages)} rendered pages, "
+            f"{doc.n_pages} in its labels"
+        )
     for n, index in enumerate(b_page_indices(len(pages), settings)):
         jpeg = _resize(pages[index], doc.n_pages, settings)
         rel = Path("pages") / doc.document_sha256 / f"{n}.jpg"
