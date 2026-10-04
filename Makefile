@@ -191,6 +191,10 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 # Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
 SPLITS ?= test,cal
 REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-adr0012,cal-rows-a,+calibrate TRUST_EXTRACTORS=a,eval-b,eval-attacks
+# ADR-0019 amendment 3: round R1b (pages [0, 1, last], targets limited to them). Run after
+# `make train-b-new`, export-b, smoke-b, register-b and the extractor-b-r1b alias; R1's rows and
+# reports are kept as logs/archive/extractor_b_test.r1.jsonl and reports/*.r1.* first.
+R1B_EVAL_QUEUE = eval-b,gates-b,real-cord-b B_VERSION=r1b,+real-report
 QUEUE ?= $(REDUCED_GPU_QUEUE)
 # ADR-0019 real-data track. Phase 1: A zero-shot (and B v1 as the "before") on real documents,
 # CORD first, then ExtractBench. Phase 2 re-evaluates a retrained B on the same hold-outs.
