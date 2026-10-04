@@ -56,7 +56,8 @@ Prompts render with the model's chat template and `enable_thinking=False`, the s
 A gpu-marked test asserts the tokenised training prompt equals llama-server `/apply-template`
 output for the same messages. The resolved LoRA target-module list is logged to MLflow.
 
-**1.2 Input.** B sees only the page images: the first 3 pages, resized client-side by one shared
+**1.2 Input.** B sees only the page images: the first 3 pages (ADR-0019 amendment 3: of a longer
+document, the first 2 and the last; targets hold only what those pages show), resized client-side by one shared
 function in `apx/extract`, which training reuses so train and serve are pixel-identical. Visual
 tokens per page are min(1280, ⌊2304 / pages⌋), converted to pixels from the processor's
 `patch_size × merge_size`. Why images only: A already reads parse text, so an image-only B makes

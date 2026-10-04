@@ -601,3 +601,48 @@ including the image-size guard, is recorded in PROGRESS.md and `guard_report.jso
 - A, v1, and every later round score CORD test on the same unchanged 100 documents.
 - Cross-split copies inside the CORD hold-outs (1 test-validation, 2 validation-validation pairs)
   do not affect training. They are noted for the real-data report.
+
+## Amendment 3 (2026-10-04): the pages B sees, and targets limited to them (round R1b)
+
+**Problem.** ADR-0009 §1.2 shows B the first 3 pages, and data prep cut every training document
+to those pages but kept the label set of the whole document. 315 of the 3,500 UAE R1 training
+invoices have 4 or 5 pages. In all 315 the IBAN is printed on the last page, and in 142 of them
+the totals block is on a page past the third. B was trained to output values it never saw. On
+the 750-document UAE test it learned exactly that:
+- On the 71 long test invoices, B R1's IBAN was right 0 of 71 times (A: 70 of 71), and its
+  subtotal and total 40 of 71. Its wrong IBANs are invented values, never nulls.
+- On invoices of at most 3 pages, B R1 matches or beats A (IBAN 641 vs 639 of 673).
+- IBAN is B's weakest field on the test (86.16%), and its 6 invalid-JSON answers are all 4-5
+  page invoices.
+The IBAN is the payment field, so a confident invented IBAN is the worst error B can make.
+
+**Decision.**
+1. **Pages.** B sees every page of a document of at most 3 pages. Of a longer one it sees the
+   first 2 and the last (`apx.extract.prompt_b.b_page_indices`). Serving, data prep and
+   training all call this one function, so they stay pixel-identical (§1.2's parity test now
+   asserts the last page). The per-page token budget, the rung, and the 3-image cap are
+   unchanged, so B's prompt size and VRAM are unchanged.
+2. **Targets.** A training target holds only values printed on the pages B sees
+   (`uae_target`/`docile_target` `visible_pages`). A header field printed only on an unseen
+   page is null, a line item printed only on unseen pages is left out, and a label without a
+   page index stops prep (`TrainingError`). CORD and FATURA are single-page, so their targets
+   are unchanged.
+3. **User text.** B's user message now says that a long invoice shows its first pages and its
+   last. This also gives the new contract a new `prompt_version`, so rows built on the old page
+   rule can never mix with new ones.
+4. **Round R1b.** The R1 mix and config are retrained unchanged on the new data (`make
+   train-b-data REAL_MIX=r1`, `make train-b-new`). It is registered as the challenger and pinned
+   as `extractor-b-r1b` (`evals.real --b-version r1b`). The gates (P1-P5, ADR-0009 §1.8), the
+   eval sets and every threshold are unchanged. R1b is promoted only if every gate passes.
+
+**Measured on the R1 data** (`data/uae/train`): with pages [0, 1, last], the IBAN is visible on
+315 of 315 long invoices (was 0 of 315), and the totals block on 271 of 315 (was 164 of 315).
+
+**Consequences.**
+- On a long invoice whose line items continue past page 2, B misses the middle-page lines
+  instead of inventing them. A still reads every page, and the A/B comparison flags the
+  difference.
+- The base `extractor-b` alias and any older export served after this change get the new page
+  rule. Their recorded results stay tied to their old `prompt_version`.
+- B's latency (P2) is not addressed here. The page count and image budget are the same, so P2
+  is expected to move only by the shorter outputs on long invoices.

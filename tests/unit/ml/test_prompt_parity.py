@@ -21,6 +21,7 @@ from apx.extract.prompt_b import (
     PATCH_PX,
     BImageSettings,
     ImageOnlyPromptBuilder,
+    b_page_indices,
     page_token_budget,
     resize_page_for_b,
 )
@@ -68,7 +69,9 @@ def test_training_messages_equal_serving_messages(tmp_path: Path) -> None:
     doc = SourceDoc(SampleSource.UAE, sha("doc"), lambda: pages, len(pages), target)
     row = build_row(doc, tmp_path, BImageSettings(), StubCounter())
     assert serving_messages(row, tmp_path) == served.messages
-    assert len(row.image_paths) == 3  # B sees the first three pages only
+    assert len(row.image_paths) == 3  # B sees three pages: the first two and the last
+    last = resize_page_for_b(pages[3], len(pages), BImageSettings())
+    assert (tmp_path / row.image_paths[2]).read_bytes() == last
 
     example = training_example(row, tmp_path)
     system, user, assistant = example["messages"]
@@ -85,6 +88,18 @@ def test_training_messages_equal_serving_messages(tmp_path: Path) -> None:
                 assert img.convert("RGB").tobytes() == hf_part["image"].tobytes()
     assert json.loads(assistant["content"][0]["text"])["invoice_number"] == "INV-1"
     assert example["sample_ids"] == row.sample_id
+
+
+@pytest.mark.parametrize(
+    ("n_pages", "seen"),
+    [(1, (0,)), (2, (0, 1)), (3, (0, 1, 2)), (4, (0, 1, 3)), (5, (0, 1, 4)), (9, (0, 1, 8))],
+)
+def test_a_long_document_shows_its_first_pages_and_its_last(
+    n_pages: int, seen: tuple[int, ...]
+) -> None:
+    # ADR-0019 amendment 3: the totals block and the IBAN sit on the last page of a long
+    # invoice, so B must see it; a 4-5 page invoice once showed B pages 0-2 only.
+    assert b_page_indices(n_pages, BImageSettings()) == seen
 
 
 def test_generation_conversation_has_no_assistant_turn() -> None:

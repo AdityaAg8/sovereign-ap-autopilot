@@ -8,7 +8,7 @@ the source knows for certain, never from a guess (ADR-0012 §1.3)."""
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 
@@ -72,17 +72,34 @@ def uae_classification(tax_case: str) -> tuple[InvoiceTypeCode, VatCategory]:
     return InvoiceTypeCode.INVOICE, category
 
 
-def uae_target(labels: Mapping[str, Any], tax_case: str) -> dict[str, Any]:
+def _seen(item: Mapping[str, Any], visible_pages: Collection[int] | None) -> bool:
+    """Whether a label sits on a page B sees (ADR-0019 amendment 3); every label when
+    `visible_pages` is None. A label without a page index is a data error, not a guess."""
+    if visible_pages is None:
+        return True
+    page = item.get("page")
+    if not isinstance(page, int):
+        raise TrainingError(f"label without a page index: {dict(item)!r}")
+    return page in visible_pages
+
+
+def uae_target(
+    labels: Mapping[str, Any], tax_case: str, *, visible_pages: Collection[int] | None = None
+) -> dict[str, Any]:
     """Target from a factory label set plus its truth `tax_case`: header labels (`line_index`
     null) and line-item labels grouped by `line_index`. Repeated header labels keep the
     Latin-script value, else the first; a line value split over several labels is joined with a
-    space in label order. Type code and line categories come from `uae_classification`."""
+    space in label order. Type code and line categories come from `uae_classification`. Labels
+    on pages outside `visible_pages` are left out: a field printed only there is null and a line
+    printed only there is absent, so the target never asks for a value B cannot see."""
     type_code, category = uae_classification(tax_case)
     target = empty_target()
     target[INVOICE_TYPE_CODE_KEY] = type_code.value
     header: dict[str, list[str]] = {}
     lines: dict[int, dict[str, list[str]]] = {}
     for label in labels["labels"]:
+        if not _seen(label, visible_pages):
+            continue
         field, value, index = label["field"], label["value"], label.get("line_index")
         if index is None:
             if field not in UAE_HEADER_LABELS:
@@ -163,12 +180,17 @@ def merge_annotations(field: str, values: Sequence[str]) -> str:
     return " ".join(values) if kind is FieldKind.TEXT else values[0]
 
 
-def docile_target(annotation: Mapping[str, Any]) -> dict[str, Any]:
+def docile_target(
+    annotation: Mapping[str, Any], *, visible_pages: Collection[int] | None = None
+) -> dict[str, Any]:
     """DocILE mixes document types and is not UAE VAT: type code and line categories stay null
-    (unknown is the honest label; ADR-0012 §1.3)."""
+    (unknown is the honest label; ADR-0012 §1.3). Extractions on pages outside `visible_pages`
+    are left out, as in `uae_target`."""
     target = empty_target()
     header: dict[str, list[str]] = {}
     for ex in sorted(annotation.get("field_extractions", []), key=_reading_key):
+        if not _seen(ex, visible_pages):
+            continue
         fieldtype = ex["fieldtype"]
         if fieldtype in DOCILE_KILE:
             header.setdefault(DOCILE_KILE[fieldtype], []).append(ex["text"])
@@ -178,6 +200,8 @@ def docile_target(annotation: Mapping[str, Any]) -> dict[str, Any]:
         target[field] = merge_annotations(field, values)
     lines: dict[int, dict[str, list[str]]] = {}
     for ex in sorted(annotation.get("line_item_extractions", []), key=_reading_key):
+        if not _seen(ex, visible_pages):
+            continue
         fieldtype = ex["fieldtype"]
         if fieldtype in DOCILE_LIR:
             key = DOCILE_LIR[fieldtype]

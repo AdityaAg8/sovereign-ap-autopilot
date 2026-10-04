@@ -54,15 +54,17 @@ A_VERSION: Final = "base"
 B_ALIASES: Final[Mapping[str, str]] = {
     "v1": "extractor-b-v1",
     "r1": "extractor-b-r1",
+    "r1b": "extractor-b-r1b",
     "r2": "extractor-b-r2",
 }
 """B version -> llama-swap alias, each pinned to one export (never `extractor-b-challenger`, which
 moves between rounds). A round's alias is added to infra/llama-swap.yaml when its export is
 registered; until then a run on it fails typed (`ServedModelError`) instead of scoring v1."""
-B_ORDER: Final[tuple[str, ...]] = ("v1", "r1", "r2")
+B_ORDER: Final[tuple[str, ...]] = ("v1", "r1", "r1b", "r2")
 B_TRAINED_ON: Final[Mapping[str, frozenset[str]]] = {
     "v1": frozenset({"fatura"}),
     "r1": frozenset({"fatura", "cord"}),
+    "r1b": frozenset({"fatura", "cord"}),
     "r2": frozenset({"fatura", "cord", "docile"}),
 }
 """Real sets each B version saw in training (§4.4): B on these is in-distribution."""

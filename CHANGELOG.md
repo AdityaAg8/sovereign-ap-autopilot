@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extractor B was trained on values it could not see (ADR-0019 amendment 3). Data prep cut a 4-5 page invoice to its first 3 pages but kept the whole document's labels, so all 315 long UAE training invoices taught B an IBAN printed on a page it never saw (and 142 a totals block). B R1 then invented IBANs on long invoices (0/71 right on the UAE test, A 70/71). B now sees a long document's first 2 pages and its last (`b_page_indices`, one function for serving, data prep and training), and targets hold only labels on those pages (`visible_pages`); a label without a page index stops prep. Retraining as round R1b (`--b-version r1b`, alias `extractor-b-r1b`); gates unchanged.
+
 - ExtractBench: the gateway's HTTP 413 (one document's request, page images included, over the nginx body cap) ended the 2026-10-03 run at document 131/252 instead of recording that document. A 413 is now a `rejected` row like llama-server's 400, kept in every denominator; the body cap is runtime config and stays unchanged.
 
 - The digital PDF parser crashed (`TypeError` in `unicodedata.bidirectional`) on any word holding a glyph whose text is not one code point: a ligature that a font maps to "fi", or an unmapped glyph. 22 of ExtractBench's 151 born-digital PDFs hit it, stopping the 2026-10-02 ExtractBench run at document 26. Such glyphs are now base letters (`_is_mark`); for one code point the check is unchanged, and a page that parsed before parses byte-identically (any word with such a glyph used to crash), so only the parser identity changes. All 252 ExtractBench PDFs now parse (151 digital, 101 to OCR).
