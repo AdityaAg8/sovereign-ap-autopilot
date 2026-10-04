@@ -634,6 +634,16 @@ The IBAN is the payment field, so a confident invented IBAN is the worst error B
    train-b-data REAL_MIX=r1`, `make train-b-new`). It is registered as the challenger and pinned
    as `extractor-b-r1b` (`evals.real --b-version r1b`). The gates (P1-P5, ADR-0009 §1.8), the
    eval sets and every threshold are unchanged. R1b is promoted only if every gate passes.
+5. **Eval cadence (speed only).** R1b keeps both generative dev evals of epoch 2 and skips the
+   two of epoch 1 (`cadence.first_generative_eval_epoch: 2`). Each eval of the 178 dev documents
+   took ~1.6 h of R1's 13 h; v1's best checkpoint (step 383 of 510) and R1's (594 of 594) were
+   both epoch-2 evals. Dev loss still runs every 50 steps. The trained weights are unchanged;
+   only the candidate checkpoints for selection are fewer. Batch size, accumulation, learning
+   rate and epochs stay as in R1, so the R1 to R1b difference is the page rule alone.
+6. **Loader (REVIEW.md P4-01).** The PDF loader rendered only the first 3 pages, so the first R1b
+   prep still showed pages 0-2 while masking targets to [0, 1, last]. It now renders every page
+   and `build_row` selects; `tests/unit/ml/test_b_long_pdf_pages.py` builds a row from a real
+   5-page PDF. The R1b data was prepared again after this fix.
 
 **Measured on the R1 data** (`data/uae/train`): with pages [0, 1, last], the IBAN is visible on
 315 of 315 long invoices (was 0 of 315), and the totals block on 271 of 315 (was 164 of 315).

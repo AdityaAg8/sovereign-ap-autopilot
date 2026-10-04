@@ -140,7 +140,10 @@ def _pdf_pages(path: Path) -> Callable[[], list[bytes]]:
             n = len(pdf)
         finally:
             pdf.close()
-        return [render_page_png(data, i) for i in range(min(n, 3))]
+        # Every page: `build_row` picks the ones B sees with `b_page_indices`. Rendering only the
+        # first 3 here once showed B pages 0-2 of a long invoice while its target followed
+        # pages [0, 1, last] (ADR-0019 amendment 3).
+        return [render_page_png(data, i) for i in range(n)]
 
     return load
 

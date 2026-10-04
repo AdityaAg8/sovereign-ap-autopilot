@@ -109,6 +109,11 @@ class CadenceConfig(_Cfg):
     dev_loss_every_steps: int = 50
     generative_evals_per_epoch: int = 2
     """Evenly spaced; the last one sits on the epoch end. Each forces a checkpoint."""
+    first_generative_eval_epoch: int = Field(default=1, ge=1)
+    """Epochs before this one get no generative eval (dev loss still runs every
+    `dev_loss_every_steps`). Each eval of the 178 dev documents takes ~1.6 h, and the best
+    checkpoint of v1 (step 383 of 510) and R1 (594 of 594) both came from the last epoch, so R1b
+    starts at epoch 2 (ADR-0019 amendment 3). Selection only; the trained weights are unchanged."""
     f1_tie_epsilon: float = 0.1
     """F1 points within which two checkpoints count as tied (tie-break: dev loss, then step)."""
 

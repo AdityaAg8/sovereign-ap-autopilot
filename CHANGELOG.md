@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cadence.first_generative_eval_epoch` (default 1): R1b skips the two epoch-1 generative dev evals (~3.2 h of ~13 h), keeping both of epoch 2, where v1's and R1's best checkpoints were. ADR-0020 records the v1.0 scope (teacher skipped, arbiter and live retrain deferred); KNOWN_ISSUES KI-03, KI-04.
+
 - Extractor B R1 (ADR-0019 §9) exported: run `b-20261001T1641-eb0aea7d`, best step 594 (dev F1 97.25, valid JSON 0.955 on 178 UAE dev docs; v1 97.17 / 0.955), Q4_K_M sha256 `11ce0660…`. `extractor-b-challenger` now serves R1 for smoke, eval-b and gates, and the new pinned `extractor-b-r1` alias serves `evals.real --b-version r1`. The champion is unchanged. The promote tests read the challenger run from the config instead of hardcoding v1.
 
 - `make train-b-reeval` (`python -m ml.extractor_b.reeval`) re-runs a saved checkpoint's generative dev eval on the current trainer image, under the GPU lock and with the same model load as training. It passes only when dev F1 is within ± 0.1 and the valid-JSON rate within one dev row of the recorded values: ADR-0011 amendment 6 GPU validation item 5, which had no command before.
@@ -40,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extractor B dev evals persist per-row outputs to `<run>/dev_outputs/step-NNNNNN.jsonl`; `report.py` classifies invalid JSON as truncated / looping / malformed (#53).
 
 ### Fixed
+
+- B training data rendered only the first 3 pages of a PDF, so after the page-rule change a 4-5 page invoice still showed pages 0-2 while its target followed pages [0, 1, last] (REVIEW.md P4-01, found by the pass-4 audit before any training). The loader renders every page; a test builds a row from a real 5-page PDF.
+- `document_text` trimmed by character ratio, so text denser at its ends than in its middle kept up to 2.2x A's token budget (REVIEW.md P4-02). It now shrinks until the estimate fits.
+- The login throttle could evict the bucket it had just created when `max_keys` is below the eviction window, leaving that account unthrottled (REVIEW.md P4-05; defaults were safe).
 
 - `estimate_tokens` undercounted real parse text: its 3.5 Latin / 1.8 Arabic characters-per-token rule was below the true Qwen3.5 count on 99% of 752 parsed documents, digit-heavy tables by up to 3.4x. That overflowed the 12288-token slot (HTTP 400 on 4 ExtractBench documents) and could overflow Extractor A on a long, dense real invoice. It now counts the tokenizer's units (digits, punctuation and newline runs one each, Latin letter runs per 3, Arabic per 2) with a 1.2 safety factor: never below the true count on 1,452 documents (worst 1.05x, median 1.3x, 0.7 ms/doc). A's text budget is now 5000 estimated tokens (was 3500 under the old rule); no UAE test or cal invoice reaches either (longest 3621 true tokens), so A's recorded UAE results and the trust calibration are unchanged. The ExtractBench request version includes the estimator (`TOKEN_ESTIMATOR_VERSION`).
 

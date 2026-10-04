@@ -69,7 +69,7 @@ class _BucketMap:
             bucket = _Bucket(tokens=self.burst, updated=now)
             self._buckets[key] = bucket
             while len(self._buckets) > self._max_keys:
-                self._evict(now)
+                self._evict(now, keep=key)
         return bucket
 
     def existing(self, key: bytes, now: float) -> _Bucket | None:
@@ -84,15 +84,18 @@ class _BucketMap:
         self._buckets.move_to_end(key)
         return bucket
 
-    def _evict(self, now: float) -> None:
-        """Drops, among the `EVICTION_WINDOW` least recently used buckets, the one that holds
-        the most tokens at `now` (the oldest among equals). A full bucket is identical to no
-        bucket, so dropping it loses nothing; a drained one is kept while fuller ones exist."""
+    def _evict(self, now: float, *, keep: bytes) -> None:
+        """Drops, among the `EVICTION_WINDOW` least recently used buckets other than `keep` (the
+        one just created, which the caller is about to debit), the one that holds the most
+        tokens at `now` (the oldest among equals). A full bucket is identical to no bucket, so
+        dropping it loses nothing; a drained one is kept while fuller ones exist."""
         victim: bytes | None = None
         most = -1.0
         for index, (key, bucket) in enumerate(self._buckets.items()):
             if index >= EVICTION_WINDOW:
                 break
+            if key == keep:
+                continue
             tokens = min(self.burst, bucket.tokens + max(0.0, now - bucket.updated) * self.rate)
             if tokens > most:
                 victim, most = key, tokens

@@ -8,6 +8,8 @@ incomplete.
 |---|---|---|---|
 | KI-01 | Medium | REVIEW.md M-05 | Accepted, documented (history rewrite not allowed) |
 | KI-02 | Medium | M11 audit pass 1, open note; REVIEW.md N-03, P3-01, P3-06 | Mitigated (residual open) |
+| KI-03 | Low | ADR-0020 | Deferred features (arbiter, teacher, live retrain loop) |
+| KI-04 | Low | REVIEW.md P3-07, P4-03, P4-04 | Accepted, each fails closed |
 
 ## KI-01: two blobs over 1 MB in git history (REVIEW.md M-05)
 
@@ -85,3 +87,27 @@ each pass only from workflows actually waiting in review, rotating through the c
 - Decisions older than the window (default 7 days) are not reconsidered.
 - The reconciler reads each workflow's state through a Temporal query; a worker that is down
   delays re-sends until it is back (the pass retries every interval).
+
+## KI-03: features deferred past v1.0 (ADR-0020)
+
+- **Arbiter (M7.3).** No arbiter model is configured. A field A and B disagree on keeps A's value
+  and the disagreement lowers its trust score, so it goes to review instead of auto-acceptance.
+  The `Arbiter` seam and the `has_arbiter` audit flag are in place.
+- **Teacher round (M7.2).** Skipped: B misses only the latency gate (P2), which teacher labels
+  cannot improve.
+- **Live retrain loop (M10.2).** The retrain and promotion pipeline runs offline (rounds R1, R1b)
+  with the same gates; a retrain triggered by live review corrections is not run yet.
+
+## KI-04: low findings that fail closed (REVIEW.md P3-07, P4-03, P4-04)
+
+- **P3-07.** An approval's corrections are read in one transaction and recorded in another. A
+  field edit in between makes the new approval stale, so the invoice ends FAILED
+  (`review.approval_stale`). Nothing is paid wrongly. Fix: derive the corrections inside the
+  writer's locked transaction.
+- **P4-03.** `prompt_version` hashes the request for a blank probe page, so A's text budget and
+  the token estimator do not feed it. The 2026-10-04 estimator change kept every UAE test and cal
+  invoice byte-identical (none reaches either budget), so the recorded A rows and the calibrator
+  stay valid. A future change that trims real UAE text must bump the version.
+- **P4-04.** The reconciler audits a re-sent approval that has no digest (written before
+  migration 0012) as `stale`, but `confirm_review` treats it as unbacked and the workflow keeps
+  waiting. The audit label is wrong; the outcome is safe, and KI-02 lists the manual step.

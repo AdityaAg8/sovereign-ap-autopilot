@@ -1,4 +1,5 @@
 # Extractor B run config (ADR-0009 §1, ADR-0011). Defaults live in ml/extractor_b/interfaces.py.
 rung: L0                 # must equal SERVING_RUNG in apx/extract/prompt_b.py (ADR-0012 §5)
 optim: {epochs: 2}
-cadence: {save_every_steps: 25, dev_loss_every_steps: 50, generative_evals_per_epoch: 2}
+cadence: {save_every_steps: 25, dev_loss_every_steps: 50, generative_evals_per_epoch: 2,
+          first_generative_eval_epoch: 2}  # ADR-0019 amdt 3: ~3.2 h saved, weights unchanged

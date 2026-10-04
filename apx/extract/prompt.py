@@ -184,11 +184,21 @@ def document_text(document: ParsedDocument, max_tokens: int) -> str:
     total = estimate_tokens(text)
     if total <= max_tokens:
         return text
+    # The first cut is proportional in characters; text denser at its ends than in the middle
+    # (digit tables around prose) still estimates over budget, so shrink until it fits (REVIEW.md
+    # P4-02). Each pass scales by the measured overshoot, so a few passes suffice.
     keep = int(len(text) * max_tokens / total)
-    head = int(keep * 0.6)
-    return (
-        text[:head] + "\n[... middle of document omitted ...]\n" + text[len(text) - (keep - head) :]
-    )
+    while True:
+        head = int(keep * 0.6)
+        trimmed = (
+            text[:head]
+            + "\n[... middle of document omitted ...]\n"
+            + text[len(text) - (keep - head) :]
+        )
+        estimate = estimate_tokens(trimmed)
+        if estimate <= max_tokens or keep == 0:
+            return trimmed
+        keep = min(keep - 1, int(keep * max_tokens / estimate))
 
 
 class InvoicePromptBuilder:
