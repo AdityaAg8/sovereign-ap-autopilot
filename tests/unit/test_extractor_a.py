@@ -327,6 +327,21 @@ def test_grounding_prefers_the_labelled_occurrence_and_uses_parse_boxes_only() -
     assert grounded[FieldName.PO_NUMBER].normalized is None
 
 
+def test_grounding_skips_digit_runs_too_long_to_be_amounts() -> None:
+    """Three 9-digit account groups join into one 27-digit amount candidate (amount runs span up
+    to 3 words): grounding must treat it as a non-amount and still find the total (it crashed the
+    2026-10-02 A eval with `decimal.InvalidOperation`)."""
+    document = _document(
+        [
+            ["Account", "133123456", "789012345", "678901234"],
+            ["Total", "AED", "105.00"],
+        ]
+    )
+    grounded = WordGrounder().ground(document, [RawField(name=FieldName.TOTAL, value="105")])
+    assert grounded[FieldName.TOTAL].normalized == "105.00"
+    assert grounded[FieldName.TOTAL].word_ids == ("p0w6",)
+
+
 def test_grounding_matches_multiword_text_in_either_word_order() -> None:
     document = _document([["From:", "Al", "Noor", "Trading", "LLC"], ["LLC", "Trading", "X"]])
     grounded = WordGrounder().ground(

@@ -289,10 +289,16 @@ async def test_extractbench_row_flags_non_object_output() -> None:
     assert "finish_reason=stop" in row["error"]
 
 
-def test_request_rejection_is_only_a_400_or_context_overflow() -> None:
+def test_request_rejection_is_a_400_413_or_context_overflow() -> None:
     assert is_request_rejection(ModelContextError("context size has been exceeded"))
     assert is_request_rejection(ModelServingError("x returned HTTP 400: bad schema"))
+    # The gateway's body cap refused one document's request (its page images): the 2026-10-03
+    # ExtractBench run died on it at 131/252 instead of recording the document as a miss.
+    assert is_request_rejection(
+        ModelServingError("llama-swap /v1/chat/completions returned HTTP 413: <html>")
+    )
     assert not is_request_rejection(ModelServingError("x returned HTTP 500: crash"))
+    assert not is_request_rejection(ModelServingError("x returned HTTP 4130: odd"))
 
 
 def test_predictions_flatten_like_gold() -> None:
@@ -371,6 +377,7 @@ def test_failure_kinds_separate_documents_from_the_server() -> None:
     assert failure_kind(timeout) == "timeout" and failure_kind(TimeoutError()) == "timeout"
     assert failure_kind(ModelServingError("x returned HTTP 500: crash")) == "server_error"
     assert failure_kind(ModelServingError("x returned HTTP 400: bad schema")) == "rejected"
+    assert failure_kind(ModelServingError("x returned HTTP 413: too large")) == "rejected"
     assert failure_kind(ModelBusyError("x returned HTTP 503: loading")) is None
     assert failure_kind(ModelServingError("request to /x failed: ConnectError")) is None
     assert failure_kind(ValueError("x returned HTTP 500")) is None

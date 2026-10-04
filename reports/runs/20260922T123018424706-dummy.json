@@ -2,7 +2,7 @@
   "schema_version": 1,
   "run_id": "20260922T123018424706-dummy",
   "generated_at": "2026-09-22T12:30:18.424706Z",
-  "git_sha": "beca24f",
+  "git_sha": "e731980",
   "predictor": "dummy",
   "sets_requested": [
     "fatura",

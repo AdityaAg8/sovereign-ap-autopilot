@@ -77,13 +77,13 @@ models:
 
   extractor-b-challenger:
     name: "Extractor B challenger (fine-tuned, not served)"
-    description: "ADR-0009 §1.7-1.8: the exported Q4_K_M of run b-20260923T2025-eb0aea7d for the export smoke and the P1-P5 gate runs. Not a runtime alias (apx.llm.client), so the pipeline never calls it; promotion is a separate, gated change to extractor-b."
+    description: "ADR-0009 §1.7-1.8: the exported Q4_K_M of run b-20261001T1641-eb0aea7d (R1, ADR-0019 §9) for the export smoke and the P1-P5 gate runs. Not a runtime alias (apx.llm.client), so the pipeline never calls it; promotion is a separate, gated change to extractor-b."
     # Same flags as extractor-b so gate measurements compare like with like. The mmproj is the
     # exported one, which `make export-b` proved tensor-equal to the upstream mmproj-F16.gguf.
     cmd: |
       ${llama-server}
-      --model /models/extractor_b/b-20260923T2025-eb0aea7d/export/extractor-b-Q4_K_M.gguf
-      --mmproj /models/extractor_b/b-20260923T2025-eb0aea7d/export/mmproj-F16.gguf
+      --model /models/extractor_b/b-20261001T1641-eb0aea7d/export/extractor-b-Q4_K_M.gguf
+      --mmproj /models/extractor_b/b-20261001T1641-eb0aea7d/export/mmproj-F16.gguf
       --ctx-size 16384
       --parallel 2
     checkEndpoint: /health
@@ -97,6 +97,19 @@ models:
       ${llama-server}
       --model /models/extractor_b/b-20260923T2025-eb0aea7d/export/extractor-b-Q4_K_M.gguf
       --mmproj /models/extractor_b/b-20260923T2025-eb0aea7d/export/mmproj-F16.gguf
+      --ctx-size 16384
+      --parallel 2
+    checkEndpoint: /health
+    ttl: 600
+
+  extractor-b-r1:
+    name: "Extractor B R1 (fine-tuned, not served)"
+    description: "ADR-0019 §9: B R1 (run b-20261001T1641-eb0aea7d, UAE + FATURA + CORD) pinned for the real-data before/after (`evals.real --b-version r1`). Not a runtime alias."
+    # Same flags as extractor-b-challenger; never repointed.
+    cmd: |
+      ${llama-server}
+      --model /models/extractor_b/b-20261001T1641-eb0aea7d/export/extractor-b-Q4_K_M.gguf
+      --mmproj /models/extractor_b/b-20261001T1641-eb0aea7d/export/mmproj-F16.gguf
       --ctx-size 16384
       --parallel 2
     checkEndpoint: /health
@@ -190,7 +203,7 @@ routing:
         extract:
           swap: true
           exclusive: true
-          members: [extractor-a, extractor-b, extractor-b-challenger, extractor-b-v1]
+          members: [extractor-a, extractor-b, extractor-b-challenger, extractor-b-v1, extractor-b-r1]
         arbitrate:
           swap: true
           exclusive: true

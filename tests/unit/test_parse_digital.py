@@ -268,3 +268,30 @@ def test_arabic_line_parses_to_logical_text_with_word_boxes() -> None:
     x0s = [w.bbox.x0 for w in page.words]
     assert x0s == sorted(x0s, reverse=True)
     assert page.lines[0].word_ids == tuple(w.id for w in page.words)
+
+
+def _glyph(text: str, x0: float, x1: float) -> dict[str, object]:
+    return {"text": text, "x0": x0, "x1": x1, "top": 0.0, "bottom": 10.0}
+
+
+def test_a_multi_codepoint_glyph_is_a_base_not_a_crash() -> None:
+    """pdfplumber reports a ligature glyph (a font whose ToUnicode maps one glyph to "fi") as
+    one char with several code points; `unicodedata.bidirectional` takes exactly one, so the
+    mark check crashed on ExtractBench (2026-10-02). Such a glyph is a base letter, and a
+    combining mark still attaches to the base it is drawn on."""
+    from apx.parse.digital import _visual_text
+
+    shadda = chr(0x0651)
+    word = {
+        "text": "fix" + shadda,
+        "x0": 0.0,
+        "x1": 30.0,
+        "top": 0.0,
+        "bottom": 10.0,
+        "chars": [_glyph("fi", 0.0, 20.0), _glyph(shadda, 22.0, 22.0), _glyph("x", 20.0, 30.0)],
+    }
+    assert _visual_text(word) == "fix" + shadda  # type: ignore[arg-type]
+    plain = {**word, "text": "fix", "chars": [_glyph("fi", 0.0, 20.0), _glyph("x", 20.0, 30.0)]}
+    assert _visual_text(plain) == "fix"  # type: ignore[arg-type]
+    empty = {**word, "text": "x", "chars": [_glyph("", 0.0, 0.0), _glyph("x", 0.0, 10.0)]}
+    assert _visual_text(empty) == "x"  # type: ignore[arg-type]

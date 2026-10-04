@@ -158,10 +158,15 @@ def _user_text(text: str, digest: str | None) -> str:
     )
 
 
+_HTTP_REJECTED: Final[re.Pattern[str]] = re.compile(r"returned HTTP (400|413)\b")
+
+
 def is_request_rejection(exc: ModelServingError) -> bool:
-    """llama-server answered HTTP 400 for this one request (e.g. a schema its grammar converter
-    refuses): deterministic for the document, so it is a failed row, not a failed run."""
-    return isinstance(exc, ModelContextError) or "returned HTTP 400" in str(exc)
+    """The serving stack refused this one request: llama-server's HTTP 400 (e.g. a schema its
+    grammar converter refuses) or the gateway's HTTP 413 (the request, page images included, is
+    over its body cap). Deterministic for the document, so it is a failed row, not a failed run;
+    the cap itself is runtime config and is not raised for an eval."""
+    return isinstance(exc, ModelContextError) or bool(_HTTP_REJECTED.search(str(exc)))
 
 
 def failure_kind(exc: BaseException) -> FailureKind | None:

@@ -13,7 +13,7 @@ from lxml import etree  # type: ignore[import-untyped]
 from pydantic import JsonValue, ValidationError
 
 from apx.api.interfaces import FIELD_VALUE_MAX_LENGTH, FieldEdit
-from apx.api.service import corrections_for_rows, refuse_totals_mismatch
+from apx.api.service import refuse_totals_mismatch
 from apx.common.invoice import Invoice, VatCategory
 from apx.common.types import Money
 from apx.db.enums import FieldSource
@@ -27,6 +27,7 @@ from apx.policy.interfaces import (
     ValidationFinding,
     routing_record,
 )
+from apx.review.corrections import corrections_for_rows
 from apx.validate.address import UAE_EMIRATES, resolve_emirate
 from apx.validate.interfaces import (
     SUPPLIER_ADDRESS_VIOLATION_FIELD,
@@ -332,7 +333,7 @@ def test_only_error_severity_violations_become_findings() -> None:
     ]
 
 
-# --- 5. review fixes (reviewer FAIL on 1a72e40) ----------------------------------------------
+# --- 5. review fixes (reviewer FAIL on 4c9e7fe) ----------------------------------------------
 
 
 def _zero_rated_read_as_standard() -> Invoice:

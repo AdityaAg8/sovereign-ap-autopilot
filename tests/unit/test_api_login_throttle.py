@@ -127,6 +127,33 @@ def test_memory_is_bounded_by_max_keys() -> None:
     assert limiter.ip_bucket_count == 10
 
 
+def test_a_refused_attempt_creates_no_account_bucket() -> None:
+    """P3-03: a request the IP bucket refuses costs the server nothing (no argon2), so it must
+    not add account keys either; otherwise a cheap spray churns the account map."""
+    limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock(), ip_factor=1)
+    assert limiter.acquire("gw", "first@x.test") == 0.0
+    for i in range(100):
+        assert limiter.acquire("gw", f"spray{i}@x.test") > 0
+    assert len(limiter) == 1
+
+
+def test_a_username_spray_cannot_flush_a_drained_account_bucket() -> None:
+    """P3-03: the attacker drains the target, then sends attempts at many other usernames to
+    push its bucket out of the capped map. It must stay drained rather than come back full."""
+    clock = _Clock()
+    limiter = LoginRateLimiter(
+        burst=5, refill_per_minute=5, clock=clock, max_keys=10, ip_factor=10_000
+    )
+    target = "victim@x.test"
+    for _ in range(5):
+        assert limiter.acquire("attacker", target) == 0.0
+    assert limiter.acquire("attacker", target) > 0
+    for i in range(1_000):
+        limiter.acquire(f"ip{i % 7}", f"spray{i}@x.test")
+    assert limiter.acquire("attacker", target) > 0, "the drained bucket was evicted and refilled"
+    assert len(limiter) == 10
+
+
 def test_keys_are_fixed_size_digests_whatever_the_username() -> None:
     limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock())
     limiter.acquire("gw", "x" * 1_000_000)
@@ -136,7 +163,11 @@ def test_keys_are_fixed_size_digests_whatever_the_username() -> None:
 def test_memory_stays_bounded_under_a_spray_of_maximal_usernames() -> None:
     # REVIEW N-04 measured ~1 MB per bucket with 1 MB usernames. Now each bucket holds a
     # 32-byte digest: 2,000 buckets from 320-char emails stay far under 1 MB in total.
-    limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock(), max_keys=2_000)
+    # A large IP factor admits every attempt from "gw": only admitted attempts create account
+    # buckets (P3-03), and this test is about the cap on those.
+    limiter = LoginRateLimiter(
+        burst=1, refill_per_minute=1, clock=_Clock(), max_keys=2_000, ip_factor=20_000
+    )
     tracemalloc.start()
     try:
         before, _ = tracemalloc.get_traced_memory()

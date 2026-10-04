@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "registered_model": "extractor_b",
+  "model_version": "2",
+  "run_id": "b-20261001T1641-eb0aea7d",
+  "mlflow_run_id": "51189b0e366849e48c8c635952b33c27",
+  "gguf_sha256": "11ce0660b74abe95f64fee509396b1ec8b78888ef7d43c2bf42c85e2f3eea246",
+  "mmproj_sha256": "d312f751aeeb42bdb8f5533fde84853c9e59ccf5a812a7cf4fa8509d56e2cfad",
+  "champion_at_measurement": null,
+  "challenger_alias": "extractor-b-challenger",
+  "reference_alias": "extractor-a",
+  "measured_at": "2026-10-02T21:50:59.409373Z",
+  "git_sha": "073e6c3d8d49e808d74f61032b8f972fcc229ce0",
+  "report": {
+    "session_id": "m7.1-7c6e7d28ce43",
+    "uae_test_digest": "bfdcfa9767dcf7e0258cd266bc04c4db092ba4f5570ee88417de7b4734dca49c",
+    "latency_subset_digest": "66b65a63c54b6490cabdcbf282cc6fabe178ecb6b833392a5c7cf408f3624a6c",
+    "uae_f1_overall": 0.9196787148594378,
+    "uae_f1_en": 0.897249809014515,
+    "uae_f1_ar": 0.9873271889400922,
+    "uae_n": 750,
+    "valid_json_rate": 0.992,
+    "latency_p50_s": 19.0327357999995,
+    "latency_p95_s": 32.145065540004,
+    "latency_n": 200,
+    "reference_a_f1_overall": 0.9274584072493647,
+    "reference_a_p50_s": 28.234933200008527,
+    "extract_peak_vram_gb": 8.0703125,
+    "sequential_fallback_recorded": true,
+    "leakage_green": true,
+    "base_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "lock_base_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+  },
+  "reference_a_f1_en": 0.914750349383814,
+  "reference_a_f1_ar": 0.9665689149560118,
+  "reference_a_p95_s": 45.805807170004115,
+  "uae_n_en": 564,
+  "uae_n_ar": 186,
+  "vram_samples": 38490,
+  "vram_missed_readings": 0,
+  "a_rows_sha256": "16706fa121de1fff85627fe831181c4c74f049dc603023b19056775902d4d671",
+  "b_rows_sha256": "6b93b9a266cb46f84562d2a6a23b977afae940b85ede0127a0bee4a82b25242e",
+  "a_rows_identity": {
+    "model": "extractor-a",
+    "gguf_sha256": "6f5d30666c2d8ae16a306e616d95341dcf3cc46810df84d7e6f5a7d1e4c1b293",
+    "prompt_version": "cdcd2832034c55e3"
+  },
+  "b_rows_identity": {
+    "model": "extractor-b-challenger",
+    "gguf_sha256": "11ce0660b74abe95f64fee509396b1ec8b78888ef7d43c2bf42c85e2f3eea246",
+    "prompt_version": "6a9d2adb7b011729"
+  },
+  "leakage_detail": "5106 rows, all on the train pool",
+  "results": [
+    {
+      "gate": "P1",
+      "name": "UAE test micro field F1 (14 header fields, EN+AR pooled)",
+      "measured": "B 0.9197 (EN 0.8972, AR 0.9873); A 0.9275",
+      "rule": "B >= A - 0.030 (0.8975)",
+      "passed": true
+    },
+    {
+      "gate": "P2",
+      "name": "p50 extract latency, warm, sequential, 200 documents",
+      "measured": "B 19.03 s (p95 32.15 s); A 28.23 s",
+      "rule": "B <= 0.60 x A (16.94 s)",
+      "passed": false
+    },
+    {
+      "gate": "P3",
+      "name": "valid JSON on UAE test (750 documents)",
+      "measured": "99.20%",
+      "rule": ">= 99%",
+      "passed": true
+    },
+    {
+      "gate": "P4",
+      "name": "extract-stage peak VRAM, whole card (GiB = nvidia-smi MiB / 1024)",
+      "measured": "8.07 GiB",
+      "rule": "<= 11.8 (ADR-0013 budget, same sampler and unit; llama-swap extract group swap: True)",
+      "passed": true
+    },
+    {
+      "gate": "P5",
+      "name": "hygiene: leakage test on the run manifest, base revision == models.lock",
+      "measured": "leakage green: True; base 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "rule": "leakage green and base == 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "passed": true
+    }
+  ]
+}

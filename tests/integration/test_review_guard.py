@@ -5,7 +5,9 @@ rows (a signal with no digest-matched approval is never backed), proposal accept
 acts or is refused, and the role an approval is recorded under. M11.3: a stale recorded approval
 raises `StaleApprovalError` (N-13), a retried hold never reopens an approval (N-09), a repeated
 reject re-sends its signal (N-02), and decisions, edits and accepted proposals commit with their
-audit entry (N-07). Reuses `test_api_authz.py`'s helpers on its own container name and port."""
+audit entry (N-07). M11.4: an approval signal's corrections must match the ones recorded with the
+approval, and an edit after the approval makes it stale (N-03). Reuses `test_api_authz.py`'s
+helpers on its own container name and port."""
 
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ from apx.api.settings import get_settings
 from apx.audit.chain import PgAuditLog
 from apx.audit.interfaces import AuditEntry, AuditEvent
 from apx.common.errors import AuditChainError
+from apx.common.invoice import InvoiceKind
 from apx.common.master import User
 from apx.common.types import InvoiceId, Money, Role, Route, UserId
 from apx.db.enums import DbInvoiceStatus, DecisionAction, FieldSource, ProposalKind, ProposalStatus
@@ -37,7 +40,10 @@ from apx.db.models import Field as FieldRow
 from apx.db.session import get_session
 from apx.ingest.settings import get_ingest_settings
 from apx.policy.writer import SqlPaymentStateWriter
+from apx.review.corrections import corrections_digest
+from apx.workflows.reconciler import Candidate, PgReviewDecisionStore, Resend
 from apx.workflows.review_guard import ReviewGuardActivities, StaleApprovalError
+from apx.workflows.workflow import ReviewDecision
 from tests.integration.test_api_authz import (
     APPROVAL_LIMIT,
     PG_DB,
@@ -283,6 +289,185 @@ def test_confirm_review_needs_a_digest_matched_approval_or_a_recorded_rejection(
     api_schema: str,
 ) -> None:
     asyncio.run(_confirm_scenario())
+
+
+async def _corrections_scenario() -> None:
+    """N-03 (KI-02): an approval records the digest of the corrections it signals; the guard
+    backs a signal only with exactly those corrections, and an edit of the corrections after
+    the approval makes it stale. An accepted approve_payment proposal records its digest too."""
+    approved = _invoice_id("rg-corr-approved")
+    legacy = _invoice_id("rg-corr-legacy")
+    proposed = _invoice_id("rg-corr-proposed")
+    await _seed(
+        {
+            approved: (Route.REVIEW, DbInvoiceStatus.AWAITING_REVIEW, _HUNDRED),
+            legacy: (Route.REVIEW, DbInvoiceStatus.AWAITING_REVIEW, _HUNDRED),
+            proposed: (Route.REVIEW, DbInvoiceStatus.AWAITING_REVIEW, _HUNDRED),
+        }
+    )
+    async with get_session() as session:
+        session.add(
+            Proposal(
+                id="p-approve",
+                invoice_id=proposed,
+                kind=ProposalKind.APPROVE_PAYMENT,
+                payload={},
+                created_by="agent",
+                status=ProposalStatus.PENDING,
+            )
+        )
+    signaller = _RecordingSignaller()
+    transport = ASGITransport(app=_app(signaller))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "rev", "pw")
+        for invoice_id in (approved, legacy):
+            response = await client.post(
+                f"/invoices/{invoice_id}/decisions",
+                json={"action": "approve"},
+                headers=_auth(token),
+            )
+            assert response.status_code == 204, response.text
+        response = await client.post("/proposals/p-approve/accept", headers=_auth(token))
+        assert response.status_code == 200, response.text
+    signalled = dict(zip([i for i, _ in signaller.sent], signaller.corrections, strict=True))
+    sent = signalled[approved]
+    assert sent is not None
+
+    async def recorded(invoice_id: str) -> str | None:
+        async with get_session() as session:
+            return await session.scalar(
+                select(Approval.corrections_digest).where(Approval.invoice_id == invoice_id)
+            )
+
+    assert await recorded(approved) == corrections_digest(sent)
+    proposed_sent = signalled[proposed]
+    assert proposed_sent is not None
+    assert await recorded(proposed) == corrections_digest(proposed_sent)
+
+    guard = ReviewGuardActivities(get_session, PgAuditLog())
+    assert await guard.confirm_review(approved, True, sent, True) is True
+    assert await guard.confirm_review(proposed, True, proposed_sent, True) is True
+    # A raw signal whose corrections differ from the approved ones (or carry none) is unbacked:
+    # audited, and the invoice stays approved for the real signal.
+    forged = sent.model_copy(update={"kind": InvoiceKind.CREDIT_NOTE})
+    assert await guard.confirm_review(approved, True, forged, True) is False
+    assert await guard.confirm_review(approved, True, None, True) is False
+    assert await _status(approved) is DbInvoiceStatus.APPROVED
+    assert (await _audit_actions(f"invoice:{approved}")).count("review.signal_unbacked") == 2
+
+    # A row written before migration 0014 has no corrections digest: the current rows stand in.
+    async with get_session() as session:
+        await session.execute(
+            update(Approval).where(Approval.invoice_id == legacy).values(corrections_digest=None)
+        )
+    legacy_sent = signalled[legacy]
+    assert legacy_sent is not None
+    assert await guard.confirm_review(legacy, True, legacy_sent, True) is True
+    assert await guard.confirm_review(legacy, True, forged, True) is False
+
+    # An edit of a correction after the approval invalidates it, whichever signal arrives.
+    transport = ASGITransport(app=_app(_RecordingSignaller()))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "rev", "pw")
+        response = await client.patch(
+            f"/invoices/{approved}/fields",
+            json={
+                "field": "supplier_address",
+                "value": "Office 7, Al Quoz, Dubai",
+                "reason": "after approval",
+            },
+            headers=_auth(token),
+        )
+        assert response.status_code == 204, response.text
+    with pytest.raises(StaleApprovalError, match="edited after the approval"):
+        await guard.confirm_review(approved, True, sent, True)
+    assert "review.approval_stale" in await _audit_actions(f"invoice:{approved}")
+    # A history scheduled before the patch does not ask for the check (unchanged behaviour).
+    assert await guard.confirm_review(approved, True) is True
+    await db_session.get_engine().dispose()
+
+
+def test_confirm_review_checks_the_signal_corrections_against_the_approval(
+    api_schema: str,
+) -> None:
+    asyncio.run(_corrections_scenario())
+
+
+async def _reconciler_scenario() -> None:
+    """N-01/N-02 follow-up: the reconciler's store finds an APPROVED invoice and a rejected
+    BLOCKED one whose decision is older than the grace period, rebuilds the signal the API would
+    send (a backed one: `confirm_review` accepts it), skips undecided or fresh decisions, and
+    counts its audited re-sends."""
+    approved = InvoiceId(_invoice_id("rc-approved"))
+    rejected = InvoiceId(_invoice_id("rc-rejected"))
+    fresh = _invoice_id("rc-fresh")
+    waiting = InvoiceId(_invoice_id("rc-waiting"))
+    await _seed(
+        {
+            invoice_id: (Route.REVIEW, DbInvoiceStatus.AWAITING_REVIEW, _HUNDRED)
+            for invoice_id in (approved, rejected, fresh, waiting)
+        }
+    )
+    signaller = _RecordingSignaller()
+    transport = ASGITransport(app=_app(signaller))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        token = await _login(client, "rev", "pw")
+        for invoice_id, action in ((approved, "approve"), (rejected, "reject"), (fresh, "approve")):
+            response = await client.post(
+                f"/invoices/{invoice_id}/decisions", json={"action": action}, headers=_auth(token)
+            )
+            assert response.status_code == 204, response.text
+    an_hour_ago = datetime.now(UTC) - timedelta(hours=1)
+    async with get_session() as session:
+        await session.execute(
+            update(Approval).where(Approval.invoice_id == approved).values(approved_at=an_hour_ago)
+        )
+        await session.execute(
+            update(Decision)
+            .where(Decision.invoice_id == rejected, Decision.action == DecisionAction.REJECT)
+            .values(created_at=an_hour_ago)
+        )
+
+    store = PgReviewDecisionStore(get_session, PgAuditLog())
+    found = await store.candidates(grace=timedelta(minutes=2), window=timedelta(days=7))
+    assert set(found) == {Candidate(approved, True), Candidate(rejected, False)}
+
+    resend = await store.decision(Candidate(approved, True))
+    assert resend is not None and resend.stale is None
+    approval = resend.decision
+    assert approval.approved
+    sent = dict(zip([i for i, _ in signaller.sent], signaller.corrections, strict=True))
+    assert approval.corrections == sent[approved]
+    guard = ReviewGuardActivities(get_session, PgAuditLog())
+    assert await guard.confirm_review(approved, True, approval.corrections, True) is True
+    assert await store.decision(Candidate(rejected, False)) == Resend(
+        ReviewDecision(approved=False)
+    )
+    # A candidate the database does not back (never decided) yields no signal.
+    assert await store.decision(Candidate(waiting, True)) is None
+    assert await store.decision(Candidate(waiting, False)) is None
+
+    await store.record_resend(Candidate(approved, True), delivered=True, error=None)
+    await store.record_resend(Candidate(approved, True), delivered=False, error="unreachable")
+    counts = await store.resend_counts([approved, rejected], window=timedelta(days=7))
+    assert counts == {approved: 2}
+
+    # P3-01: an approval gone stale (its digest no longer matches) is still re-sent, marked
+    # stale, so `confirm_review` fails the invoice instead of leaving it APPROVED forever.
+    async with get_session() as session:
+        await session.execute(
+            update(Approval).where(Approval.invoice_id == fresh).values(invoice_digest="0" * 64)
+        )
+    stale = await store.decision(Candidate(InvoiceId(fresh), True))
+    assert stale is not None and stale.decision.approved
+    assert stale.stale is not None and "does not match" in stale.stale
+    with pytest.raises(StaleApprovalError):
+        await guard.confirm_review(fresh, True, stale.decision.corrections, True)
+    await db_session.get_engine().dispose()
+
+
+def test_the_reconciler_store_finds_and_rebuilds_lost_decisions(api_schema: str) -> None:
+    asyncio.run(_reconciler_scenario())
 
 
 async def _hold_scenario() -> None:

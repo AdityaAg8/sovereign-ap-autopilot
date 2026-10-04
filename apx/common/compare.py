@@ -15,6 +15,8 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from enum import StrEnum
 
+from apx.common.normalize import MAX_AMOUNT_INTEGER_DIGITS
+
 
 class FieldKind(StrEnum):
     """Comparison family of a header field: selects its normaliser and format rule (ADR-0009
@@ -153,6 +155,8 @@ def _parse_amount(body: str) -> Decimal | None:
     try:
         value = Decimal(f"{integer_part}.{frac_part or '0'}")
     except InvalidOperation:
+        return None
+    if value.adjusted() >= MAX_AMOUNT_INTEGER_DIGITS:  # not an amount: cents would overflow
         return None
     if negative:
         value = -value

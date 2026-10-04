@@ -58,6 +58,12 @@ FIXTURES: dict[type[Any], Callable[[], object]] = {
         currency="AED",
         lines=(LineCorrection(index=1, vat_category=VatCategory.STANDARD, vat_rate=Decimal("5")),),
     ),
+    ReviewCorrections | None: lambda: ReviewCorrections(
+        kind=InvoiceKind.CREDIT_NOTE,
+        currency="AED",
+        lines=(LineCorrection(index=1, vat_category=VatCategory.STANDARD, vat_rate=Decimal("5")),),
+        supplier_address="Office 12, Al Quoz, Dubai",
+    ),
     ScanReport: fx.scan_report,
     ParsedDocument: fx.parsed_document,
     ParsedDocumentRef: fx.parsed_ref,

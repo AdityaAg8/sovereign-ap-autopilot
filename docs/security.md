@@ -181,7 +181,7 @@ Control IDs refer to the catalogue in §8.
 
 | STRIDE | Threat | Controls | Proof |
 |---|---|---|---|
-| I, T | LAN or host reaches Postgres, Temporal, Phoenix, MLflow or llama-swap on published ports | Only the gateway publishes, on 127.0.0.1; Postgres (5432) and the Temporal UI (8233) are published only by the opt-in `devports` profile, whose Temporal UI proxy passes GET/HEAD only; `POSTGRES_PASSWORD`, `AGENT_RO_PASSWORD` and `API_JWT_SECRET` are generated into `.env` by `make env`, Compose has no fallback, and no code or config ships a default password (SEC-19, SEC-23; G-1, G-2 closed in dab25f3) | `unit/test_compose_security.py`, `unit/test_db_passwords.py`, `unit/test_db_session.py`, `unit/test_init_env.py` |
+| I, T | LAN or host reaches Postgres, Temporal, Phoenix, MLflow or llama-swap on published ports | Only the gateway publishes, on 127.0.0.1; Postgres (5432) and the Temporal UI (8233) are published only by the opt-in `devports` profile, whose Temporal UI proxy passes GET/HEAD only; `POSTGRES_PASSWORD`, `AGENT_RO_PASSWORD` and `API_JWT_SECRET` are generated into `.env` by `make env`, Compose has no fallback, and no code or config ships a default password (SEC-19, SEC-23; G-1, G-2 closed in 6971630) | `unit/test_compose_security.py`, `unit/test_db_passwords.py`, `unit/test_db_session.py`, `unit/test_init_env.py` |
 | I | Runtime egress to the internet | `internal: true` app network (ADR-0001) (SEC-19). **Test missing: G-4** | `integration/test_no_egress.py` |
 | T | Tampered model or image at setup time | `models.lock.json` revision plus sha256; read-only mounts; `uv.lock` (SEC-20) | *exists*: `test_download_models.py` |
 | E | Container breakout from a parser exploit | No privileged containers; non-root app users; read-only model mounts (SEC-19) | `test_compose_security.py` |
@@ -369,13 +369,13 @@ Results: pending the first live run (the report above is written by it).
 | SEC-24 | Idempotency keys, exactly-once ASP, sha256 dedupe | §6.4 | M5.2, M5.5 | `integration/test_workflow_crash.py`, `ingest/test_dedupe.py` | planned |
 | SEC-25 | IBAN redaction in logs; traces stay on loopback or the internal network | C6 | M10.3 | `common/test_log_redaction.py` | planned |
 | SEC-26 | Bank master product path (`apx.bank`): an admin proposes a change (stored unverified, audited, P2 window starts); a different admin records the out-of-band verification; the writer refuses a verifier who recorded the change, even with a valid grant; the agent never imports `apx.bank` | P2, I3, K5 | M11 (M-01) | `tests/unit/test_bank_master.py`, `tests/integration/test_bank_master.py` (`test_propose_then_verify_by_another_admin`, `test_writer_refuses_self_verification_even_with_a_grant`) | implemented |
-| SEC-27 | Review guard: approvals carry `invoice_digest` (migration 0012); after every `review` signal `confirm_review` recomputes the digest from the database and acts only on a matching approval or a recorded rejection; anything else is audited and the workflow keeps waiting | I3, K6 | M11 (C-03) | `tests/integration/test_review_guard.py`, `tests/unit/test_invoice_workflow.py` | implemented (corrections carried in the signal are not digest-checked: KNOWN_ISSUES.md KI-02) |
+| SEC-27 | Review guard: approvals carry `invoice_digest` (migration 0012); after every `review` signal `confirm_review` recomputes the digest from the database and acts only on a matching approval or a recorded rejection; anything else is audited and the workflow keeps waiting. The signal's `ReviewCorrections` must digest to `approvals.corrections_digest` (migration 0014), recorded at approval from the `fields` rows, and the rows must still derive it (N-03; KI-02 mitigated, residual open). A decision recorded but never delivered is re-signalled by the worker's reconciler (`apx/workflows/reconciler.py`, audited `review.signal_resent`, bounded per invoice) | I3, K6 | M11 (C-03) | `tests/integration/test_review_guard.py`, `tests/unit/test_invoice_workflow.py`, `tests/unit/test_review_corrections_guard.py`, `tests/unit/test_review_signal_corrections.py`, `tests/unit/test_review_signal_reconciler.py` | implemented (executions started before the `m11-review-signal-corrections` patch are not corrections-checked: KNOWN_ISSUES.md KI-02 residual) |
 | SEC-28 | Raster caps (`apx.common.raster`): page side ≤ 2384 pt, render ≤ 200 DPI and ≤ 40 MP, decoded image ≤ 40 MP, embedded images ≤ 100 MP per page; enforced at ingest, scan and parse; over-cap input is refused with a typed error | - | M11 (H-03) | `tests/unit/test_raster_caps.py` | implemented |
 | SEC-29 | Login throttle: in-process token bucket per (client IP, email), burst 5, refill 5/min (API settings `login_burst`, `login_refill_per_minute`), 429 with `Retry-After`, LRU-bounded; unknown emails pay the same password-hash cost | - | M11 (L-02) | `tests/unit/test_api_login_throttle.py` | implemented |
 
 ## 9. Gaps found during M6.1
 
-Found on `main` at 9120b01. Fixes are M6.5 plan item 13 in ADR-0008.
+Found on `main` at f39d7e4. Fixes are M6.5 plan item 13 in ADR-0008.
 
 | ID | Severity | Finding | Fix | Proof |
 |---|---|---|---|---|
@@ -384,7 +384,7 @@ Found on `main` at 9120b01. Fixes are M6.5 plan item 13 in ADR-0008.
 | G-3 | High | `BankAccount.verified` is a plain column, so a direct database write can forge P1. | Add `verification_audit_id` to `BankAccount`; `select_payee` requires it; `record_approval` checks, in the same transaction, that the referenced entry is a `bank.verify` event for that vendor and IBAN | `policy/test_payee.py`; audit verifier |
 | G-4 | High | ADR-0001's `tests/integration/test_no_egress.py` is missing, so C1 is not proven automatically | Implement it as ADR-0001 describes and add it to `verify-m0` and `verify-m6` | The test itself |
 
-### 9.1 Status after M11 audit pass 1 (dab25f3)
+### 9.1 Status after M11 audit pass 1 (6971630)
 
 | ID | Status | How |
 |---|---|---|
@@ -402,7 +402,7 @@ Found on `main` at 9120b01. Fixes are M6.5 plan item 13 in ADR-0008.
 | R-2 | Admin and approver collude | Technical controls cannot stop two colluding role-holders | Audit chain, dashboard of bank changes followed by approvals |
 | R-3 | A human clicks through an agent proposal | Human attention | P1-P3 and SoD still apply, so a click cannot pay an unverified account |
 | R-4 | A reviewer edits a money field and approves within the limit | No maker-checker on edits (would conflict with the M5.4 flow) | Edit → new digest → routing recomputed (3-way match, fraud); audit |
-| R-5 | ~~An admin verifies their own bank change~~ **Closed** in dab25f3 | - | SEC-26: `apx.bank` and `PaymentStateWriter.verify_bank_account` require verifier ≠ changer; P2 still bars the changer from approving for 30 days |
+| R-5 | ~~An admin verifies their own bank change~~ **Closed** in 6971630 | - | SEC-26: `apx.bank` and `PaymentStateWriter.verify_bank_account` require verifier ≠ changer; P2 still bars the changer from approving for 30 days |
 | R-6 | A new hiding technique evades scan and guard | Detectors are incomplete by nature | Payment safety does not depend on them (M6.6 guard-off run) |
 | R-7 | Learning-loop poisoning through crafted invoices | Corrections feed Extractor B | Only human-corrected labels; I5 leakage test; promotion only when no gate, including the attack suite, regresses (M10.2) |
 | R-8 | Document text and PII stored in traces and the database | Needed for review and debugging | Loopback-only (G-1), retention in the runbook, full-disk encryption recommended |

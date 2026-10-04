@@ -1,7 +1,9 @@
 """In-memory token-bucket throttle for `POST /auth/login` (REVIEW L-02 and N-04, docs/security.md
 B8): an account bucket per normalised email slows password guessing against one account, and a
 coarse per-client-IP bucket with a much higher limit caps one source's total attempts. Keys are
-sha256 digests in LRU-capped maps, so memory stays bounded whatever the usernames look like.
+sha256 digests in capped maps, so memory stays bounded whatever the usernames look like; a refused
+request never creates an account bucket, and eviction drops the fullest old bucket, so a spray of
+usernames cannot flush a drained account's bucket back to full (REVIEW.md P3-03).
 """
 
 from __future__ import annotations
@@ -21,6 +23,10 @@ route rejects anything longer with 422 before the limiter or argon2 sees it."""
 DEFAULT_MAX_KEYS: Final[int] = 50_000
 """Most account buckets kept; beyond it the least recently used one is dropped. Each key is a
 32-byte digest, so the cap bounds memory to a few MB whatever usernames are sent."""
+
+EVICTION_WINDOW: Final[int] = 64
+"""How many of the least recently used buckets eviction compares; it drops the one holding the
+most tokens (the oldest among equals), so a drained bucket outlives a full one."""
 
 DEFAULT_MAX_IP_KEYS: Final[int] = 10_000
 """Most client-IP buckets kept (LRU, like the account buckets)."""
@@ -57,19 +63,41 @@ class _BucketMap:
 
     def refilled(self, key: bytes, now: float) -> _Bucket:
         """The bucket for `key` with tokens refilled up to `now`, created full if absent and
-        marked most recently used; creating one may evict the least recently used."""
-        bucket = self._buckets.get(key)
+        marked most recently used; creating one may evict another (`_evict`)."""
+        bucket = self.existing(key, now)
         if bucket is None:
             bucket = _Bucket(tokens=self.burst, updated=now)
             self._buckets[key] = bucket
             while len(self._buckets) > self._max_keys:
-                self._buckets.popitem(last=False)
-            return bucket
+                self._evict(now)
+        return bucket
+
+    def existing(self, key: bytes, now: float) -> _Bucket | None:
+        """The bucket for `key` refilled up to `now` and marked most recently used, or None
+        when there is none (nothing is created)."""
+        bucket = self._buckets.get(key)
+        if bucket is None:
+            return None
         elapsed = max(0.0, now - bucket.updated)
         bucket.tokens = min(self.burst, bucket.tokens + elapsed * self.rate)
         bucket.updated = now
         self._buckets.move_to_end(key)
         return bucket
+
+    def _evict(self, now: float) -> None:
+        """Drops, among the `EVICTION_WINDOW` least recently used buckets, the one that holds
+        the most tokens at `now` (the oldest among equals). A full bucket is identical to no
+        bucket, so dropping it loses nothing; a drained one is kept while fuller ones exist."""
+        victim: bytes | None = None
+        most = -1.0
+        for index, (key, bucket) in enumerate(self._buckets.items()):
+            if index >= EVICTION_WINDOW:
+                break
+            tokens = min(self.burst, bucket.tokens + max(0.0, now - bucket.updated) * self.rate)
+            if tokens > most:
+                victim, most = key, tokens
+        if victim is not None:
+            del self._buckets[victim]
 
     def wait_s(self, bucket: _Bucket) -> float:
         return 0.0 if bucket.tokens >= 1.0 else (1.0 - bucket.tokens) / self.rate
@@ -128,11 +156,17 @@ class LoginRateLimiter:
 
     def acquire(self, client_ip: str, email: str) -> float:
         now = self._clock()
-        account = self._accounts.refilled(_digest("email", normalise_email(email)), now)
+        account_key = _digest("email", normalise_email(email))
         source = self._ips.refilled(_digest("ip", client_ip), now)
-        wait = max(self._accounts.wait_s(account), self._ips.wait_s(source))
+        # An absent account bucket would be full, so it is only created for an admitted
+        # request: refused ones (cheap, no argon2) never add keys that could evict others.
+        account = self._accounts.existing(account_key, now)
+        account_wait = 0.0 if account is None else self._accounts.wait_s(account)
+        wait = max(account_wait, self._ips.wait_s(source))
         if wait > 0:
             return wait
+        if account is None:
+            account = self._accounts.refilled(account_key, now)
         account.tokens -= 1.0
         source.tokens -= 1.0
         return 0.0

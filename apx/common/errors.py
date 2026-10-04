@@ -179,6 +179,13 @@ class ProposalNotExecutableError(ApxError):
     an action that did not happen (REVIEW.md M-06); the proposal stays pending."""
 
 
+class ProposalInvoiceMismatchError(ApxError):
+    """`execute_proposal` was sent to one invoice's decisions endpoint with a proposal for
+    another invoice. Refused before anything is recorded (API 409): otherwise the proposal's
+    invoice would be approved while the audit entry and the review signal named the path's
+    invoice (REVIEW.md P3-02)."""
+
+
 class AuditChainError(ApxError):
     """Audit chain append failed or verification found a broken link (I4)."""
 
