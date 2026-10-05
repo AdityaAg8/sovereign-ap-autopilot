@@ -197,7 +197,8 @@ it and point the stack at it through the shell (shell variables win over `.env`)
 
 ```bash
 docker exec sovereign-ap-autopilot-postgres-1 sh -c 'createdb -U "$POSTGRES_USER" apx_attacks'
-export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db INGEST_INBOX_DIR=data/inbox_attacks \n  WORKER_ASP_DB=data/asp/asp_attacks.sqlite DATABASE_URL=
+export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db \
+  INGEST_INBOX_DIR=data/inbox_attacks WORKER_ASP_DB=data/asp/asp_attacks.sqlite DATABASE_URL=
 cp -n data/seed_credentials.json data/seed_credentials.live.json
 make up && make seed
 make eval-attacks
@@ -210,7 +211,9 @@ database's file aside and put it back afterwards. `INGEST_INBOX_DIR` gives the w
 inbox: on an empty database it would otherwise sweep every document in the live inbox into it.
 The host scripts that drop documents (`eval-attacks`, `e2e-pipeline`, `demo`) read the same
 variable (`evals/stack_inbox.py`), so their files land where that worker looks; `attacks_e2e.py
---inbox` overrides it. The empty `DATABASE_URL=` keeps a `DATABASE_URL` in `.env` from pointing
+--inbox` overrides it. Keep both paths below `data/`, the only folder the worker shares with the
+host: `host_inbox` refuses any other value, and a `WORKER_ASP_DB` elsewhere would live inside the
+container and reset on the next `make up`. The empty `DATABASE_URL=` keeps a `DATABASE_URL` in `.env` from pointing
 the host scripts back at `apx` (`uv run --env-file` never overrides a variable the shell sets).
 `WORKER_ASP_DB` gives the run its own mock-ASP store: send and archive idempotency is keyed by
 the document sha, so a document that another database already sent (the attack and demo PDFs are

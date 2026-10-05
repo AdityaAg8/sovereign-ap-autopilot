@@ -21,7 +21,9 @@ def host_inbox(
 ) -> Path:
     """`explicit` if given; else `root/INGEST_INBOX_DIR` when that is set; else `data/inbox`.
 
-    Raises `ConfigError` for an absolute or `..` value, which has no fixed place under `root`.
+    Raises `ConfigError` unless the value is a relative POSIX path below `data/`: the worker
+    shares only `data/` with the host (`../data:/app/data`), so any other folder is one the
+    worker watches inside its container and the host can never write to.
     """
     if explicit is not None:
         return explicit
@@ -29,9 +31,12 @@ def host_inbox(
     if not value:
         return data / "inbox"
     relative = PurePosixPath(value)
-    if relative.is_absolute() or ".." in relative.parts:
+    parts = relative.parts
+    if relative.is_absolute() or "\\" in value or ".." in parts or parts[:1] != ("data",):
         raise ConfigError(
-            f"INGEST_INBOX_DIR={value!r} must be a path inside the repo, such as "
-            "data/inbox_attacks (the worker resolves it against /app, the repo root)"
+            f"INGEST_INBOX_DIR={value!r} must be a relative path below data/, such as "
+            "data/inbox_attacks (the only folder the worker shares with the host)"
         )
+    if len(parts) < 2:
+        raise ConfigError(f"INGEST_INBOX_DIR={value!r} must name a folder below data/")
     return root.joinpath(*relative.parts)

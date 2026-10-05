@@ -119,7 +119,9 @@ def _eta(seconds: float) -> str:
 
 
 STALE_SLACK_S = 5.0
+"""Clock slack between this host and Postgres when comparing created_at with the drop time."""
 LIVE_HISTORY_FILE = "temporal.db"
+"""The live stack's Temporal history file (compose `TEMPORAL_DB_FILE` default)."""
 
 
 def started_on_this_history(data: Path, sha: str, environ: Mapping[str, str] = os.environ) -> bool:
@@ -131,9 +133,6 @@ def started_on_this_history(data: Path, sha: str, environ: Mapping[str, str] = o
     if (environ.get("TEMPORAL_DB_FILE") or LIVE_HISTORY_FILE) != LIVE_HISTORY_FILE:
         return False
     return (data / "documents" / sha).exists()
-
-
-"""Clock slack between this host and Postgres when comparing created_at with the drop time."""
 
 
 class Runner:

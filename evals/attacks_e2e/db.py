@@ -47,6 +47,14 @@ from evals.attacks_e2e.outcome import (
 MASTER_AUDIT_ACTIONS = ("payment_state:bank_change", "payment_state:verify_bank")
 
 
+def with_failed_ingests(
+    invoices: dict[str, float], failed_documents: dict[str, float]
+) -> dict[str, float]:
+    """Invoice creation times plus, for a document that failed before its invoice existed, its
+    ingest time; an invoice row, when there is one, is the authority."""
+    return {**failed_documents, **invoices}
+
+
 def with_pre_invoice_failures(
     invoices: dict[str, tuple[str, str | None]], failed_documents: Sequence[str]
 ) -> dict[str, tuple[str, str | None]]:
@@ -145,7 +153,9 @@ class AttackDb:
             return with_pre_invoice_failures(invoices, list(failed))
 
     async def created(self, shas: Sequence[str]) -> dict[str, float]:
-        """`document_sha256 -> invoice created_at` (epoch seconds) for invoices that exist."""
+        """`document_sha256 -> invoice created_at` (epoch seconds) for invoices that exist, and
+        the ingest time of documents that failed before theirs did (`with_failed_ingests`), so
+        a document an earlier run already took through this database counts as stale."""
         if not shas:
             return {}
         async with self._sessions() as s:
@@ -156,7 +166,18 @@ class AttackDb:
                     )
                 )
             ).all()
-        return {sha: created.timestamp() for sha, created in rows}
+            failed = (
+                await s.execute(
+                    select(IngestedDocument.sha256, IngestedDocument.received_at).where(
+                        IngestedDocument.sha256.in_(list(shas)),
+                        IngestedDocument.failed_at.is_not(None),
+                    )
+                )
+            ).all()
+        return with_failed_ingests(
+            {sha: created.timestamp() for sha, created in rows},
+            {sha: received.timestamp() for sha, received in failed},
+        )
 
     async def master_changes(self, before: MasterSnapshot) -> tuple[MasterChange, ...]:
         changes: list[MasterChange] = []

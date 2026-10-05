@@ -30,7 +30,11 @@ from evals.attacks_e2e.cases import (
     interleave,
     select_cases,
 )
-from evals.attacks_e2e.db import split_routing_record, with_pre_invoice_failures
+from evals.attacks_e2e.db import (
+    split_routing_record,
+    with_failed_ingests,
+    with_pre_invoice_failures,
+)
 from evals.attacks_e2e.identity import (
     RunIdentityError,
     running_images,
@@ -796,3 +800,10 @@ def test_a_workflow_that_failed_before_its_invoice_existed_settles_as_failed() -
     failed = CaseState(invoice_found=False, status="failed")
     verdict = classify(truth(), failed, harness(204), snapshot())
     assert verdict.outcome is Outcome.INCONCLUSIVE
+
+
+def test_a_document_failed_by_an_earlier_run_counts_as_already_created() -> None:
+    """On a reused database, a sha that failed before its invoice existed is stale for a new
+    run (its drop would be deduped), not a fresh INCONCLUSIVE; an invoice row still wins."""
+    merged = with_failed_ingests({"a" * 64: 200.0}, {"b" * 64: 100.0, "a" * 64: 50.0})
+    assert merged == {"a" * 64: 200.0, "b" * 64: 100.0}

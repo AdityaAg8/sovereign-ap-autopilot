@@ -141,8 +141,11 @@ each pass only from workflows actually waiting in review, rotating through the c
   `NON_RETRYABLE_ERRORS`: "sampling may differ"), so the activity re-runs extraction for the
   whole `OUTAGE_WINDOW` (36 attempts, about 30 minutes) before `mark_failed` records the failure
   on `ingested_documents`. Extraction is greedy, so the same page yields the same miss.
-- **Seen.** One clean factory invoice in the 2026-10-05 attack-suite baseline. It failed
-  closed: no invoice row, no payment, a durable failure record, and the API shows it as failed.
+- **Seen.** In the 2026-10-05 attack-suite run: three attack cases (A03-002, A03-010,
+  A10-012; `reports/attacks_e2e.md`) and one clean factory invoice in an earlier baseline pass.
+  Each failed closed: no invoice row, no payment, a durable failure record, and the API shows it
+  as failed. They are three of the four inconclusive cases that keep the M6.6 gate at
+  FAIL_INCOMPLETE, since the gate counts any failed workflow as inconclusive.
 - **Impact.** About 30 minutes of GPU time per such document, which delays the queue behind it.
   No correctness or safety impact.
 - **Fix.** Raise a distinct, non-retryable subclass for the missing-fields case (keep schema

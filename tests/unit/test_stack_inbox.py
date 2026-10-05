@@ -30,7 +30,18 @@ def test_an_explicit_folder_wins_over_the_environment(tmp_path: Path) -> None:
     assert host_inbox(tmp_path / "data", tmp_path, chosen, environ=env) == chosen
 
 
-@pytest.mark.parametrize("value", ["/app/data/inbox_demo", "../inbox", "data/../../inbox"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "/app/data/inbox_demo",
+        "../inbox",
+        "data/../../inbox",
+        "inbox_attacks",  # outside data/, the only folder the worker shares with the host
+        "apx/inbox",
+        r"data\inbox_attacks",  # one directory name in the Linux container
+        "data",
+    ],
+)
 def test_refuses_a_value_it_cannot_map_to_the_host(tmp_path: Path, value: str) -> None:
     with pytest.raises(ConfigError, match="INGEST_INBOX_DIR"):
         host_inbox(tmp_path / "data", tmp_path, environ={"INGEST_INBOX_DIR": value})
