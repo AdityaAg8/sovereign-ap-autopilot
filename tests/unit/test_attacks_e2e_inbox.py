@@ -1,6 +1,6 @@
-"""`scripts/attacks_e2e.py --inbox`: a run on a second database drops its cases into that stack's
-own inbox (the worker's `INGEST_INBOX_DIR`), so its worker never sweeps the live inbox's
-documents into the attack database. Without the flag the folder comes from `host_inbox`."""
+"""`scripts/attacks_e2e.py` on a second database: `--inbox` (else `host_inbox`) drops its cases
+into that stack's own inbox, so its worker never sweeps the live inbox's documents, and a blob
+in the shared document store skips a case only when the run shares the live Temporal history."""
 
 from __future__ import annotations
 
@@ -30,3 +30,17 @@ def test_inbox_defaults_to_the_data_folder_and_can_be_overridden(tmp_path: Path)
         ["--data", str(tmp_path), "--inbox", str(tmp_path / "inbox_attacks")]
     )
     assert other.inbox == tmp_path / "inbox_attacks"
+
+
+def test_a_stored_blob_marks_a_case_taken_only_on_the_live_history(tmp_path: Path) -> None:
+    """`data/documents` is shared by every database; on its own Temporal file (and database) a
+    run starts every workflow fresh, so a blob left by a live-stack run must not skip the case."""
+    sha = "ab" * 32
+    (tmp_path / "documents").mkdir()
+    assert not attacks.started_on_this_history(tmp_path, sha, environ={})
+    (tmp_path / "documents" / sha).write_bytes(b"%PDF")
+    assert attacks.started_on_this_history(tmp_path, sha, environ={})
+    live = {"TEMPORAL_DB_FILE": "temporal.db"}
+    assert attacks.started_on_this_history(tmp_path, sha, environ=live)
+    own = {"TEMPORAL_DB_FILE": "temporal_attacks.db"}
+    assert not attacks.started_on_this_history(tmp_path, sha, environ=own)

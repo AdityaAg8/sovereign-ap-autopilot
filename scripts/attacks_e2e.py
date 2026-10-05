@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import shutil
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,6 +119,20 @@ def _eta(seconds: float) -> str:
 
 
 STALE_SLACK_S = 5.0
+LIVE_HISTORY_FILE = "temporal.db"
+
+
+def started_on_this_history(data: Path, sha: str, environ: Mapping[str, str] = os.environ) -> bool:
+    """Whether a run outside the row store may already have started this sha's workflow on the
+    stack's Temporal history (workflow ids derive from the sha and reject duplicates). The
+    document store `data/documents` is shared by every database, so a stored blob says so only
+    on the live history; a run on its own `TEMPORAL_DB_FILE` (with its own database, whose
+    rows `AttackDb.created` already checks) starts every workflow fresh."""
+    if (environ.get("TEMPORAL_DB_FILE") or LIVE_HISTORY_FILE) != LIVE_HISTORY_FILE:
+        return False
+    return (data / "documents" / sha).exists()
+
+
 """Clock slack between this host and Postgres when comparing created_at with the drop time."""
 
 
@@ -224,7 +240,7 @@ class Runner:
                     flight.approve_http = clicked.approve_http
                     flight.approve_typed = clicked.approve_typed
                 flights[sha] = flight
-            elif sha in existing or (data / "documents" / sha).exists():
+            elif sha in existing or started_on_this_history(data, sha):
                 stale.append(case_id)  # ingested by another run: dedupe would hide a drop
             else:
                 queue.append(prepared)
@@ -397,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def taken(sha: str) -> bool:
         # A clean invoice ingested before (and not by this run) cannot be dropped again.
-        return (data / "documents" / sha).exists() and not store.knows(sha)
+        return started_on_this_history(data, sha) and not store.knows(sha)
 
     baseline = clean_baseline(data, args.baseline, erp.build(), taken)
     print(f"{len(baseline)} clean baseline invoices", flush=True)
