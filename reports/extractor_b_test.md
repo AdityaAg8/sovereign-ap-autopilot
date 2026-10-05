@@ -8,24 +8,24 @@ Parse failures (no row, after retries; the run fails): 0.
 
 | Metric | Value | Gate |
 |---|---:|---|
-| Valid JSON | 99.20% | ≥ 99% PASS |
-| Grounding rate (non-null fields matched to parse words) | 89.97% | reported |
+| Valid JSON | 100.00% | ≥ 99% PASS |
+| Grounding rate (non-null fields matched to parse words) | 91.10% | reported |
 | Grounded box IoU ≥ 0.5 with the label (correct values) | 81.60% | reported |
-| Latency p50 / p95 | 23.9 s / 41.9 s | reported |
+| Latency p50 / p95 | 20.3 s / 34.4 s | reported |
 
 ## By input kind and layout language
 
 | Slice | Docs | Valid JSON | Field accuracy | Grounding | Box IoU ≥ 0.5 | Latency p50 / p95 |
 |---|---:|---:|---:|---:|---:|---:|
-| All | 750 | 99.20% | 97.92% | 89.97% | 81.60% | 23.9 s / 41.9 s |
-| Digital | 510 | 99.22% | 98.38% | 92.36% | 85.41% | 23.1 s / 41.9 s |
-| Scan | 240 | 99.17% | 96.94% | 84.87% | 72.74% | 24.9 s / 40.9 s |
-| English-first | 564 | 98.94% | 97.59% | 90.60% | 83.82% | 23.9 s / 42.8 s |
-| Arabic-first | 186 | 100.00% | 98.89% | 88.06% | 75.27% | 23.7 s / 37.8 s |
-| Digital, English-first | 380 | 98.95% | 97.97% | 92.57% | 86.23% | 23.6 s / 42.9 s |
-| Digital, Arabic-first | 130 | 100.00% | 99.56% | 91.76% | 83.17% | 22.0 s / 37.8 s |
-| Scan, English-first | 184 | 98.91% | 96.82% | 86.54% | 78.45% | 24.3 s / 42.2 s |
-| Scan, Arabic-first | 56 | 100.00% | 97.32% | 79.46% | 54.09% | 26.5 s / 37.6 s |
+| All | 750 | 100.00% | 98.63% | 91.10% | 81.60% | 20.3 s / 34.4 s |
+| Digital | 510 | 100.00% | 99.08% | 93.59% | 85.48% | 19.9 s / 34.1 s |
+| Scan | 240 | 100.00% | 97.68% | 85.81% | 72.58% | 21.8 s / 35.1 s |
+| English-first | 564 | 100.00% | 98.78% | 92.16% | 83.70% | 20.1 s / 34.3 s |
+| Arabic-first | 186 | 100.00% | 98.16% | 87.86% | 75.40% | 20.6 s / 34.5 s |
+| Digital, English-first | 380 | 100.00% | 99.15% | 94.31% | 86.33% | 19.9 s / 34.1 s |
+| Digital, Arabic-first | 130 | 100.00% | 98.85% | 91.50% | 83.10% | 19.9 s / 34.1 s |
+| Scan, English-first | 184 | 100.00% | 98.02% | 87.76% | 77.86% | 20.9 s / 34.4 s |
+| Scan, Arabic-first | 56 | 100.00% | 96.56% | 79.35% | 54.63% | 23.8 s / 35.4 s |
 
 ## Field accuracy (normalised exact match against factory labels, valid outputs)
 
@@ -33,19 +33,19 @@ Party names on bilingual invoices are printed in both scripts; either printed re
 
 | Field | Accuracy | Digital | Scan | English-first | Arabic-first | Grounded |
 |---|---:|---:|---:|---:|---:|---:|
-| invoice_number | 99.33% | 99.80% | 98.32% | 99.64% | 98.39% | 87.23% |
-| issue_date | 99.60% | 100.00% | 98.74% | 99.82% | 98.92% | 98.79% |
-| due_date | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | 98.92% |
-| supplier_name | 99.87% | 100.00% | 99.58% | 100.00% | 99.46% | 86.02% |
-| supplier_trn | 97.85% | 99.01% | 95.38% | 97.85% | 97.85% | 89.78% |
-| supplier_address | 98.66% | 100.00% | 95.80% | 98.39% | 99.46% | 56.85% |
-| buyer_name | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | 95.83% |
-| buyer_trn | 99.60% | 100.00% | 98.74% | 99.46% | 100.00% | 95.16% |
+| invoice_number | 99.33% | 99.80% | 98.33% | 99.65% | 98.39% | 87.33% |
+| issue_date | 99.60% | 100.00% | 98.75% | 99.82% | 98.92% | 98.67% |
+| due_date | 99.87% | 100.00% | 99.58% | 99.82% | 100.00% | 98.67% |
+| supplier_name | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | 85.60% |
+| supplier_trn | 98.00% | 99.02% | 95.83% | 98.05% | 97.85% | 89.73% |
+| supplier_address | 98.53% | 99.80% | 95.83% | 98.23% | 99.46% | 56.53% |
+| buyer_name | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | 95.87% |
+| buyer_trn | 99.60% | 100.00% | 98.75% | 99.47% | 100.00% | 95.33% |
 | currency | 100.00% | 100.00% | 100.00% | 100.00% | 100.00% | 99.87% |
-| po_number | 99.19% | 100.00% | 97.48% | 99.64% | 97.85% | 81.72% |
-| subtotal | 95.70% | 95.26% | 96.64% | 94.44% | 99.46% | 94.76% |
-| vat_total | 99.19% | 99.41% | 98.74% | 99.10% | 99.46% | 97.85% |
-| total | 95.70% | 95.26% | 96.64% | 94.44% | 99.46% | 94.89% |
-| iban | 86.16% | 88.54% | 81.09% | 83.51% | 94.09% | 81.85% |
+| po_number | 98.93% | 99.41% | 97.92% | 99.29% | 97.85% | 81.33% |
+| subtotal | 96.67% | 96.27% | 97.50% | 97.70% | 93.55% | 98.90% |
+| vat_total | 97.60% | 97.45% | 97.92% | 97.87% | 96.77% | 98.50% |
+| total | 98.00% | 97.84% | 98.33% | 97.87% | 98.39% | 99.05% |
+| iban | 94.67% | 97.45% | 88.75% | 95.21% | 93.01% | 90.53% |
 
-Overall field accuracy: 97.92%.
+Overall field accuracy: 98.63%.

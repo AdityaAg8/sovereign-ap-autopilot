@@ -4,7 +4,7 @@ n = 252, extractbench eval, Extractor A `base` (extractor-a), zero-shot
 
 - Headline on the 245 `source:real` documents, then all 252.
 - Predictions carry no citations, so grounding F1 is the true score of an answer that cites nothing.
-- Generated at 2026-10-03T13:43:32.008228+00:00; normaliser `04d4eb8964f09d79`; git 565d09ae686442282a5bea57288510ee000b1b8b, be917f6426bbe0349029078cc415fdbc938343fc
+- Generated at 2026-10-05T05:16:17.650936+00:00; normaliser `04d4eb8964f09d79`; git 565d09ae686442282a5bea57288510ee000b1b8b, be917f6426bbe0349029078cc415fdbc938343fc
 
 | Metric | Value | 95% CI | n |
 |---|---|---|---|
