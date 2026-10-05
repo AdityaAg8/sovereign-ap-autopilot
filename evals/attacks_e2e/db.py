@@ -1,5 +1,6 @@
 """Read-only database facts for the M6.6 attack run (PRD §10 M6.6): the vendor bank-master
-snapshot taken when the run starts, the status/route of in-flight invoices, every bank-master write
+snapshot taken when the run starts, the status/route of in-flight invoices (and `failed` for a
+document whose workflow gave up before its invoice existed), every bank-master write
 since the snapshot, and one settled invoice's full `CaseState` (payee pinned at routing, reasons,
 fraud flags, scan audit, approvals, proposals, audit actions). Raw IBANs are hashed on read."""
 
@@ -25,6 +26,7 @@ from apx.db.models import (
     BankDetailHistory,
     Decision,
     FraudFlag,
+    IngestedDocument,
     Invoice,
     Proposal,
     User,
@@ -43,6 +45,18 @@ from evals.attacks_e2e.outcome import (
 )
 
 MASTER_AUDIT_ACTIONS = ("payment_state:bank_change", "payment_state:verify_bank")
+
+
+def with_pre_invoice_failures(
+    invoices: dict[str, tuple[str, str | None]], failed_documents: Sequence[str]
+) -> dict[str, tuple[str, str | None]]:
+    """`invoices` plus `failed` (no route) for each document whose workflow gave up before its
+    invoice row existed (`mark_failed` writes `ingested_documents.failed_at` then); an invoice
+    row, when there is one, is the authority."""
+    merged = dict(invoices)
+    for sha in failed_documents:
+        merged.setdefault(sha, ("failed", None))
+    return merged
 
 
 def split_routing_record(
@@ -105,7 +119,8 @@ class AttackDb:
         )
 
     async def statuses(self, shas: Sequence[str]) -> dict[str, tuple[str, str | None]]:
-        """`document_sha256 -> (status, route)` for the invoices that exist so far."""
+        """`document_sha256 -> (status, route)` for the invoices that exist so far, and `failed`
+        for documents that failed before theirs existed (`with_pre_invoice_failures`)."""
         if not shas:
             return {}
         async with self._sessions() as s:
@@ -116,7 +131,18 @@ class AttackDb:
                     )
                 )
             ).all()
-        return {sha: (cast(str, _enum(status)), _enum(route)) for sha, status, route in rows}
+            failed = (
+                await s.execute(
+                    select(IngestedDocument.sha256).where(
+                        IngestedDocument.sha256.in_(list(shas)),
+                        IngestedDocument.failed_at.is_not(None),
+                    )
+                )
+            ).scalars()
+            invoices = {
+                sha: (cast(str, _enum(status)), _enum(route)) for sha, status, route in rows
+            }
+            return with_pre_invoice_failures(invoices, list(failed))
 
     async def created(self, shas: Sequence[str]) -> dict[str, float]:
         """`document_sha256 -> invoice created_at` (epoch seconds) for invoices that exist."""
@@ -176,7 +202,12 @@ class AttackDb:
                 await s.execute(select(Invoice).where(Invoice.document_sha256 == sha))
             ).scalar_one_or_none()
             if invoice is None:
-                return CaseState(invoice_found=False)
+                failed_at = await s.scalar(
+                    select(IngestedDocument.failed_at).where(IngestedDocument.sha256 == sha)
+                )
+                return CaseState(
+                    invoice_found=False, status=None if failed_at is None else "failed"
+                )
             state = await self._invoice_facts(s, invoice)
         return state.model_copy(update={"master_changes": await self.master_changes(before)})
 

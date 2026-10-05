@@ -30,7 +30,7 @@ from evals.attacks_e2e.cases import (
     interleave,
     select_cases,
 )
-from evals.attacks_e2e.db import split_routing_record
+from evals.attacks_e2e.db import split_routing_record, with_pre_invoice_failures
 from evals.attacks_e2e.identity import (
     RunIdentityError,
     running_images,
@@ -784,3 +784,15 @@ def test_report_nets_detection_of_the_clean_baseline_and_counts_timeouts(tmp_pat
     assert data["net_detection"]["payee_p1"] == 0.0
     text = out.read_text(encoding="utf-8")
     assert "| **net of baseline** |" in text and "(timed out)" in text and "A02-009" in text
+
+
+def test_a_workflow_that_failed_before_its_invoice_existed_settles_as_failed() -> None:
+    """`mark_failed` records such a failure on `ingested_documents`; without reading it the run
+    would poll that case until `--case-timeout` (90 min). It settles, and stays inconclusive."""
+    invoices = {"a" * 64: ("archived", "review")}
+    merged = with_pre_invoice_failures(invoices, ["b" * 64, "a" * 64])
+    assert merged == {"a" * 64: ("archived", "review"), "b" * 64: ("failed", None)}
+    assert is_settled("failed", approve_enabled=True, approve_http=None)
+    failed = CaseState(invoice_found=False, status="failed")
+    verdict = classify(truth(), failed, harness(204), snapshot())
+    assert verdict.outcome is Outcome.INCONCLUSIVE
