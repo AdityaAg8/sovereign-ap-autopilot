@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Extractor B R1b (ADR-0019 amendment 3) exported: run `b-20261004T1300-e871c646`, best step 446 (dev F1 99.64, valid JSON 1.000 on 178 UAE dev docs whose targets are limited to the pages B sees, so not comparable with R1's 97.25), Q4_K_M sha256 `366648ea…`, smoke 5/5, registered as MLflow `extractor_b` v3 (alias challenger). `extractor-b-challenger` now serves R1b, and the new pinned `extractor-b-r1b` alias serves `evals.real --b-version r1b`. The champion is unchanged.
+
 - `--parser-id` on `evals.extraction_a`, `ml.extractor_b.promote` (eval-b, gates) and `evals.real run` (Makefile `PARSER_ID`) reads an earlier parser build's cache snapshot, read-only: a miss stops the run instead of parsing. R1b's eval queue reads `a8832889e65c7fd5`, the snapshot A and R1 were measured on (ADR-0019 amendment 3 item 7), and `gates-b` is now `+` so a failed gate still lets the CORD hold-out and the report run.
 
 - `cadence.first_generative_eval_epoch` (default 1): R1b skips the two epoch-1 generative dev evals (~3.2 h of ~13 h), keeping both of epoch 2, where v1's and R1's best checkpoints were. ADR-0020 records the v1.0 scope (teacher skipped, arbiter and live retrain deferred); KNOWN_ISSUES KI-03, KI-04.
