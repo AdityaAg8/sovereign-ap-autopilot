@@ -3,7 +3,7 @@
 n = 100, cord test, Extractor B `v1` (extractor-b-v1), zero-shot
 
 - Scored on the 7 mapped CORD keys only (ADR-0019 §2).
-- Generated at 2026-10-05T05:16:08.499522+00:00; normaliser `04d4eb8964f09d79`; git b6b0e1c422857f9f5c96912270a9fa7c237d2d59
+- Generated at 2026-10-05T15:20:43.600927+00:00; normaliser `04d4eb8964f09d79`; git b6b0e1c422857f9f5c96912270a9fa7c237d2d59
 - Mapped gold share: 76.02% of gold field instances
 
 | Metric | Value | 95% CI | n |

@@ -3,7 +3,7 @@
 n = 100, cord test, Extractor B `v1` (extractor-b-v1), zero-shot
 
 - Scored on the 7 mapped CORD keys only (ADR-0019 §2).
-- Generated at 2026-10-05T05:16:08.499522+00:00; normaliser `04d4eb8964f09d79`; git b6b0e1c422857f9f5c96912270a9fa7c237d2d59
+- Generated at 2026-10-05T15:20:43.600927+00:00; normaliser `04d4eb8964f09d79`; git b6b0e1c422857f9f5c96912270a9fa7c237d2d59
 - Mapped gold share: 76.02% of gold field instances
 
 | Metric | Value | 95% CI | n |
@@ -27,7 +27,7 @@ Identity: model=extractor-b-v1, gguf_sha256=5269de7351ff4571385f2dfd7e7863ebb68b
 n = 100, cord test, Extractor B `r1` (extractor-b-r1), in-distribution
 
 - Scored on the 7 mapped CORD keys only (ADR-0019 §2).
-- Generated at 2026-10-05T05:16:07.940596+00:00; normaliser `04d4eb8964f09d79`; git 073e6c3d8d49e808d74f61032b8f972fcc229ce0
+- Generated at 2026-10-05T15:20:42.974609+00:00; normaliser `04d4eb8964f09d79`; git 073e6c3d8d49e808d74f61032b8f972fcc229ce0
 - Mapped gold share: 76.02% of gold field instances
 
 | Metric | Value | 95% CI | n |
@@ -51,7 +51,7 @@ Identity: model=extractor-b-r1, gguf_sha256=11ce0660b74abe95f64fee509396b1ec8b78
 n = 100, cord test, Extractor B `r1b` (extractor-b-r1b), in-distribution
 
 - Scored on the 7 mapped CORD keys only (ADR-0019 §2).
-- Generated at 2026-10-05T05:16:08.225305+00:00; normaliser `04d4eb8964f09d79`; git 00846e9371703f60d181283d2c54e93f85951d1d
+- Generated at 2026-10-05T15:20:43.262039+00:00; normaliser `04d4eb8964f09d79`; git 00846e9371703f60d181283d2c54e93f85951d1d
 - Mapped gold share: 76.02% of gold field instances
 
 | Metric | Value | 95% CI | n |
@@ -75,7 +75,7 @@ Identity: model=extractor-b-r1b, gguf_sha256=366648ea66478d6c1baff5348efd6fc56e0
 n = 100, cord test, Extractor A `base` (extractor-a), zero-shot
 
 - Scored on the 7 mapped CORD keys only (ADR-0019 §2).
-- Generated at 2026-10-05T05:16:07.664568+00:00; normaliser `04d4eb8964f09d79`; git ea6f25c5febbcbd2d246beedcfa932be0bdb7a50
+- Generated at 2026-10-05T15:20:42.670149+00:00; normaliser `04d4eb8964f09d79`; git ea6f25c5febbcbd2d246beedcfa932be0bdb7a50
 - Mapped gold share: 76.02% of gold field instances
 
 | Metric | Value | 95% CI | n |

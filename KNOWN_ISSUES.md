@@ -12,6 +12,7 @@ incomplete.
 | KI-04 | Low | REVIEW.md P3-07, P4-03, P4-04 | Accepted, each fails closed |
 | KI-05 | Medium | Found 2026-10-04 (R1b run) | Open: B trains at 512 px wide, serves full size; fix next round |
 | KI-06 | Low | Found 2026-10-05 (attack suite run) | Open: an extraction missing required fields is retried for the 30-min outage window |
+| KI-07 | Low | Found 2026-10-05 (ExtractBench run) | Open: answers longer than the 4,096-token output limit are cut off (21 of 252 ExtractBench documents) |
 
 ## KI-01: two blobs over 1 MB in git history (REVIEW.md M-05)
 
@@ -152,3 +153,17 @@ each pass only from workflows actually waiting in review, rotating through the c
   and JSON failures retryable), list it under `build_invoice` in `NON_RETRYABLE_ERRORS`, and
   test that it fails at once. Unscheduled for v1.0: it changes the defense fingerprint the attack
   suite was measured on.
+
+## KI-07: long table answers outgrow the output limit (found 2026-10-05)
+
+- **What.** Extractor A answers in at most 4,096 tokens (`LlmSettings.max_tokens`, inside the
+  12,288-token slot of ADR-0013). On ExtractBench, 21 of 252 documents ask for every row of a
+  long table (13F and N-PORT holdings, census tables, price lists, SEC schedules). The answer
+  stops at the limit (`finish_reason=length`), the JSON is incomplete, and the row counts as a
+  failure in every denominator: valid JSON 91.67%, value F1 70.39% on the real documents.
+- **Impact on the product.** None measured: UAE invoices answer in well under the limit (0
+  invalid JSON on 750 UAE test documents for Extractor B, 99.60% valid for A), and the invoice
+  schema has no unbounded tables beyond line items.
+- **Fix.** A larger output budget means a larger slot or fewer reserved tokens, which is a
+  serving change under ADR-0013 with a VRAM probe; or chunked extraction of long tables. Neither
+  is in v1.0 scope (ADR-0020).

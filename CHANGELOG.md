@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-05
+
+### Measured (live stack and fixed eval splits; every report under `reports/`)
+
+- Attack suite end to end (M6.6, fresh database): 312 of 312 cases run, payment-changing ASR 0 of 308 conclusive, none timed out; gate FAIL_INCOMPLETE on 4 cases that ended `failed` with no payment (3 extractions without totals, KI-06; 1 mock-ASP resend conflict, now fixed).
+- End to end (M5.6): 18 of 18 factory invoices archived, 2 of 2 attack PDFs kept out of payment. Demo (M10.5): 9 of 9 scenarios met their expected outcome (`reports/demo.md`).
+- Extractor B R1b: UAE test field F1 93.23% vs A 92.75%, valid JSON 100%, p50 16.35 s vs A 26.04 s; promotion gates 4 of 5 (fails P2 latency, limit 15.62 s), not promoted. CORD v2 test field F1 90.70% (A zero-shot 46.16%).
+- Extractor A on ExtractBench short (zero-shot): value F1 70.39% on 245 real documents, 91.67% valid JSON (KI-07).
+- Trust gate: 0.54% error among auto-accepted fields at α = 1% (limit 1%).
+
 ### Added
 
 - Extractor B R1b (ADR-0019 amendment 3) exported: run `b-20261004T1300-e871c646`, best step 446 (dev F1 99.64, valid JSON 1.000 on 178 UAE dev docs whose targets are limited to the pages B sees, so not comparable with R1's 97.25), Q4_K_M sha256 `366648ea…`, smoke 5/5, registered as MLflow `extractor_b` v3 (alias challenger). `extractor-b-challenger` now serves R1b, and the new pinned `extractor-b-r1b` alias serves `evals.real --b-version r1b`. The champion is unchanged.
@@ -47,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ExtractBench requests sized their schema digest (the field descriptions) with `estimate_tokens`, which is calibrated on document text and overshoots compact JSON 1.88-2.70x against the Qwen3.5 tokenizer. After the 2026-10-04 estimator change, a run dropped the digest for 132 of 252 documents and Extractor A's value F1 fell from 73.10% to 47.07% with the same model and parse. Digests are now sized with `estimate_json_tokens` (calibrated on the 252 digests, never below their true count); 220 of 252 carry one, and the largest request is 11,172 of the slot's 12,288 true tokens. Invoice extraction is unaffected: no UAE test or calibration invoice reaches the text budget.
 - A run on a second database also shared the mock-ASP store (`data/asp/asp.sqlite`), whose send and archive idempotency is keyed by document sha: a document already sent from another database (the attack and demo PDFs are deterministic) was refused as a conflicting resend and its invoice ended FAILED. The worker now takes `WORKER_ASP_DB` from the shell (compose passthrough); found by the 2026-10-05 attack run, where it made one attack case and two clean baselines inconclusive.
 - Attack-suite harness (`scripts/attacks_e2e.py`, `evals/attacks_e2e/db.py`): a blob in the shared document store skips a case only on the live Temporal history, so a run on its own `TEMPORAL_DB_FILE` no longer reports every case as already ingested; a document whose workflow failed before its invoice existed (`ingested_documents.failed_at`) settles as `failed` instead of being polled to the 90-minute case timeout, and counts as already created for a later run on the same database. Outcomes and the M6.6 gate are unchanged: such a case is still inconclusive.
 - `INGEST_INBOX_DIR` must be a folder below `data/` (`evals/stack_inbox.py`): the worker shares only `data/` with the host, so any other value made the scripts drop files the worker could never see.
