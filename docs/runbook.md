@@ -197,12 +197,12 @@ it and point the stack at it through the shell (shell variables win over `.env`)
 
 ```bash
 docker exec sovereign-ap-autopilot-postgres-1 sh -c 'createdb -U "$POSTGRES_USER" apx_attacks'
-export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db INGEST_INBOX_DIR=data/inbox_attacks DATABASE_URL=
+export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db INGEST_INBOX_DIR=data/inbox_attacks \n  WORKER_ASP_DB=data/asp/asp_attacks.sqlite DATABASE_URL=
 cp -n data/seed_credentials.json data/seed_credentials.live.json
 make up && make seed
 make eval-attacks
 cp data/seed_credentials.live.json data/seed_credentials.json
-unset POSTGRES_DB TEMPORAL_DB_FILE INGEST_INBOX_DIR DATABASE_URL && make up
+unset POSTGRES_DB TEMPORAL_DB_FILE INGEST_INBOX_DIR WORKER_ASP_DB DATABASE_URL && make up
 ```
 
 `make seed` writes a new random password to `data/seed_credentials.json`, so keep the live
@@ -212,6 +212,9 @@ The host scripts that drop documents (`eval-attacks`, `e2e-pipeline`, `demo`) re
 variable (`evals/stack_inbox.py`), so their files land where that worker looks; `attacks_e2e.py
 --inbox` overrides it. The empty `DATABASE_URL=` keeps a `DATABASE_URL` in `.env` from pointing
 the host scripts back at `apx` (`uv run --env-file` never overrides a variable the shell sets).
+`WORKER_ASP_DB` gives the run its own mock-ASP store: send and archive idempotency is keyed by
+the document sha, so a document that another database already sent (the attack and demo PDFs are
+deterministic) is otherwise refused as a conflicting resend and its invoice ends FAILED.
 
 `TEMPORAL_DB_FILE` is a bare file name on the `temporal-data` volume (default `temporal.db`).
 Each database needs its own: workflow ids reject duplicates, so a document already processed

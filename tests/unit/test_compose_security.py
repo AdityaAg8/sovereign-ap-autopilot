@@ -126,6 +126,16 @@ def test_worker_inbox_defaults_to_the_live_inbox_and_follows_an_override() -> No
     assert env["INGEST_INBOX_DIR"] == "${INGEST_INBOX_DIR:-data/inbox}"
 
 
+def test_worker_asp_store_defaults_to_the_live_store_and_follows_an_override() -> None:
+    """Mock-ASP idempotency is keyed by document sha, so a second-database run sets
+    WORKER_ASP_DB; the default is `WorkerSettings.asp_db`, the live store."""
+    from apx.workflows.main import WorkerSettings
+
+    env = _compose()["services"]["worker"]["environment"]
+    assert env["WORKER_ASP_DB"] == "${WORKER_ASP_DB:-data/asp/asp.sqlite}"
+    assert WorkerSettings.model_fields["asp_db"].default == Path("data/asp/asp.sqlite")
+
+
 def test_app_services_get_the_agent_password_not_a_literal_url() -> None:
     env = _compose()["services"]["migrate"]["environment"]
     assert "AGENT_DATABASE_URL" not in env

@@ -369,6 +369,9 @@ services:
       # A run on a second database (POSTGRES_DB, TEMPORAL_DB_FILE) also gets its own inbox, so
       # its worker does not sweep the live inbox's documents into that database.
       INGEST_INBOX_DIR: ${INGEST_INBOX_DIR:-data/inbox}
+      # ...and its own mock-ASP store: send/archive idempotency is keyed by the document sha, so
+      # a document already sent from another database would be refused as a conflicting resend.
+      WORKER_ASP_DB: ${WORKER_ASP_DB:-data/asp/asp.sqlite}
     volumes:
       - ../data:/app/data
       # Directory mount, not single files: promote-b rewrites llama-swap.yaml atomically, and a
