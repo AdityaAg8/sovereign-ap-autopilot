@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The inbox watcher started watching only after its startup sweep, so a file dropped while the sweep ran (a 513-file inbox took minutes) raised no event and was never ingested until the next restart; the 2026-10-05 e2e run lost all 20 of its documents this way. The watch is now live before the sweep (`apx/ingest/watcher.py`), with a test that drops a file mid-sweep.
+
 - B training data rendered only the first 3 pages of a PDF, so after the page-rule change a 4-5 page invoice still showed pages 0-2 while its target followed pages [0, 1, last] (REVIEW.md P4-01, found by the pass-4 audit before any training). The loader renders every page; a test builds a row from a real 5-page PDF.
 - `document_text` trimmed by character ratio, so text denser at its ends than in its middle kept up to 2.2x A's token budget (REVIEW.md P4-02). It now shrinks until the estimate fits.
 - The login throttle could evict the bucket it had just created when `max_keys` is below the eviction window, leaving that account unthrottled (REVIEW.md P4-05; defaults were safe).

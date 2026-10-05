@@ -147,3 +147,39 @@ async def test_watch_inbox_ingests_files_already_waiting_at_startup(tmp_path: Pa
         ("a.pdf", "watch"),
         ("b.pdf", "watch"),
     ]
+
+
+class _SlowSweepIngestor(_FakeIngestor):
+    """Drops `late.pdf` into the inbox while it ingests the first swept file, as a supplier
+    upload landing during a worker restart's startup sweep would."""
+
+    def __init__(self, inbox: Path) -> None:
+        super().__init__()
+        self._inbox = inbox
+
+    async def ingest(
+        self, data: bytes, filename: str, source: Literal["watch", "upload"]
+    ) -> IngestResult:
+        if filename == "early.pdf":
+            (self._inbox / "late.pdf").write_bytes(b"%PDF-1.4 landed during the sweep")
+            await asyncio.sleep(0.5)
+        return await super().ingest(data, filename, source)
+
+
+async def test_watch_inbox_ingests_a_file_that_lands_during_the_startup_sweep(
+    tmp_path: Path,
+) -> None:
+    """A file dropped while the startup sweep runs (513 files took minutes in the 2026-10-05
+    e2e run) gets no event unless the watcher is already live: it must still be ingested."""
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "early.pdf").write_bytes(b"%PDF-1.4 waiting at startup")
+    ingestor = _SlowSweepIngestor(inbox)
+    task = asyncio.create_task(watch_inbox(inbox, ingestor))
+    try:
+        await _run_until(lambda: any(c[1] == "late.pdf" for c in ingestor.calls), timeout_s=15.0)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert {name for _data, name, _source in ingestor.calls} == {"early.pdf", "late.pdf"}
