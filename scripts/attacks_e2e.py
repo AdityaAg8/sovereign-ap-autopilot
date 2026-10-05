@@ -54,6 +54,7 @@ from evals.attacks_e2e.rows import (  # noqa: E402
     SnapshotRow,
     defense_fingerprint,
 )
+from evals.stack_inbox import host_inbox  # noqa: E402
 
 SECONDS_PER_CASE = 45.0
 """Batched throughput of the live stack: reports/e2e_pipeline_offset30.md routed 14 documents
@@ -135,7 +136,7 @@ class Runner:
         self.client = client
         self.snapshot = snapshot
         self.approver_id = approver_id
-        self.inbox: Path = args.inbox or args.data / "inbox"
+        self.inbox: Path = host_inbox(args.data, ROOT, args.inbox)
         self.started = time.monotonic()
         self.finished_here = 0
 
@@ -290,7 +291,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--inbox",
         type=Path,
         default=None,
-        help="folder the worker watches (its INGEST_INBOX_DIR); default <data>/inbox",
+        help="folder the worker watches; default $INGEST_INBOX_DIR, else <data>/inbox",
     )
     parser.add_argument("--limit", type=int, default=None, help="first N, spread across categories")
     parser.add_argument("--categories", nargs="*", default=[], help="names or ids, e.g. A08")

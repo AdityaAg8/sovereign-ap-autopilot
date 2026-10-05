@@ -196,18 +196,22 @@ make seed          # ERP restored and invoices cleared; the append-only audit lo
 it and point the stack at it through the shell (shell variables win over `.env`):
 
 ```bash
-docker compose -f infra/compose.yaml exec postgres psql -U apx -c "CREATE DATABASE apx_attacks"
-export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db INGEST_INBOX_DIR=data/inbox_attacks
+docker exec sovereign-ap-autopilot-postgres-1 sh -c 'createdb -U "$POSTGRES_USER" apx_attacks'
+export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db INGEST_INBOX_DIR=data/inbox_attacks DATABASE_URL=
 cp -n data/seed_credentials.json data/seed_credentials.live.json
 make up && make seed
-make eval-attacks ATTACKS_ARGS="--inbox data/inbox_attacks"
+make eval-attacks
 cp data/seed_credentials.live.json data/seed_credentials.json
-unset POSTGRES_DB TEMPORAL_DB_FILE INGEST_INBOX_DIR && make up
+unset POSTGRES_DB TEMPORAL_DB_FILE INGEST_INBOX_DIR DATABASE_URL && make up
 ```
 
 `make seed` writes a new random password to `data/seed_credentials.json`, so keep the live
 database's file aside and put it back afterwards. `INGEST_INBOX_DIR` gives the worker its own
 inbox: on an empty database it would otherwise sweep every document in the live inbox into it.
+The host scripts that drop documents (`eval-attacks`, `e2e-pipeline`, `demo`) read the same
+variable (`evals/stack_inbox.py`), so their files land where that worker looks; `attacks_e2e.py
+--inbox` overrides it. The empty `DATABASE_URL=` keeps a `DATABASE_URL` in `.env` from pointing
+the host scripts back at `apx` (`uv run --env-file` never overrides a variable the shell sets).
 
 `TEMPORAL_DB_FILE` is a bare file name on the `temporal-data` volume (default `temporal.db`).
 Each database needs its own: workflow ids reject duplicates, so a document already processed
