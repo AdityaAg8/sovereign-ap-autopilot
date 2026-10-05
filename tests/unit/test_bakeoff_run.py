@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -14,12 +15,15 @@ import httpx
 import pytest
 
 from apx.common.errors import ModelBusyError, ModelContextError, ModelServingError
+from apx.extract.prompt import estimate_tokens
 from apx.llm.interfaces import CompletionResult, ImagePart, StructuredRequest, TextPart
 from apx.parse.interfaces import ParsedDocument
 from evals.bakeoff.arms import BakeoffError, arm_by_key
 from evals.bakeoff.extractbench import (
+    JSON_ESTIMATE_DIVISOR,
     ExtractBenchPromptBuilder,
     ExtractBenchPromptSettings,
+    estimate_json_tokens,
     extractbench_row,
     failure_kind,
     is_request_rejection,
@@ -243,10 +247,32 @@ def test_schema_digest_drops_noise_then_cuts_descriptions_to_fit() -> None:
     full = schema_digest(SCHEMA, 10_000)
     assert full is not None and "title" not in full and "default" not in full
     assert "Vendor name as printed." in full
-    short = schema_digest(SCHEMA, 100)  # fits only with every description dropped
-    assert short is not None and len(short) < len(full) and '"anyOf"' in short
+    # The smallest cap that yields a digest fits it only with every description dropped.
+    short = next(d for cap in range(1, 10_000) if (d := schema_digest(SCHEMA, cap)) is not None)
+    assert len(short) < len(full) and '"anyOf"' in short
     assert "Vendor name" not in short
     assert schema_digest(SCHEMA, 5) is None
+
+
+def test_json_estimate_is_the_text_estimate_scaled_by_its_calibrated_divisor() -> None:
+    """`estimate_tokens` counts each JSON punctuation mark as a token; Qwen's tokenizer merges
+    runs like `":"`, so on 252 ExtractBench schema digests it overshot 1.88-2.70x. The JSON
+    estimate divides by just under the minimum, so it stays at or above the true count."""
+    full = schema_digest(SCHEMA, 10_000)
+    assert full is not None
+    assert JSON_ESTIMATE_DIVISOR < 1.88
+    assert estimate_json_tokens(full) == math.ceil(estimate_tokens(full) / JSON_ESTIMATE_DIVISOR)
+    assert estimate_json_tokens(full) < estimate_tokens(full)
+
+
+def test_schema_digest_is_sized_with_the_json_estimate() -> None:
+    """A digest under the cap by the JSON estimate keeps its descriptions, although the plain
+    text estimate is over the cap (which on 2026-10-05 dropped 132 of 252 digests)."""
+    full = schema_digest(SCHEMA, 10_000)
+    assert full is not None
+    cap = estimate_json_tokens(full)
+    assert estimate_tokens(full) > cap
+    assert schema_digest(SCHEMA, cap) == full
 
 
 def test_extractbench_prompt_is_constrained_by_the_record_schema() -> None:
