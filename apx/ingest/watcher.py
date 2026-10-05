@@ -17,6 +17,9 @@ from apx.ingest.interfaces import Ingestor
 
 logger = logging.getLogger(__name__)
 
+_STARTUP_YIELD_MS = 500
+"""How long `awatch` waits for a first event before yielding an empty batch, which is when the
+startup sweep runs; afterwards an empty batch every interval is a no-op."""
 _DEFAULT_SETTLE_CHECKS = 3
 _DEFAULT_SETTLE_INTERVAL_S = 0.1
 
@@ -54,11 +57,18 @@ async def watch_inbox(inbox_dir: Path, ingestor: Ingestor) -> None:
     place rather than crashing the watcher; every other failure propagates so the process
     supervisor can restart it."""
     inbox_dir.mkdir(parents=True, exist_ok=True)
-    # Files that landed while the watcher was down raise no event now; ingest dedupes by
-    # sha256, so sweeping them on start never starts a second workflow for the same bytes.
-    for path in sorted(p for p in inbox_dir.iterdir() if p.is_file()):
-        await _ingest_file(path, ingestor)
-    async for changes in awatch(inbox_dir):
+    swept = False
+    # The watch is live before the sweep: `awatch` yields its first (possibly empty) batch only
+    # after it starts watching, so a file dropped while the sweep runs arrives as a later event
+    # instead of being missed until the next restart (2026-10-05 e2e: 20 invoices dropped
+    # during a 513-file sweep were never ingested).
+    async for changes in awatch(inbox_dir, yield_on_timeout=True, rust_timeout=_STARTUP_YIELD_MS):
+        if not swept:
+            swept = True
+            # Files that landed while the watcher was down raise no event; ingest dedupes by
+            # sha256, so a file swept here and also reported as an event starts one workflow.
+            for path in sorted(p for p in inbox_dir.iterdir() if p.is_file()):
+                await _ingest_file(path, ingestor)
         for change, raw_path in changes:
             if change is Change.deleted:
                 continue

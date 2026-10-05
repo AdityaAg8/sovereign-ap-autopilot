@@ -117,14 +117,21 @@ def warmup_steps(cfg: TrainConfig, n_train: int) -> int:
 
 def generative_eval_steps(cfg: TrainConfig, n_train: int) -> tuple[int, ...]:
     """Evenly spaced generative-eval steps, `per_epoch` per epoch, the last of each epoch on the
-    epoch end: `{round(k x steps_per_epoch / per_epoch) : k = 1..per_epoch·epochs}`."""
+    epoch end: `{round(k x steps_per_epoch / per_epoch) : k = 1..per_epoch·epochs}`, keeping only
+    the steps of epoch `first_generative_eval_epoch` onwards."""
     spe = steps_per_epoch(n_train, cfg.optim.grad_accum_steps)
     per_epoch = cfg.cadence.generative_evals_per_epoch
     if per_epoch <= 0:
         return ()
+    if cfg.cadence.first_generative_eval_epoch > cfg.optim.epochs:
+        raise ConfigError(
+            f"first_generative_eval_epoch {cfg.cadence.first_generative_eval_epoch} is past the "
+            f"last epoch ({cfg.optim.epochs}): no checkpoint could be selected"
+        )
+    first_k = per_epoch * (cfg.cadence.first_generative_eval_epoch - 1) + 1
     steps = {
         (2 * k * spe + per_epoch) // (2 * per_epoch)
-        for k in range(1, per_epoch * cfg.optim.epochs + 1)
+        for k in range(first_k, per_epoch * cfg.optim.epochs + 1)
     }
     return tuple(sorted(s for s in steps if s > 0))
 

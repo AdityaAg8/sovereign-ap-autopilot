@@ -38,6 +38,7 @@ if str(ROOT) not in sys.path:  # `uv run python scripts/e2e_pipeline.py` puts on
     sys.path.insert(0, str(ROOT))
 
 from evals.scan_input import scan_document  # noqa: E402  (needs ROOT on sys.path)
+from evals.stack_inbox import host_inbox  # noqa: E402
 from factory.gold_xml import TAX_CASE_VAT_CATEGORY  # noqa: E402
 
 SETTLED = {"blocked", "archived", "failed"}
@@ -494,7 +495,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    inbox = args.data / "inbox"
+    inbox = host_inbox(args.data, ROOT)
     inbox.mkdir(parents=True, exist_ok=True)
     selection = args.out.with_suffix(".selection.json")
     auth = LoginAuth.from_seed(args.data)

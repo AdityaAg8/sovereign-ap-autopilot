@@ -601,3 +601,73 @@ including the image-size guard, is recorded in PROGRESS.md and `guard_report.jso
 - A, v1, and every later round score CORD test on the same unchanged 100 documents.
 - Cross-split copies inside the CORD hold-outs (1 test-validation, 2 validation-validation pairs)
   do not affect training. They are noted for the real-data report.
+
+## Amendment 3 (2026-10-04): the pages B sees, and targets limited to them (round R1b)
+
+**Problem.** ADR-0009 §1.2 shows B the first 3 pages, and data prep cut every training document
+to those pages but kept the label set of the whole document. 315 of the 3,500 UAE R1 training
+invoices have 4 or 5 pages. In all 315 the IBAN is printed on the last page, and in 142 of them
+the totals block is on a page past the third. B was trained to output values it never saw. On
+the 750-document UAE test it learned exactly that:
+- On the 71 long test invoices, B R1's IBAN was right 0 of 71 times (A: 70 of 71), and its
+  subtotal and total 40 of 71. Its wrong IBANs are invented values, never nulls.
+- On invoices of at most 3 pages, B R1 matches or beats A (IBAN 641 vs 639 of 673).
+- IBAN is B's weakest field on the test (86.16%), and its 6 invalid-JSON answers are all 4-5
+  page invoices.
+The IBAN is the payment field, so a confident invented IBAN is the worst error B can make.
+
+**Decision.**
+1. **Pages.** B sees every page of a document of at most 3 pages. Of a longer one it sees the
+   first 2 and the last (`apx.extract.prompt_b.b_page_indices`). Serving, data prep and
+   training all call this one function, so they stay pixel-identical (§1.2's parity test now
+   asserts the last page). The per-page token budget, the rung, and the 3-image cap are
+   unchanged, so B's prompt size and VRAM are unchanged.
+2. **Targets.** A training target holds only values printed on the pages B sees
+   (`uae_target`/`docile_target` `visible_pages`). A header field printed only on an unseen
+   page is null, a line item printed only on unseen pages is left out, and a label without a
+   page index stops prep (`TrainingError`). CORD and FATURA are single-page, so their targets
+   are unchanged.
+3. **User text.** B's user message now says that a long invoice shows its first pages and its
+   last. This also gives the new contract a new `prompt_version`, so rows built on the old page
+   rule can never mix with new ones.
+4. **Round R1b.** The R1 mix and config are retrained unchanged on the new data (`make
+   train-b-data REAL_MIX=r1`, `make train-b-new`). It is registered as the challenger and pinned
+   as `extractor-b-r1b` (`evals.real --b-version r1b`). The gates (P1-P5, ADR-0009 §1.8), the
+   eval sets and every threshold are unchanged. R1b is promoted only if every gate passes.
+5. **Eval cadence (speed only).** R1b keeps both generative dev evals of epoch 2 and skips the
+   two of epoch 1 (`cadence.first_generative_eval_epoch: 2`). Each eval of the 178 dev documents
+   took ~1.6 h of R1's 13 h; v1's best checkpoint (step 383 of 510) and R1's (594 of 594) were
+   both epoch-2 evals. Dev loss still runs every 50 steps. The trained weights are unchanged;
+   only the candidate checkpoints for selection are fewer. Batch size, accumulation, learning
+   rate and epochs stay as in R1, so the R1 to R1b difference is the page rule alone.
+6. **Loader (REVIEW.md P4-01).** The PDF loader rendered only the first 3 pages, so the first R1b
+   prep still showed pages 0-2 while masking targets to [0, 1, last]. It now renders every page
+   and `build_row` selects; `tests/unit/ml/test_b_long_pdf_pages.py` builds a row from a real
+   5-page PDF. The R1b data was prepared again after this fix.
+7. **Evaluation inputs.** R1b's eval-b, gates-b and real-cord-b read the parse snapshot
+   `a8832889e65c7fd5`, pinned read-only (`PARSER_ID`, `evals.parse_cache.open_cache`): the
+   parses that A's test rows, B R1's rows and CORD v1/r1/A were all measured on, so every arm
+   of the comparison reads the same inputs. The only parser change since (13023ef, a glyph of
+   several or no code points is a base letter) gives identical output for every page that parsed
+   before, since for one code point `_is_mark` equals the old `bidirectional(c) == "NSM"`; the
+   inputs it changes crashed the old parser and are in none of these splits. Re-parsing them
+   would have cost ~4.5 h of OCR for the same bytes. A pinned snapshot is never written to:
+   a missing input stops the run (`ParseCacheMissError`) rather than being parsed by the
+   current build. Before the run, every input was checked present: UAE test 750/750, the P2
+   latency subset 200/200, CORD test 100/100.
+
+**Measured on the R1 data** (`data/uae/train`): with pages [0, 1, last], the IBAN is visible on
+315 of 315 long invoices (was 0 of 315), and the totals block on 271 of 315 (was 164 of 315).
+
+**Consequences.**
+- On a long invoice whose line items continue past page 2, B misses the middle-page lines
+  instead of inventing them. A still reads every page, and the A/B comparison flags the
+  difference.
+- The base `extractor-b` alias and any older export served after this change get the new page
+  rule. Their recorded results stay tied to their old `prompt_version`.
+- Found during R1b (KNOWN_ISSUES KI-05): the training collator shrinks pages to 512 px wide,
+  while serving sends the prepared size. v1, R1 and R1b all share this, so R1 vs R1b still
+  differs by the page rule alone. The fix (`resize="max"` plus a new VRAM probe) is for the
+  next round.
+- B's latency (P2) is not addressed here. The page count and image budget are the same, so P2
+  is expected to move only by the shorter outputs on long invoices.

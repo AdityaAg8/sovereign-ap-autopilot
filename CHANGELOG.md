@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-05
+
+### Measured (live stack and fixed eval splits; every report under `reports/`)
+
+- Attack suite end to end (M6.6, fresh database): 312 of 312 cases run, payment-changing ASR 0 of 308 conclusive, none timed out; gate FAIL_INCOMPLETE on 4 cases that ended `failed` with no payment (3 extractions without totals, KI-06; 1 mock-ASP resend conflict, now fixed).
+- End to end (M5.6): 18 of 18 factory invoices archived, 2 of 2 attack PDFs kept out of payment (one only because its workflow failed before routing). Demo (M10.5): 9 of 9 scenarios met their expected outcome (`reports/demo.md`).
+- Extractor B R1b: UAE test field F1 93.23% vs A 92.75%, valid JSON 100%, p50 16.35 s vs A 26.04 s; promotion gates 4 of 5 (fails P2 latency, limit 15.62 s), not promoted. CORD v2 test field F1 90.70% (A zero-shot 46.16%).
+- Extractor A on ExtractBench short (zero-shot): value F1 70.39% on 245 real documents, 91.67% valid JSON (KI-07).
+- Trust gate: 0.54% error among auto-accepted fields at α = 1% (limit 1%).
+
 ### Added
+
+- Extractor B R1b (ADR-0019 amendment 3) exported: run `b-20261004T1300-e871c646`, best step 446 (dev F1 99.64, valid JSON 1.000 on 178 UAE dev docs whose targets are limited to the pages B sees, so not comparable with R1's 97.25), Q4_K_M sha256 `366648ea…`, smoke 5/5, registered as MLflow `extractor_b` v3 (alias challenger). `extractor-b-challenger` now serves R1b, and the new pinned `extractor-b-r1b` alias serves `evals.real --b-version r1b`. The champion is unchanged.
+
+- `--parser-id` on `evals.extraction_a`, `ml.extractor_b.promote` (eval-b, gates) and `evals.real run` (Makefile `PARSER_ID`) reads an earlier parser build's cache snapshot, read-only: a miss stops the run instead of parsing. R1b's eval queue reads `a8832889e65c7fd5`, the snapshot A and R1 were measured on (ADR-0019 amendment 3 item 7), and `gates-b` is now `+` so a failed gate still lets the CORD hold-out and the report run.
+
+- `cadence.first_generative_eval_epoch` (default 1): R1b skips the two epoch-1 generative dev evals (~3.2 h of ~13 h), keeping both of epoch 2, where v1's and R1's best checkpoints were. ADR-0020 records the v1.0 scope (teacher skipped, arbiter and live retrain deferred); KNOWN_ISSUES KI-03, KI-04.
 
 - Extractor B R1 (ADR-0019 §9) exported: run `b-20261001T1641-eb0aea7d`, best step 594 (dev F1 97.25, valid JSON 0.955 on 178 UAE dev docs; v1 97.17 / 0.955), Q4_K_M sha256 `11ce0660…`. `extractor-b-challenger` now serves R1 for smoke, eval-b and gates, and the new pinned `extractor-b-r1` alias serves `evals.real --b-version r1`. The champion is unchanged. The promote tests read the challenger run from the config instead of hardcoding v1.
 
@@ -40,6 +56,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extractor B dev evals persist per-row outputs to `<run>/dev_outputs/step-NNNNNN.jsonl`; `report.py` classifies invalid JSON as truncated / looping / malformed (#53).
 
 ### Fixed
+
+- ExtractBench requests sized their schema digest (the field descriptions) with `estimate_tokens`, which is calibrated on document text and overshoots compact JSON 1.88-2.70x against the Qwen3.5 tokenizer. After the 2026-10-04 estimator change, 153 of 252 requests carried no digest (132 of them had one on 2026-10-03), and Extractor A's value F1 fell from 73.10% to 47.07% with the same model and parse; that run was discarded (rows kept under `logs/archive/`). Digests are now sized with `estimate_json_tokens` (calibrated on the 252 digests, never below their true count); 220 of 252 carry one, and the largest request is 11,172 of the slot's 12,288 true tokens. Invoice extraction is unaffected: no UAE test or calibration invoice reaches the text budget.
+- A run on a second database also shared the mock-ASP store (`data/asp/asp.sqlite`), whose send and archive idempotency is keyed by document sha: a document already sent from another database (the attack and demo PDFs are deterministic) was refused as a conflicting resend and its invoice ended FAILED. The worker now takes `WORKER_ASP_DB` from the shell (compose passthrough); found by the 2026-10-05 attack run, where it made one attack case and two clean baselines inconclusive.
+- Attack-suite harness (`scripts/attacks_e2e.py`, `evals/attacks_e2e/db.py`): a blob in the shared document store skips a case only on the live Temporal history, so a run on its own `TEMPORAL_DB_FILE` no longer reports every case as already ingested; a document whose workflow failed before its invoice existed (`ingested_documents.failed_at`) settles as `failed` instead of being polled to the 90-minute case timeout, and counts as already created for a later run on the same database. Outcomes and the M6.6 gate are unchanged: such a case is still inconclusive.
+- `INGEST_INBOX_DIR` must be a folder below `data/` (`evals/stack_inbox.py`): the worker shares only `data/` with the host, so any other value made the scripts drop files the worker could never see.
+- Extractor B `build_row` stops when a document's rendered page count differs from its labels' `n_pages` (REVIEW.md P5-06), so a target masked for one page count is never paired with another.
+- A run on a second database (attack suite, demo) would have shared the live inbox: its worker, starting on an empty database, sweeps every file it finds, and the scripts that drop documents always wrote to `data/inbox`. The worker now takes `INGEST_INBOX_DIR` from the shell (compose passthrough), and `eval-attacks`, `e2e-pipeline` and `demo` drop into the same folder (`evals/stack_inbox.py`; `attacks_e2e.py --inbox` overrides). Runbook: "A second database".
+- The inbox watcher started watching only after its startup sweep, so a file dropped while the sweep ran (a 513-file inbox took minutes) raised no event and was never ingested until the next restart; the 2026-10-05 e2e run lost all 20 of its documents this way. The watch is now live before the sweep (`apx/ingest/watcher.py`), with a test that drops a file mid-sweep.
+
+- B training data rendered only the first 3 pages of a PDF, so after the page-rule change a 4-5 page invoice still showed pages 0-2 while its target followed pages [0, 1, last] (REVIEW.md P4-01, found by the pass-4 audit before any training). The loader renders every page; a test builds a row from a real 5-page PDF.
+- `document_text` trimmed by character ratio, so text denser at its ends than in its middle kept up to 2.2x A's token budget (REVIEW.md P4-02). It now shrinks until the estimate fits.
+- The login throttle could evict the bucket it had just created when `max_keys` is below the eviction window, leaving that account unthrottled (REVIEW.md P4-05; defaults were safe).
+
+- `estimate_tokens` undercounted real parse text: its 3.5 Latin / 1.8 Arabic characters-per-token rule was below the true Qwen3.5 count on 99% of 752 parsed documents, digit-heavy tables by up to 3.4x. That overflowed the 12288-token slot (HTTP 400 on 4 ExtractBench documents) and could overflow Extractor A on a long, dense real invoice. It now counts the tokenizer's units (digits, punctuation and newline runs one each, Latin letter runs per 3, Arabic per 2) with a 1.2 safety factor: never below the true count on 1,452 documents (worst 1.05x, median 1.3x, 0.7 ms/doc). A's text budget is now 5000 estimated tokens (was 3500 under the old rule); no UAE test or cal invoice reaches either (longest 3621 true tokens), so A's recorded UAE results and the trust calibration are unchanged. The ExtractBench request version includes the estimator (`TOKEN_ESTIMATOR_VERSION`).
+
+- The gateway's llama-swap port (8080, used by the host-run evals; the runtime calls llama-swap directly) had no `client_max_body_size`, so nginx's 1 MB default rejected requests with two dense page images (HTTP 413 on 3 ExtractBench documents). It now sets 25m explicitly; a static test pins it.
+
+- Extractor B was trained on values it could not see (ADR-0019 amendment 3). Data prep cut a 4-5 page invoice to its first 3 pages but kept the whole document's labels, so all 315 long UAE training invoices taught B an IBAN printed on a page it never saw (and 142 a totals block). B R1 then invented IBANs on long invoices (0/71 right on the UAE test, A 70/71). B now sees a long document's first 2 pages and its last (`b_page_indices`, one function for serving, data prep and training), and targets hold only labels on those pages (`visible_pages`); a label without a page index stops prep. Retraining as round R1b (`--b-version r1b`, alias `extractor-b-r1b`); gates unchanged.
 
 - ExtractBench: the gateway's HTTP 413 (one document's request, page images included, over the nginx body cap) ended the 2026-10-03 run at document 131/252 instead of recording that document. A 413 is now a `rejected` row like llama-server's 400, kept in every denominator; the body cap is runtime config and stays unchanged.
 

@@ -188,3 +188,39 @@ artifact) and record the exception in `KNOWN_ISSUES.md`.
 ```bash
 make seed          # ERP restored and invoices cleared; the append-only audit log keeps its history
 ```
+
+## A second database (attack suite, demo)
+
+`make seed` replaces the ERP tables and every invoice in its database, so never run it (or
+`make demo`, which seeds) against the live database `apx`. To run against a separate one, create
+it and point the stack at it through the shell (shell variables win over `.env`):
+
+```bash
+docker exec sovereign-ap-autopilot-postgres-1 sh -c 'createdb -U "$POSTGRES_USER" apx_attacks'
+export POSTGRES_DB=apx_attacks TEMPORAL_DB_FILE=temporal_attacks.db \
+  INGEST_INBOX_DIR=data/inbox_attacks WORKER_ASP_DB=data/asp/asp_attacks.sqlite DATABASE_URL=
+cp -n data/seed_credentials.json data/seed_credentials.live.json
+make up && make seed
+make eval-attacks
+cp data/seed_credentials.live.json data/seed_credentials.json
+unset POSTGRES_DB TEMPORAL_DB_FILE INGEST_INBOX_DIR WORKER_ASP_DB DATABASE_URL && make up
+```
+
+`make seed` writes a new random password to `data/seed_credentials.json`, so keep the live
+database's file aside and put it back afterwards. `INGEST_INBOX_DIR` gives the worker its own
+inbox: on an empty database it would otherwise sweep every document in the live inbox into it.
+The host scripts that drop documents (`eval-attacks`, `e2e-pipeline`, `demo`) read the same
+variable (`evals/stack_inbox.py`), so their files land where that worker looks; `attacks_e2e.py
+--inbox` overrides it. Keep both paths below `data/`, the only folder the worker shares with the
+host: `host_inbox` refuses any other value, and a `WORKER_ASP_DB` elsewhere would live inside the
+container and reset on the next `make up`. The empty `DATABASE_URL=` keeps a `DATABASE_URL` in `.env` from pointing
+the host scripts back at `apx` (`uv run --env-file` never overrides a variable the shell sets).
+`WORKER_ASP_DB` gives the run its own mock-ASP store: send and archive idempotency is keyed by
+the document sha, so a document that another database already sent (the attack and demo PDFs are
+deterministic) is otherwise refused as a conflicting resend and its invoice ends FAILED.
+
+`TEMPORAL_DB_FILE` is a bare file name on the `temporal-data` volume (default `temporal.db`).
+Each database needs its own: workflow ids reject duplicates, so a document already processed
+in the live history would collide. Switching the file while the live database is attached
+leaves its waiting approval workflows in the other file, so always switch both together, and
+run `make up` with neither variable set to return to the live stack.

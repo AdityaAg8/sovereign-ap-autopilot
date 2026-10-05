@@ -32,6 +32,7 @@ from apx.fraud.rules import (  # noqa: E402  (needs ROOT on sys.path)
     RULE_ID_NEAR_DUPLICATE_PAGE,
 )
 from apx.policy.interfaces import PayeeMatch, electronic_iban, select_payee  # noqa: E402
+from evals.stack_inbox import host_inbox  # noqa: E402
 from factory.erp import Erp  # noqa: E402
 
 DUPLICATE_MARK = b"\n% resubmitted by the vendor as a new file\n"
@@ -586,7 +587,7 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(header()), flush=True)
         runner = Runner(
             client,
-            args.data / "inbox",
+            host_inbox(args.data, ROOT),
             timeout_s=args.timeout,
             gap_s=args.gap,
             on_tick=screen.draw,

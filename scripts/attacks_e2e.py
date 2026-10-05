@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import shutil
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,6 +56,7 @@ from evals.attacks_e2e.rows import (  # noqa: E402
     SnapshotRow,
     defense_fingerprint,
 )
+from evals.stack_inbox import host_inbox  # noqa: E402
 
 SECONDS_PER_CASE = 45.0
 """Batched throughput of the live stack: reports/e2e_pipeline_offset30.md routed 14 documents
@@ -116,7 +119,21 @@ def _eta(seconds: float) -> str:
 
 
 STALE_SLACK_S = 5.0
-"""Clock slack between this host and Postgres when comparing created_at with the drop time."""
+"""Clock slack between this host and the stack (Postgres `created_at`, the worker's `received_at`
+for a failed ingest) when comparing their times with the drop time."""
+LIVE_HISTORY_FILE = "temporal.db"
+"""The live stack's Temporal history file (compose `TEMPORAL_DB_FILE` default)."""
+
+
+def started_on_this_history(data: Path, sha: str, environ: Mapping[str, str] = os.environ) -> bool:
+    """Whether a run outside the row store may already have started this sha's workflow on the
+    stack's Temporal history (workflow ids derive from the sha and reject duplicates). The
+    document store `data/documents` is shared by every database, so a stored blob says so only
+    on the live history; a run on its own `TEMPORAL_DB_FILE` (with its own database, whose
+    rows `AttackDb.created` already checks) starts every workflow fresh."""
+    if (environ.get("TEMPORAL_DB_FILE") or LIVE_HISTORY_FILE) != LIVE_HISTORY_FILE:
+        return False
+    return (data / "documents" / sha).exists()
 
 
 class Runner:
@@ -135,7 +152,7 @@ class Runner:
         self.client = client
         self.snapshot = snapshot
         self.approver_id = approver_id
-        self.inbox: Path = args.data / "inbox"
+        self.inbox: Path = host_inbox(args.data, ROOT, args.inbox)
         self.started = time.monotonic()
         self.finished_here = 0
 
@@ -223,7 +240,7 @@ class Runner:
                     flight.approve_http = clicked.approve_http
                     flight.approve_typed = clicked.approve_typed
                 flights[sha] = flight
-            elif sha in existing or (data / "documents" / sha).exists():
+            elif sha in existing or started_on_this_history(data, sha):
                 stale.append(case_id)  # ingested by another run: dedupe would hide a drop
             else:
                 queue.append(prepared)
@@ -286,6 +303,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--data", type=Path, default=ROOT / "data")
     parser.add_argument("--out", type=Path, default=ROOT / "reports" / "attacks_e2e.md")
     parser.add_argument("--work", type=Path, default=None, help="default data/attacks_e2e/<erp>")
+    parser.add_argument(
+        "--inbox",
+        type=Path,
+        default=None,
+        help="folder the worker watches; default $INGEST_INBOX_DIR, else <data>/inbox",
+    )
     parser.add_argument("--limit", type=int, default=None, help="first N, spread across categories")
     parser.add_argument("--categories", nargs="*", default=[], help="names or ids, e.g. A08")
     parser.add_argument(
@@ -390,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def taken(sha: str) -> bool:
         # A clean invoice ingested before (and not by this run) cannot be dropped again.
-        return (data / "documents" / sha).exists() and not store.knows(sha)
+        return started_on_this_history(data, sha) and not store.knows(sha)
 
     baseline = clean_baseline(data, args.baseline, erp.build(), taken)
     print(f"{len(baseline)} clean baseline invoices", flush=True)

@@ -270,8 +270,26 @@ def _uae_f1(inputs: Inputs) -> Cell:
     )
 
 
+def _real_extractbench_cell(inputs: Inputs) -> Cell | None:
+    """The newest real-track ExtractBench report (ADR-0019) on all 252 documents, the scope the
+    published 92.31 uses. Report-only like the row: its valid-JSON miss is shown, not gated."""
+    found = inputs.real("extractbench")
+    if not found:
+        return None
+    report, stamp = max(found, key=lambda loaded: loaded[1].at)
+    metrics = {metric.name: metric for metric in report.metrics}
+    value, grounding = metrics.get("value_f1.all"), metrics.get("grounding_f1.all")
+    if value is None or grounding is None:
+        return None
+    measured = (
+        f"{_arm_label(report)}: value F1 {value.value:.2%} (n={value.n_docs}), "
+        f"grounding F1 {grounding.value:.2%}, valid JSON {report.valid_json_rate.value:.2%}"
+    )
+    return Cell(measured=measured, status="REPORTED", sources=(stamp,))
+
+
 def _extractbench(inputs: Inputs) -> Cell:
-    measured = run_cell(inputs, "extractbench")
+    measured = newest_cell(run_cell(inputs, "extractbench"), _real_extractbench_cell(inputs))
     if measured is not None:
         return measured
     reason = "no model run on ExtractBench short yet; only harness self-tests (see below)"

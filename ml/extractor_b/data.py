@@ -23,7 +23,13 @@ from typing import Any, Final, Literal
 from PIL import Image
 
 from apx.common.errors import ApxError
-from apx.extract.prompt_b import B_IMAGE_RUNGS, PATCH_PX, BImageSettings
+from apx.extract.prompt_b import (
+    B_IMAGE_RUNGS,
+    PATCH_PX,
+    BImageSettings,
+    b_page_indices,
+    serving_image_settings,
+)
 from apx.extract.prompt_b import resize_page_for_b as _resize
 from evals.datasets.manifest import load_manifest
 from ml.extractor_b.checkpoints import atomic_write_bytes
@@ -134,7 +140,10 @@ def _pdf_pages(path: Path) -> Callable[[], list[bytes]]:
             n = len(pdf)
         finally:
             pdf.close()
-        return [render_page_png(data, i) for i in range(min(n, 3))]
+        # Every page: `build_row` picks the ones B sees with `b_page_indices`. Rendering only the
+        # first 3 here once showed B pages 0-2 of a long invoice while its target followed
+        # pages [0, 1, last] (ADR-0019 amendment 3).
+        return [render_page_png(data, i) for i in range(n)]
 
     return load
 
@@ -154,6 +163,12 @@ def _pdf_page_count(path: Path) -> int:
         return len(pdf)
     finally:
         pdf.close()
+
+
+def _visible(n_pages: int) -> frozenset[int]:
+    """Page indices B sees of an `n_pages` document (ADR-0019 amendment 3): a target holds only
+    values printed on them, so B is never taught to produce a value it cannot read."""
+    return frozenset(b_page_indices(n_pages, serving_image_settings()))
 
 
 def uae_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc]:
@@ -179,12 +194,13 @@ def uae_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceDoc]
             tax_case = json.loads(truth_path.read_text(encoding="utf-8"))["tax_case"]
         except (OSError, ValueError, KeyError) as exc:
             raise TrainingError(f"no tax_case for UAE train doc {sha}: {exc}") from exc
+        n_pages = int(labels.get("n_pages") or _pdf_page_count(pdf))
         yield SourceDoc(
             source=SampleSource.UAE,
             document_sha256=sha,
             pages=_pdf_pages(pdf),
-            n_pages=int(labels.get("n_pages") or _pdf_page_count(pdf)),
-            target=uae_target(labels, str(tax_case)),
+            n_pages=n_pages,
+            target=uae_target(labels, str(tax_case), visible_pages=_visible(n_pages)),
         )
 
 
@@ -235,12 +251,13 @@ def docile_docs(data_root: Path, train_shas: frozenset[str]) -> Iterator[SourceD
         annotation = json.loads(
             (data_root / "docile" / "annotations" / f"{doc_id}.json").read_text(encoding="utf-8")
         )
+        n_pages = _pdf_page_count(pdf)
         yield SourceDoc(
             source=SampleSource.DOCILE,
             document_sha256=sha,
             pages=_pdf_pages(pdf),
-            n_pages=_pdf_page_count(pdf),
-            target=docile_target(annotation),
+            n_pages=n_pages,
+            target=docile_target(annotation, visible_pages=_visible(n_pages)),
         )
 
 
@@ -438,8 +455,14 @@ def build_row(
     around them; target tokens = the tokenised target (ADR-0011 amendment 3, exact counts)."""
     rels: list[Path] = []
     visual = 0
-    for n, page in enumerate(doc.pages()[: settings.max_pages]):
-        jpeg = _resize(page, doc.n_pages, settings)
+    pages = doc.pages()
+    if len(pages) != doc.n_pages:  # the target was masked for doc.n_pages (REVIEW.md P5-06)
+        raise TrainingError(
+            f"{doc.source.value} {doc.document_sha256}: {len(pages)} rendered pages, "
+            f"{doc.n_pages} in its labels"
+        )
+    for n, index in enumerate(b_page_indices(len(pages), settings)):
+        jpeg = _resize(pages[index], doc.n_pages, settings)
         rel = Path("pages") / doc.document_sha256 / f"{n}.jpg"
         atomic_write_bytes(out_dir / rel, jpeg)
         with Image.open(out_dir / rel) as img:

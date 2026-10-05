@@ -191,6 +191,14 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 # Overridable: `make parse-cache SPLITS=test`, `nohup make gpu-queue QUEUE="eval-b,cal-rows-b" &`.
 SPLITS ?= test,cal
 REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-adr0012,cal-rows-a,+calibrate TRUST_EXTRACTORS=a,eval-b,eval-attacks
+# ADR-0019 amendment 3: round R1b (pages [0, 1, last], targets limited to them). Run after
+# `make train-b-new`, export-b, smoke-b, register-b and the extractor-b-r1b alias; R1's rows and
+# reports are kept as logs/archive/extractor_b_test.r1.jsonl and reports/*.r1.* first.
+# Every R1b item reads the parse snapshot A, R1 and CORD v1/r1 were measured on (R1B_PARSER_ID,
+# read-only; ADR-0019 amendment 3 item 7). gates-b is '+' so a failed gate (a result) still lets
+# the CORD hold-out and the report run.
+R1B_PARSER_ID = a8832889e65c7fd5
+R1B_EVAL_QUEUE = eval-b PARSER_ID=$(R1B_PARSER_ID),+gates-b PARSER_ID=$(R1B_PARSER_ID),real-cord-b B_VERSION=r1b PARSER_ID=$(R1B_PARSER_ID),+real-report
 QUEUE ?= $(REDUCED_GPU_QUEUE)
 # ADR-0019 real-data track. Phase 1: A zero-shot (and B v1 as the "before") on real documents,
 # CORD first, then ExtractBench. Phase 2 re-evaluates a retrained B on the same hold-outs.
@@ -217,7 +225,8 @@ real-cord:
 
 real-cord-b:
 	@echo "==> Extractor B $(or $(B_VERSION),v1) on CORD test"
-	$(HOST_PARSE) uv run python -m evals.real run --set cord --split test --extractor b --b-version $(or $(B_VERSION),v1)
+	$(HOST_PARSE) uv run python -m evals.real run --set cord --split test --extractor b --b-version $(or $(B_VERSION),v1) \
+		$(if $(PARSER_ID),--parser-id $(PARSER_ID))
 
 real-extractbench:
 	@echo "==> Extractor A on ExtractBench short (headline on the 245 source:real documents)"
@@ -372,11 +381,13 @@ register-b:
 
 eval-b:
 	@echo "==> Extractor B on UAE test via extractor-b-challenger -> reports/extractor_b_test.md (GPU, resumable)"
-	$(HOST_PARSE) uv run python -m ml.extractor_b.promote eval-b $(if $(B_ROWS),--b-rows $(B_ROWS))
+	$(HOST_PARSE) uv run python -m ml.extractor_b.promote eval-b $(if $(B_ROWS),--b-rows $(B_ROWS)) \
+		$(if $(PARSER_ID),--parser-id $(PARSER_ID))
 
 gates-b:
 	@echo "==> P1-P5: A vs B F1, 200-doc sequential latency + VRAM run, hygiene -> reports/extractor_b_gates.md (GPU)"
-	$(HOST_PARSE) uv run python -m ml.extractor_b.promote gates $(if $(A_ROWS),--a-rows $(A_ROWS)) $(if $(B_ROWS),--b-rows $(B_ROWS))
+	$(HOST_PARSE) uv run python -m ml.extractor_b.promote gates $(if $(A_ROWS),--a-rows $(A_ROWS)) $(if $(B_ROWS),--b-rows $(B_ROWS)) \
+		$(if $(PARSER_ID),--parser-id $(PARSER_ID))
 
 promote-b:
 	@echo "==> move champion only if every gate passed: calibrator, models.lock, llama-swap, alias (CPU)"

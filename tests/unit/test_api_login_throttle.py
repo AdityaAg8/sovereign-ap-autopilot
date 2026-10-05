@@ -325,3 +325,15 @@ def test_successful_logins_do_not_drain_the_account_bucket(client: TestClient) -
         401,
         429,
     ]
+
+
+def test_a_new_bucket_is_never_the_one_evicted_to_make_room() -> None:
+    # REVIEW.md P4-05: with fewer keys than the eviction window, the bucket just created was the
+    # fullest in the window, so it was dropped and the caller debited an orphan (no throttle).
+    from apx.api.ratelimit import _BucketMap
+
+    buckets = _BucketMap(burst=5, rate_per_s=1.0, max_keys=2)
+    for key in (b"a", b"b", b"c"):
+        bucket = buckets.refilled(key, now=0.0)
+        bucket.tokens -= 1
+        assert buckets.existing(key, now=0.0) is bucket

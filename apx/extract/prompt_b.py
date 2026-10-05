@@ -1,6 +1,7 @@
-"""Extractor B's image-only prompt (ADR-0009 §1.1-1.2): the first 3 page images, resized by the
-one shared function below, plus a system prompt without the parse-text rules. Serving and the
-M7.1 fine-tune (`ml.extractor_b`) both build messages here, so train and serve match exactly.
+"""Extractor B's image-only prompt (ADR-0009 §1.1-1.2, ADR-0019 amendment 3): up to 3 page
+images (a longer document's first pages and its last), resized by the one shared function below,
+plus a system prompt without the parse-text rules. Serving and the M7.1 fine-tune
+(`ml.extractor_b`) both build messages here, so train and serve match exactly.
 `SERVING_RUNG` is the one source of B's image budget for serving, data prep and training."""
 
 from __future__ import annotations
@@ -33,7 +34,8 @@ if _A_EVIDENCE not in SYSTEM_PROMPT:  # pragma: no cover - guards a silent promp
 B_SYSTEM_PROMPT: Final[str] = SYSTEM_PROMPT.replace(_A_EVIDENCE, _B_EVIDENCE)
 B_USER_TEXT: Final[str] = (
     "Extract the fields of this invoice from the page images, following the rules and field "
-    "definitions in the system message."
+    "definitions in the system message. The images are pages in document order; a long invoice "
+    "shows its first pages and its last page."
 )
 PATCH_PX: Final[int] = 32
 """Qwen3.5-VL patch 16 x spatial merge 2: one visual token covers a 32x32 pixel block."""
@@ -64,6 +66,15 @@ one-line change here, followed by a fresh data prep."""
 
 def serving_image_settings() -> BImageSettings:
     return B_IMAGE_RUNGS[SERVING_RUNG]
+
+
+def b_page_indices(n_pages: int, settings: BImageSettings) -> tuple[int, ...]:
+    """The pages B sees (ADR-0019 amendment 3), in serving, data prep and training alike: every
+    page of a document of at most `max_pages`; else the first `max_pages - 1` and the last,
+    where the totals block and the bank details sit."""
+    if n_pages <= settings.max_pages:
+        return tuple(range(n_pages))
+    return (*range(settings.max_pages - 1), n_pages - 1)
 
 
 def page_token_budget(n_pages: int, settings: BImageSettings) -> int:
@@ -108,8 +119,11 @@ class ImageOnlyPromptBuilder:
         self._settings = settings or serving_image_settings()
 
     def page_jpegs(self, document: ParsedDocument) -> list[bytes]:
-        pages = document.pages[: self._settings.max_pages]
-        return [resize_page_for_b(p.image_png, len(document.pages), self._settings) for p in pages]
+        n_pages = len(document.pages)
+        return [
+            resize_page_for_b(document.pages[i].image_png, n_pages, self._settings)
+            for i in b_page_indices(n_pages, self._settings)
+        ]
 
     def build(self, document: ParsedDocument, model: str) -> StructuredRequest:
         return StructuredRequest(

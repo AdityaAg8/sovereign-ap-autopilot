@@ -86,6 +86,55 @@ def test_uae_target() -> None:
         )
 
 
+def test_uae_target_holds_only_values_printed_on_pages_b_sees() -> None:
+    # ADR-0019 amendment 3: R1 was taught IBANs printed on page 4-5, which it never saw, and
+    # learned to invent them (0/71 right on long test invoices).
+    labels = {
+        "labels": [
+            {"field": "invoice_number", "value": "INV-9", "line_index": None, "page": 0},
+            {"field": "invoice_number", "value": "INV-9", "line_index": None, "page": 2},
+            {"field": "description", "value": "Seen", "line_index": 0, "page": 1},
+            {"field": "description", "value": "Hidden", "line_index": 1, "page": 2},
+            {"field": "total", "value": "10.00", "line_index": None, "page": 2},
+            {"field": "iban", "value": "AE070331234567890123456", "line_index": None, "page": 3},
+        ]
+    }
+    target = uae_target(labels, "standard", visible_pages=frozenset({0, 1, 3}))
+    _schema_ok(target)
+    assert target["invoice_number"] == "INV-9"
+    assert target["iban"] == "AE070331234567890123456"
+    assert target["total"] is None
+    assert [li["description"] for li in target["line_items"]] == ["Seen"]
+    assert uae_target(labels, "standard")["total"] == "10.00"  # no mask: every label
+    with pytest.raises(TrainingError, match="page index"):
+        uae_target(
+            {"labels": [{"field": "total", "value": "1", "line_index": None}]},
+            "standard",
+            visible_pages=frozenset({0}),
+        )
+
+
+def test_docile_target_drops_extractions_on_unseen_pages() -> None:
+    annotation = {
+        "field_extractions": [
+            {"fieldtype": "document_id", "text": "A-1", "page": 0, "bbox": [0, 0.1, 0, 0]},
+            {"fieldtype": "amount_total_gross", "text": "9.00", "page": 2, "bbox": [0, 0.9, 0, 0]},
+        ],
+        "line_item_extractions": [
+            {
+                "fieldtype": "line_item_description",
+                "text": "hidden",
+                "page": 2,
+                "line_item_id": 1,
+                "bbox": [0, 0.5, 0, 0],
+            }
+        ],
+    }
+    target = docile_target(annotation, visible_pages=frozenset({0, 1}))
+    _schema_ok(target)
+    assert (target["invoice_number"], target["total"], target["line_items"]) == ("A-1", None, [])
+
+
 @pytest.mark.parametrize(
     ("tax_case", "category"),
     [("standard", "S"), ("zero_rated", "Z"), ("exempt", "E"), ("reverse_charge", "AE"),

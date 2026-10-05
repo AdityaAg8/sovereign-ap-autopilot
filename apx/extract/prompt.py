@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import base64
 import io
+import math
+import re
 from dataclasses import dataclass
+from typing import Final
 
 from PIL import Image
 
@@ -118,9 +121,10 @@ class PromptSettings:
     The text keeps its head and tail when trimmed (header fields and totals); images are the
     first and last pages."""
 
-    max_text_tokens: int = 3500
-    """Estimated tokens of parse text. With two images (~1.4k), the system prompt (~0.4k) and
-    4096 output tokens this stays well inside a 12288-token slot, for Arabic text too."""
+    max_text_tokens: int = 5000
+    """Estimated tokens of parse text (`estimate_tokens`, never below the true count). With two
+    images (~1.4k), the system prompt (~0.7k) and 4096 output tokens this stays inside a
+    12288-token slot. No UAE test or cal invoice reaches it (longest: 3621 true tokens)."""
     max_images: int = 2
     image_max_side: int = 1024
     temperature: float = 0.0
@@ -137,11 +141,29 @@ def page_image_data_url(image_png: bytes, max_side: int) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
+_LETTER_RUN: Final[re.Pattern[str]] = re.compile(r"[^\W\d_]+")
+_NEWLINE_RUN: Final[re.Pattern[str]] = re.compile(r"\n[\n ]*")
+_PUNCTUATION: Final[re.Pattern[str]] = re.compile(r"[^\w\s]|_")
+_DIGIT: Final[re.Pattern[str]] = re.compile(r"\d")
+_ARABIC_LETTER: Final[re.Pattern[str]] = re.compile(r"[\u0600-\u06ff\u0750-\u077f\ufb50-\ufeff]")
+TOKEN_ESTIMATE_SAFETY: Final[float] = 1.2
+TOKEN_ESTIMATOR_VERSION: Final[str] = "runs-3-2-1x1.2"
+"""Names the `estimate_tokens` rule, so request versions that budget with it change with it."""
+
+
 def estimate_tokens(text: str) -> int:
-    """Conservative token estimate for the Qwen tokenizer: ~3.5 Latin characters per token but
-    only ~1.8 Arabic characters, which is what overflowed a fixed character budget."""
-    arabic = sum(1 for ch in text if "\u0600" <= ch <= "\u06ff")
-    return int((len(text) - arabic) / 3.5 + arabic / 1.8) + 1
+    """Conservative Qwen3.5 token count without loading the tokenizer, by the units its
+    pre-tokenizer splits text into: one token per digit, punctuation mark and newline run, one
+    per 3 letters of a Latin letter run and per 2 of an Arabic one, times `TOKEN_ESTIMATE_SAFETY`.
+    Calibrated against the Qwen3.5 tokenizer on 752 parsed documents (UAE, CORD, ExtractBench):
+    never below the true count there. The old 3.5 / 1.8 characters-per-token rule undercounted
+    99% of them, digit-heavy tables by up to 3.4x, which overflowed the 12288-token slot."""
+    tokens = len(_DIGIT.findall(text)) + len(_NEWLINE_RUN.findall(text))
+    tokens += len(_PUNCTUATION.findall(text))
+    for run in _LETTER_RUN.findall(text):
+        arabic = len(_ARABIC_LETTER.findall(run))
+        tokens += math.ceil(arabic / 2) + math.ceil((len(run) - arabic) / 3)
+    return math.ceil(tokens * TOKEN_ESTIMATE_SAFETY) + 1
 
 
 def document_text(document: ParsedDocument, max_tokens: int) -> str:
@@ -162,11 +184,21 @@ def document_text(document: ParsedDocument, max_tokens: int) -> str:
     total = estimate_tokens(text)
     if total <= max_tokens:
         return text
+    # The first cut is proportional in characters; text denser at its ends than in the middle
+    # (digit tables around prose) still estimates over budget, so shrink until it fits (REVIEW.md
+    # P4-02). Each pass scales by the measured overshoot, so a few passes suffice.
     keep = int(len(text) * max_tokens / total)
-    head = int(keep * 0.6)
-    return (
-        text[:head] + "\n[... middle of document omitted ...]\n" + text[len(text) - (keep - head) :]
-    )
+    while True:
+        head = int(keep * 0.6)
+        trimmed = (
+            text[:head]
+            + "\n[... middle of document omitted ...]\n"
+            + text[len(text) - (keep - head) :]
+        )
+        estimate = estimate_tokens(trimmed)
+        if estimate <= max_tokens or keep == 0:
+            return trimmed
+        keep = min(keep - 1, int(keep * max_tokens / estimate))
 
 
 class InvoicePromptBuilder:

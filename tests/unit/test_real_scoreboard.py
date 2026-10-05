@@ -125,3 +125,19 @@ def test_before_after_parser_round_trips() -> None:
     (parsed,) = parse_real_before_after(text, "x")
     assert isinstance(parsed, BeforeAfterReport)
     assert parsed.deltas[0].ci.method == "paired_bootstrap"
+
+
+def test_prd_extractbench_row_reads_the_real_track_report(tmp_path: Path) -> None:
+    """Without a harness model run, the PRD §5 ExtractBench row shows the real-track run of the
+    same set (REVIEW.md P7-03) instead of claiming no model run exists."""
+    pending_row = _line(_render(tmp_path / "none", {}), "Value F1 + grounding F1")
+    assert "PENDING" in pending_row
+    report = _report("extractbench").model_dump_json()
+    row = _line(
+        _render(tmp_path / "eb", {"real_extractbench.a-base.json": report}),
+        "Value F1 + grounding F1",
+    )
+    assert "A base, zero-shot: value F1 61.00% (n=100)" in row
+    assert "grounding F1 61.00%" in row and "valid JSON 98.00%" in row
+    assert re.search(r"\| REPORTED +\|", row)
+    assert "`reports/real_extractbench.a-base.json`" in row

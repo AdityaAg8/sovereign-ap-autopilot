@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -20,11 +21,30 @@ import httpx
 from pydantic import JsonValue
 
 from apx.common.errors import ModelBusyError, ModelContextError, ModelServingError
-from apx.extract.prompt import document_text, estimate_tokens, page_image_data_url
+from apx.extract.prompt import (
+    TOKEN_ESTIMATOR_VERSION,
+    document_text,
+    estimate_tokens,
+    page_image_data_url,
+)
 from apx.llm.interfaces import ChatMessage, ImagePart, LlmClient, StructuredRequest, TextPart
 from apx.parse.interfaces import ParsedDocument
 from evals.run import _gold_extractbench_examples, _predicted_extractbench_examples
 from evals.scorers.extractbench import ExtractBenchExample, ExtractBenchScore, score_extractbench
+
+JSON_ESTIMATE_DIVISOR: Final[float] = 1.85
+"""`estimate_tokens` is calibrated on document text and counts every punctuation mark as a
+token; Qwen3.5's tokenizer merges JSON runs such as `":"` and `"},"`. On the 252 ExtractBench
+schema digests (full descriptions) it overshot the true count 1.88-2.70x (median 2.15x), so a
+2500-token cap kept only 17 full digests where 69 fit, and left 153 of 252 requests with no
+digest at all (2026-10-05 run, discarded). Dividing by just under the minimum ratio keeps the
+estimate at or above the true count on all 252."""
+
+
+def estimate_json_tokens(text: str) -> int:
+    """Conservative Qwen3.5 token count of compact JSON (`JSON_ESTIMATE_DIVISOR`)."""
+    return math.ceil(estimate_tokens(text) / JSON_ESTIMATE_DIVISOR)
+
 
 EXTRACTBENCH_SYSTEM_PROMPT: Final[str] = (
     "You extract structured data from one document.\n"
@@ -89,7 +109,7 @@ def schema_digest(schema: Mapping[str, Any], max_tokens: int) -> str | None:
     (the response-format grammar still constrains the output then)."""
     for cap in _DESCRIPTION_CAPS:
         text = json.dumps(_strip(schema, cap), ensure_ascii=False, separators=(",", ":"))
-        if estimate_tokens(text) <= max_tokens:
+        if estimate_json_tokens(text) <= max_tokens:
             return text
     return None
 
@@ -112,6 +132,8 @@ class ExtractBenchPromptBuilder:
             "drop": sorted(_SCHEMA_DROP_KEYS),
             "caps": list(_DESCRIPTION_CAPS),
             "template": _user_text("{text}", "{schema}"),
+            "token_estimator": TOKEN_ESTIMATOR_VERSION,
+            "json_estimate_divisor": JSON_ESTIMATE_DIVISOR,
         }
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()[:16]
@@ -135,7 +157,7 @@ class ExtractBenchPromptBuilder:
             settings.max_output_tokens
             + (settings.image_tokens if images else 0)
             + estimate_tokens(EXTRACTBENCH_SYSTEM_PROMPT)
-            + (estimate_tokens(digest) if digest else 0)
+            + (estimate_json_tokens(digest) if digest else 0)
             + settings.margin_tokens
         )
         text_budget = max(settings.min_text_tokens, settings.slot_tokens - reserved)

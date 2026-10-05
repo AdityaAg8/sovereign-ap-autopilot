@@ -27,14 +27,14 @@ def _uae_doc(root: Path, name: str, *, pages: int = 2, tax_case: str | None = "e
     labels = {
         "layout_id": "t",
         "n_pages": pages,
-        "labels": [
-            {"field": "invoice_number", "value": f"INV-{name}", "line_index": None},
-            {"field": "issue_date", "value": "2026-01-05", "line_index": None},
-            {"field": "supplier_name", "value": "Acme LLC", "line_index": None},
-            {"field": "subtotal", "value": "100.00", "line_index": None},
-            {"field": "vat_total", "value": "5.00", "line_index": None},
-            {"field": "total", "value": "105.00", "line_index": None},
-            {"field": "description", "value": "Item", "line_index": 0},
+        "labels": [  # header on page 1, totals on the last page, as the factory prints them
+            {"field": "invoice_number", "value": f"INV-{name}", "line_index": None, "page": 0},
+            {"field": "issue_date", "value": "2026-01-05", "line_index": None, "page": 0},
+            {"field": "supplier_name", "value": "Acme LLC", "line_index": None, "page": 0},
+            {"field": "subtotal", "value": "100.00", "line_index": None, "page": pages - 1},
+            {"field": "vat_total", "value": "5.00", "line_index": None, "page": pages - 1},
+            {"field": "total", "value": "105.00", "line_index": None, "page": pages - 1},
+            {"field": "description", "value": "Item", "line_index": 0, "page": 0},
         ],
     }
     (folder / f"{doc_sha}.labels.json").write_text(json.dumps(labels), encoding="utf-8")

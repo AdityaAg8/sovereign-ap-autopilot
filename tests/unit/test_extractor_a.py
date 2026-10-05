@@ -366,10 +366,36 @@ def test_document_text_cannot_close_the_data_fence() -> None:
     assert text.count("</document_text>") == 1 and text.count("<document_text>") == 1
 
 
+_TRUE_QWEN35_TOKENS = {
+    # Counted with the Qwen3.5-4B tokenizer.json (shared by the 9B) on 2026-10-04.
+    "TAX INVOICE\nInvoice No: INV-2026-001234\nSupplier: Gulf Star Trading LLC, Dubai\n"
+    "Description Qty Unit Price Amount\nOffice chairs 12 450.00 5,400.00\n": 59,
+    "\n".join(f"{i:04d} 0001234567 {i * 37:,}.25 98765432.10" for i in range(40)): 1419,
+    (
+        "\u0641\u0627\u062a\u0648\u0631\u0629 \u0636\u0631\u064a\u0628\u064a\u0629\n"
+        "\u0627\u0644\u0645\u0648\u0631\u062f: \u0634\u0631\u0643\u0629 \u0627\u0644\u0646\u062c"
+        "\u0645 \u0644\u0644\u062a\u062c\u0627\u0631\u0629\n\u0627\u0644\u0645\u062c\u0645\u0648"
+        "\u0639 \u0661\u0662\u0663\u0664\u0665\u066b\u0660\u0660 \u062f.\u0625\n"
+    )
+    * 3: 114,
+    "IBAN AE070331234567890123456 | TRN 100123456700003 | \u0627\u0644\u0631\u0642\u0645 "
+    "\u0627\u0644\u0636\u0631\u064a\u0628\u064a\n" * 5: 245,
+}
+
+
+@pytest.mark.parametrize(("text", "true_tokens"), list(_TRUE_QWEN35_TOKENS.items()))
+def test_token_estimate_is_never_below_the_true_count(text: str, true_tokens: int) -> None:
+    # The old 3.5 chars-per-token rule counted the digit table as ~550 tokens (true 1419): a
+    # numeric line-item table overflowed the 12288-token slot (HTTP 400 on 4 ExtractBench docs).
+    from apx.extract.prompt import estimate_tokens
+
+    assert true_tokens <= estimate_tokens(text) <= 1.6 * true_tokens
+
+
 def test_token_budget_counts_arabic_as_denser_than_latin() -> None:
     from apx.extract.prompt import estimate_tokens
 
-    assert estimate_tokens("\u0641" * 180) > 1.8 * estimate_tokens("a" * 180)
+    assert estimate_tokens("\u0641" * 180) > 1.4 * estimate_tokens("a" * 180)
     arabic = _document([["\u0641\u0627\u062a\u0648\u0631\u0629"] * 8 for _ in range(300)])
     assert estimate_tokens(document_text(arabic, 800)) <= 800 * 1.1
 

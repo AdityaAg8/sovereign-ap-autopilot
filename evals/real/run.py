@@ -54,15 +54,17 @@ A_VERSION: Final = "base"
 B_ALIASES: Final[Mapping[str, str]] = {
     "v1": "extractor-b-v1",
     "r1": "extractor-b-r1",
+    "r1b": "extractor-b-r1b",
     "r2": "extractor-b-r2",
 }
 """B version -> llama-swap alias, each pinned to one export (never `extractor-b-challenger`, which
 moves between rounds). A round's alias is added to infra/llama-swap.yaml when its export is
 registered; until then a run on it fails typed (`ServedModelError`) instead of scoring v1."""
-B_ORDER: Final[tuple[str, ...]] = ("v1", "r1", "r2")
+B_ORDER: Final[tuple[str, ...]] = ("v1", "r1", "r1b", "r2")
 B_TRAINED_ON: Final[Mapping[str, frozenset[str]]] = {
     "v1": frozenset({"fatura"}),
     "r1": frozenset({"fatura", "cord"}),
+    "r1b": frozenset({"fatura", "cord"}),
     "r2": frozenset({"fatura", "cord", "docile"}),
 }
 """Real sets each B version saw in training (§4.4): B on these is in-distribution."""
@@ -901,6 +903,7 @@ async def run_set(
     models_lock: Path = Path("infra/models.lock.json"),
     models_root: Path = Path("models"),
     parse_only: bool = False,
+    parser_id: str | None = None,
 ) -> int:  # pragma: no cover - needs the parse service and llama-swap on the GPU
     """Resumable; one RealRow per doc, failures included. Raises DirtyTreeError (test split,
     dirty tree) and ConsecutiveFailuresError (3 in a row)."""
@@ -915,7 +918,7 @@ async def run_set(
     from evals.bakeoff.extractbench import ExtractBenchPromptBuilder, extractbench_row, failure_kind
     from evals.extraction_a import prompt_builder_for
     from evals.extraction_identity import serving_args_sha256
-    from evals.parse_cache import Contacted, ParseCache, is_transient_parse_error, retrying
+    from evals.parse_cache import Contacted, is_transient_parse_error, open_cache, retrying
     from evals.run import _load_extractbench_records
 
     if not parse_only:
@@ -931,7 +934,7 @@ async def run_set(
         for d in docs
         if d.sha256 not in existing or (retry_failed and existing[d.sha256].error_kind is not None)
     ]
-    cache = ParseCache()
+    cache = open_cache(parser_id, log=_print)
     parse_failed: dict[str, str] = {}
     parse_client = ParseServiceClient()
     parser = PaddleOcrDocumentParser(parse_client)
@@ -1075,6 +1078,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wi
         p.add_argument("--rows", type=Path, default=None)
         p.add_argument("--data-root", type=Path, default=DATA_ROOT)
         p.add_argument("--base-url", default="http://127.0.0.1:8080")
+        p.add_argument("--parser-id", default=None, help="pinned parse cache snapshot (read-only)")
     rep = sub.add_parser("report")
     rep.add_argument("--rows-dir", type=Path, default=ROWS_DIR)
     rep.add_argument("--reports-dir", type=Path, default=REPORTS_DIR)
@@ -1106,6 +1110,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - CLI wi
                     model=args.model,
                     base_url=args.base_url,
                     parse_only=args.command == "parse",
+                    parser_id=args.parser_id,
                 )
             )
             return 0

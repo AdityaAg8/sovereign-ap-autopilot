@@ -61,7 +61,13 @@ from evals.extraction_identity import (
     serving_args_sha256,
 )
 from evals.parse_cache import DEFAULT_ROOT as DEFAULT_PARSE_CACHE
-from evals.parse_cache import PARSE_RETRY_BACKOFF_S, ParseCache, parser_identity, retrying
+from evals.parse_cache import (
+    PARSE_RETRY_BACKOFF_S,
+    ParseCache,
+    open_cache,
+    parser_identity,
+    retrying,
+)
 from evals.scan_input import INPUT_KINDS, InputKind, document_input, load_truth
 from evals.splits import load_splits
 
@@ -503,7 +509,7 @@ async def run(args: argparse.Namespace) -> int:
         models_root=args.models_root,
     )
     require_identity(rows, identity, rows_path)  # never mix builds or prompts in one file
-    cache = None if args.no_parse_cache else ParseCache(args.parse_cache)
+    cache = None if args.no_parse_cache else open_cache(args.parser_id, args.parse_cache)
     serving = run_serving(
         model,
         llama_swap_config=args.llama_swap_config,
@@ -589,6 +595,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--models-root", type=Path, default=Path("models"))
     parser.add_argument("--parse-cache", type=Path, default=DEFAULT_PARSE_CACHE)
     parser.add_argument("--no-parse-cache", action="store_true", help="parse every input inline")
+    parser.add_argument(
+        "--parser-id",
+        default=None,
+        help="read an earlier parser build's cache snapshot, read-only (default: current build)",
+    )
     return asyncio.run(run(parser.parse_args(argv)))
 
 

@@ -84,6 +84,14 @@ def test_the_default_gateway_proxies_neither_postgres_nor_temporal() -> None:
     assert "temporal:" not in code and "postgres:" not in code
 
 
+def test_the_llama_swap_listener_sets_an_explicit_body_cap() -> None:
+    # Without one nginx caps bodies at 1 MB, and host-run evals got HTTP 413 on requests with
+    # two dense page images that the runtime (which calls llama-swap directly) accepts.
+    conf = GATEWAY_CONF.read_text(encoding="utf-8")
+    block = conf.split("listen 8080;", 1)[1].split("server {", 1)[0]
+    assert "client_max_body_size 25m;" in block
+
+
 def test_devports_temporal_ui_proxy_is_read_only() -> None:
     conf = DEVPORTS_CONF.read_text(encoding="utf-8")
     server = conf[conf.index("listen 8233;") :]
@@ -100,6 +108,32 @@ def test_temporal_is_reachable_only_inside_the_app_network() -> None:
     temporal = _compose()["services"]["temporal"]
     assert "ports" not in temporal
     assert temporal["networks"] == ["app"]
+
+
+def test_temporal_store_is_a_file_on_its_volume_named_by_an_optional_override() -> None:
+    """The default keeps the live history file; TEMPORAL_DB_FILE only picks another file on the
+    same volume, so a run on a second Postgres database gets a second workflow history."""
+    temporal = _compose()["services"]["temporal"]
+    command = temporal["command"]
+    store = command[command.index("--db-filename") + 1]
+    assert store == "/home/temporal/${TEMPORAL_DB_FILE:-temporal.db}"
+    assert "temporal-data:/home/temporal" in temporal["volumes"]
+
+
+def test_worker_inbox_defaults_to_the_live_inbox_and_follows_an_override() -> None:
+    """A second-database run sets INGEST_INBOX_DIR so its worker never sweeps the live inbox."""
+    env = _compose()["services"]["worker"]["environment"]
+    assert env["INGEST_INBOX_DIR"] == "${INGEST_INBOX_DIR:-data/inbox}"
+
+
+def test_worker_asp_store_defaults_to_the_live_store_and_follows_an_override() -> None:
+    """Mock-ASP idempotency is keyed by document sha, so a second-database run sets
+    WORKER_ASP_DB; the default is `WorkerSettings.asp_db`, the live store."""
+    from apx.workflows.main import WorkerSettings
+
+    env = _compose()["services"]["worker"]["environment"]
+    assert env["WORKER_ASP_DB"] == "${WORKER_ASP_DB:-data/asp/asp.sqlite}"
+    assert WorkerSettings.model_fields["asp_db"].default == Path("data/asp/asp.sqlite")
 
 
 def test_app_services_get_the_agent_password_not_a_literal_url() -> None:

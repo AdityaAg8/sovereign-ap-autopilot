@@ -95,6 +95,20 @@ def test_derived_steps_for_the_planned_run() -> None:
     assert epoch_end_steps(cfg, n_train) == (458, 916)
 
 
+def test_generative_evals_can_start_at_a_later_epoch() -> None:
+    # R1b (ADR-0019 amendment 3): no generative eval in epoch 1, both of epoch 2's kept.
+    base = TrainConfig()
+    cfg = base.model_copy(
+        update={"cadence": base.cadence.model_copy(update={"first_generative_eval_epoch": 2})}
+    )
+    assert generative_eval_steps(cfg, 7318) == (687, 916)
+    late = base.model_copy(
+        update={"cadence": base.cadence.model_copy(update={"first_generative_eval_epoch": 3})}
+    )
+    with pytest.raises(ConfigError, match="past the last epoch"):
+        generative_eval_steps(late, 7318)
+
+
 def test_steps_per_epoch_rejects_empty() -> None:
     with pytest.raises(ConfigError):
         steps_per_epoch(0, 16)
