@@ -36,9 +36,9 @@ JSON_ESTIMATE_DIVISOR: Final[float] = 1.85
 """`estimate_tokens` is calibrated on document text and counts every punctuation mark as a
 token; Qwen3.5's tokenizer merges JSON runs such as `":"` and `"},"`. On the 252 ExtractBench
 schema digests (full descriptions) it overshot the true count 1.88-2.70x (median 2.15x), so a
-2500-token cap kept only 17 full digests where 69 fit, and dropped 132 digests entirely
-(2026-10-05 run). Dividing by just under the minimum ratio keeps the estimate at or above the
-true count on all 252."""
+2500-token cap kept only 17 full digests where 69 fit, and left 153 of 252 requests with no
+digest at all (2026-10-05 run, discarded). Dividing by just under the minimum ratio keeps the
+estimate at or above the true count on all 252."""
 
 
 def estimate_json_tokens(text: str) -> int:

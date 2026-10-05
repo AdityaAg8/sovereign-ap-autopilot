@@ -267,7 +267,7 @@ def test_json_estimate_is_the_text_estimate_scaled_by_its_calibrated_divisor() -
 
 def test_schema_digest_is_sized_with_the_json_estimate() -> None:
     """A digest under the cap by the JSON estimate keeps its descriptions, although the plain
-    text estimate is over the cap (which on 2026-10-05 dropped 132 of 252 digests)."""
+    text estimate is over the cap (on 2026-10-05, 153 of 252 requests got no digest)."""
     full = schema_digest(SCHEMA, 10_000)
     assert full is not None
     cap = estimate_json_tokens(full)

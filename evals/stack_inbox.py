@@ -32,7 +32,12 @@ def host_inbox(
         return data / "inbox"
     relative = PurePosixPath(value)
     parts = relative.parts
-    if relative.is_absolute() or "\\" in value or ".." in parts or parts[:1] != ("data",):
+    if (
+        relative.is_absolute()
+        or any(c in value for c in ("\\", ":"))  # Windows separators and drive letters
+        or ".." in parts
+        or parts[:1] != ("data",)
+    ):
         raise ConfigError(
             f"INGEST_INBOX_DIR={value!r} must be a relative path below data/, such as "
             "data/inbox_attacks (the only folder the worker shares with the host)"

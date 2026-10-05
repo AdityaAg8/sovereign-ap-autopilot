@@ -119,7 +119,8 @@ def _eta(seconds: float) -> str:
 
 
 STALE_SLACK_S = 5.0
-"""Clock slack between this host and Postgres when comparing created_at with the drop time."""
+"""Clock slack between this host and the stack (Postgres `created_at`, the worker's `received_at`
+for a failed ingest) when comparing their times with the drop time."""
 LIVE_HISTORY_FILE = "temporal.db"
 """The live stack's Temporal history file (compose `TEMPORAL_DB_FILE` default)."""
 

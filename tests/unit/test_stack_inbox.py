@@ -40,8 +40,17 @@ def test_an_explicit_folder_wins_over_the_environment(tmp_path: Path) -> None:
         "apx/inbox",
         r"data\inbox_attacks",  # one directory name in the Linux container
         "data",
+        "data/C:x",  # a drive letter: Windows resolves it outside data/ (REVIEW.md P7-01)
+        "data/C:/x",
+        "data/x:y",
     ],
 )
 def test_refuses_a_value_it_cannot_map_to_the_host(tmp_path: Path, value: str) -> None:
     with pytest.raises(ConfigError, match="INGEST_INBOX_DIR"):
         host_inbox(tmp_path / "data", tmp_path, environ={"INGEST_INBOX_DIR": value})
+
+
+@pytest.mark.parametrize("value", ["data/inbox_demo", "./data/inbox_demo", "data/inbox_demo/"])
+def test_accepts_spellings_of_a_folder_below_data(tmp_path: Path, value: str) -> None:
+    got = host_inbox(tmp_path / "x", tmp_path, environ={"INGEST_INBOX_DIR": value})
+    assert got == tmp_path / "data" / "inbox_demo"
