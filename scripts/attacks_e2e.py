@@ -135,7 +135,7 @@ class Runner:
         self.client = client
         self.snapshot = snapshot
         self.approver_id = approver_id
-        self.inbox: Path = args.data / "inbox"
+        self.inbox: Path = args.inbox or args.data / "inbox"
         self.started = time.monotonic()
         self.finished_here = 0
 
@@ -286,6 +286,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--data", type=Path, default=ROOT / "data")
     parser.add_argument("--out", type=Path, default=ROOT / "reports" / "attacks_e2e.md")
     parser.add_argument("--work", type=Path, default=None, help="default data/attacks_e2e/<erp>")
+    parser.add_argument(
+        "--inbox",
+        type=Path,
+        default=None,
+        help="folder the worker watches (its INGEST_INBOX_DIR); default <data>/inbox",
+    )
     parser.add_argument("--limit", type=int, default=None, help="first N, spread across categories")
     parser.add_argument("--categories", nargs="*", default=[], help="names or ids, e.g. A08")
     parser.add_argument(

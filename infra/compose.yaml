@@ -366,6 +366,9 @@ services:
       # The inbox is a host bind mount; on Docker Desktop (Windows/macOS) a file dropped on the
       # host raises no inotify event in the container, so the watcher (watchfiles) polls.
       WATCHFILES_FORCE_POLLING: "true"
+      # A run on a second database (POSTGRES_DB, TEMPORAL_DB_FILE) also gets its own inbox, so
+      # its worker does not sweep the live inbox's documents into that database.
+      INGEST_INBOX_DIR: ${INGEST_INBOX_DIR:-data/inbox}
     volumes:
       - ../data:/app/data
       # Directory mount, not single files: promote-b rewrites llama-swap.yaml atomically, and a

@@ -120,6 +120,12 @@ def test_temporal_store_is_a_file_on_its_volume_named_by_an_optional_override() 
     assert "temporal-data:/home/temporal" in temporal["volumes"]
 
 
+def test_worker_inbox_defaults_to_the_live_inbox_and_follows_an_override() -> None:
+    """A second-database run sets INGEST_INBOX_DIR so its worker never sweeps the live inbox."""
+    env = _compose()["services"]["worker"]["environment"]
+    assert env["INGEST_INBOX_DIR"] == "${INGEST_INBOX_DIR:-data/inbox}"
+
+
 def test_app_services_get_the_agent_password_not_a_literal_url() -> None:
     env = _compose()["services"]["migrate"]["environment"]
     assert "AGENT_DATABASE_URL" not in env
