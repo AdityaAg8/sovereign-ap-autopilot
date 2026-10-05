@@ -11,6 +11,7 @@ incomplete.
 | KI-03 | Low | ADR-0020 | Deferred features (arbiter, teacher, live retrain loop) |
 | KI-04 | Low | REVIEW.md P3-07, P4-03, P4-04 | Accepted, each fails closed |
 | KI-05 | Medium | Found 2026-10-04 (R1b run) | Open: B trains at 512 px wide, serves full size; fix next round |
+| KI-06 | Low | Found 2026-10-05 (attack suite run) | Open: an extraction missing required fields is retried for the 30-min outage window |
 
 ## KI-01: two blobs over 1 MB in git history (REVIEW.md M-05)
 
@@ -131,3 +132,20 @@ each pass only from workflows actually waiting in review, rotating through the c
   new VRAM probe (`make train-b-probe`) and ~4-5 h more training.
 - **Fix (next round).** Pass `resize="max"` (no resize; pages are already at the serving size),
   re-run the probe against the ADR-0009 §1.6 ladder, and retrain with an ADR-0019 amendment.
+
+## KI-06: an extraction missing required fields is retried for 30 minutes (found 2026-10-05)
+
+- **What.** `build_invoice` raises `ModelOutputError("required invoice fields missing: ...")`
+  when the extraction has no subtotal, VAT total or total (`apx/workflows/components.py`).
+  `ModelOutputError` is deliberately retryable (`apx/workflows/workflow.py`,
+  `NON_RETRYABLE_ERRORS`: "sampling may differ"), so the activity re-runs extraction for the
+  whole `OUTAGE_WINDOW` (36 attempts, about 30 minutes) before `mark_failed` records the failure
+  on `ingested_documents`. Extraction is greedy, so the same page yields the same miss.
+- **Seen.** One clean factory invoice in the 2026-10-05 attack-suite baseline. It failed
+  closed: no invoice row, no payment, a durable failure record, and the API shows it as failed.
+- **Impact.** About 30 minutes of GPU time per such document, which delays the queue behind it.
+  No correctness or safety impact.
+- **Fix.** Raise a distinct, non-retryable subclass for the missing-fields case (keep schema
+  and JSON failures retryable), list it under `build_invoice` in `NON_RETRYABLE_ERRORS`, and
+  test that it fails at once. Unscheduled for v1.0: it changes the defense fingerprint the attack
+  suite was measured on.
