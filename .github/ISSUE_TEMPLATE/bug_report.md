@@ -11,7 +11,7 @@ labels: bug
 
 ## Steps to reproduce
 
-## Relevant PRD section / milestone task
+## Environment (OS, GPU, Docker version)
 
 ## Logs / report evidence
 

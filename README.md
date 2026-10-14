@@ -56,7 +56,10 @@ often the output is wrong, and whether a malicious invoice can redirect a paymen
 </p>
 <p align="center"><sub>Invoices from the data factory: 12 layouts across English, Arabic-first and bilingual, five UAE tax cases, 30% rendered as scans.</sub></p>
 
-<!-- screenshot: review UI -->
+<p align="center">
+  <img src="docs/images/review-screen.png" width="96%" alt="Invoice review screen: the source document on the left, extracted fields with confidence on the right">
+</p>
+<p align="center"><sub>The review screen: each extracted field is boxed on the page it was read from.</sub></p>
 
 ## What ships in v1.0
 

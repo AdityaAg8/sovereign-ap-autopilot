@@ -58,8 +58,8 @@ Details and the report each one writes: [Evaluation guide](evaluation.md).
 | `make extraction-a-adr0012` / `make extraction-a-compare` | Extractor A with the ADR-0012 prompt (GPU, resumable) / paired before-after report |
 | `make cal-rows-a` / `make cal-rows-b` | GPU, needs `make up`, resumable: A / B (`CAL_B_MODEL`, default `extractor-b`) over the 750 UAE cal documents → `logs/cal_a.jsonl`, `logs/cal_b.jsonl` |
 | `make calibrate` | CPU: fit the trust calibrator on cal, LTT λ̂ at alpha 0.5/1/2%, artifact to `data/trust/` (activated only for the served champions), UAE test gate → `reports/trust_gate.md` |
-| `make bakeoff-probe` / `make bakeoff` / `make bakeoff-report` | M3.4: 5-page VRAM probe per arm (GPU) / 200 UAE + ExtractBench short per in-budget arm (GPU, resumable) / `reports/bakeoff.md` + ADR-0016 decision (CPU) |
-| `make verify-mN` / `make verify-all` | Milestone gates (built: m0, m1, m2, m4, m5, m7, m8; the others fail loudly until their milestone lands) / all of them in order |
+| `make bakeoff-probe` / `make bakeoff` / `make bakeoff-report` | Extractor A bake-off, built but not run in v1.0: 5-page VRAM probe per arm (GPU) / 200 UAE + ExtractBench short per in-budget arm (GPU, resumable) / `reports/bakeoff.md` + ADR-0016 decision (CPU) |
+| `make verify-mN` / `make verify-all` | Grouped checks by build stage (real checks: m0, m1, m2, m4, m5, m7, m8; m3, m6 and m9-m12 are stubs that exit 1, so `verify-all` fails) / all of them in order |
 
 ## Extractor B training
 
@@ -82,7 +82,7 @@ Guide: [Training Extractor B](training.md).
 | `make promote-b` | CPU: only if every gate passed, move `champion` (calibrator, models.lock, llama-swap, alias) |
 | `make test-export` | Exporter-image tests on CPU |
 | `make test-trainer` | Trainer-image tests on CPU (`trainer and not gpu`) |
-| `make test-trainer-gpu` | Trainer-image GPU tests (DeltaNet fast path, ADR-0011 amdt 6 item 3) |
+| `make test-trainer-gpu` | Trainer-image GPU tests (DeltaNet kernels, ADR-0011) |
 | `make retrain` | Challenger vs champion on gates G1-G11; promote only if nothing regresses ([ADR-0015](adr/0015-promotion-gates.md)). Not usable yet: exits 2 with `RetrainPrerequisiteError` until the production adapters land |
 
 ## Useful one-liners

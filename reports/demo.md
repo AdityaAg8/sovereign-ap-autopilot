@@ -1,4 +1,4 @@
-# Demo run (M10.5)
+# Demo run
 
 `make demo` against a fresh database (`apx_demo`, its own inbox, mock-ASP store and Temporal history; docs/runbook.md "A second database"), 2026-10-05, stack images built that day from `29ea948`. Every verdict is asserted against the API by `scripts/demo.py`; the table is the final verdict per document from its run log.
 

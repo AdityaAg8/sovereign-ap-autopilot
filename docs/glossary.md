@@ -26,15 +26,15 @@ Terms used across the code, the ADRs and the reports, in plain words.
 | **Factory** | `factory/`: the synthetic ERP and bilingual invoice renderer that makes our labelled training and test data |
 | **Parse** | Turning a PDF or scan into words with boxes. Born-digital PDFs use pdfplumber; scans use PaddleOCR-VL |
 | **Extractor A** | Qwen3.5-9B, prompted to return the invoice fields as JSON |
-| **Extractor B** | Qwen3.5-4B with our LoRA fine-tune, an independent second opinion ([training guide](training.md)) |
-| **Arbiter** | A third model that looks only at fields where A and B disagree |
+| **Extractor B** | Qwen3.5-4B, an independent second opinion. Its LoRA fine-tune is trained and gated but not promoted, so v1.0 serves the base model ([training guide](training.md)) |
+| **Arbiter** | A third model that would look only at fields where A and B disagree; not configured in v1.0, so a disputed field keeps A's value |
 | **Grounding** | Matching an extracted value back to words on the page, so every field has a box a reviewer can see |
 | **Trust gate** | Decides per field whether a value can be accepted without a human ([ADR-0004](adr/0004-trust-gate-method.md)) |
 | **Calibration** | Turning raw signals (agreement, logprobs, validators) into a probability that the field is correct |
 | **LTT (Learn-then-Test)** | The statistical method that picks the acceptance threshold so the error rate among auto-accepted fields stays below α with high confidence |
 | **α, δ** | α: the allowed error rate among auto-accepted fields (0.5%, 1%, 2%). δ: the chance that guarantee fails (5%) |
-| **STP** | Straight-through processing: the share of invoices that need no human touch |
-| **Champion / challenger** | The model currently served / a new candidate. A challenger is promoted only if it beats every gate ([ADR-0015](adr/0015-promotion-gates.md)) |
+| **STP** | Straight-through processing. Field STP: the share of fields accepted without review. Invoice STP: the share of invoices whose every field is accepted, so they need no human touch |
+| **Champion / challenger** | The model currently served / a new candidate. A challenger is promoted only if no gate regresses ([ADR-0015](adr/0015-promotion-gates.md)) |
 | **Stage / llama-swap group** | One set of models resident on the GPU at a time (extract, arbitrate, ...), swapped by llama-swap ([ADR-0002](adr/0002-serving-and-vram-staging.md)) |
 
 ## Security
@@ -49,7 +49,7 @@ Terms used across the code, the ADRs and the reports, in plain words.
 | **I1-I5** | System invariants: boxes come from parse words (I1), no raw document text to agents (I2), payment changes need policy + human (I3), every decision is audited (I4), eval data never trains (I5) |
 | **ASR** | Attack success rate. The target for payment-changing attacks is zero |
 | **Audit chain** | The append-only, hash-chained audit log; `apx/audit/` verifies it has not been altered |
-| **Guard** | The injection classifier that flags suspicious document text (M6.4) |
+| **Guard** | The injection classifier that flags suspicious document text |
 
 ## Training and evaluation
 
@@ -57,7 +57,7 @@ Terms used across the code, the ADRs and the reports, in plain words.
 |---|---|
 | **LoRA** | Low-rank adapters: a small set of trained weights added to a frozen base model |
 | **GGUF, Q4_K_M, mmproj** | llama.cpp's model file format, its 4-bit quantisation, and the separate vision-projector file |
-| **Rung (L0...)** | The image resolution level used for training and serving; they must match |
+| **Rung (L0...)** | The image resolution level used for training and serving; they are meant to match ([KI-05](../KNOWN_ISSUES.md): in v1.0 training did not) |
 | **Dev / cal / test** | Checkpoint selection / threshold fitting / final measurement. Never mixed ([evaluation guide](evaluation.md)) |
 | **Field F1 / accuracy** | How many extracted field values exactly match the label after normalisation |
 | **Valid JSON rate** | Share of model outputs that parse as JSON matching the schema |
