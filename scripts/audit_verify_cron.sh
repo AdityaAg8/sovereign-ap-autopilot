@@ -4,11 +4,9 @@
 # timestamped human summary into logs/audit-verify/, and exits with the CLI's own exit code
 # (0 ok, 1 chain/anchor mismatch, 2 could not run) so cron, systemd or a monitoring wrapper
 # can alert on failure. Only depends on `uv` and `DATABASE_URL`/`AUDIT_ANCHOR_FILE` already
-# being set the way the running app is configured -- no Temporal client exists yet in this
-# repo (apx/workflows has only Protocol interfaces), so this host cron entry is the
-# fit-for-purpose "compose-friendly" scheduling path in the audit design; once a Temporal
-# worker exists, wire the same `python -m apx.audit verify` command into a Temporal Schedule
-# instead of cron without changing anything in apx/audit/.
+# being set the way the running app is configured. A host cron entry keeps the verifier
+# independent of the Temporal worker it checks; the same `python -m apx.audit verify` command
+# could run as a Temporal Schedule instead without changing anything in apx/audit/.
 #
 # Suggested crontab entry (nightly at 02:00, matching "walks the chain nightly"):
 #   0 2 * * * /usr/bin/env bash /path/to/repo/scripts/audit_verify_cron.sh

@@ -45,3 +45,6 @@ Thumbs.db
 
 # Machine-specific preflight output (scripts/preflight.sh)
 reports/env.md
+
+# Manual setup steps written by the dataset fetchers and scripts/preflight.sh
+/SETUP_TODO.md
