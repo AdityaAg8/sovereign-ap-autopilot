@@ -177,12 +177,12 @@ invoices from the data factory (564 English-first, 186 Arabic-first, 240 rendere
 |---|---|---|---|
 | Extraction, Extractor A (Qwen3.5-9B) | 100% valid JSON; field accuracy 97.80% (born-digital 99.54%, scans 94.11%) | valid JSON ≥ 99% | [`extraction_a_adr0012.md`](reports/extraction_a_adr0012.md) |
 | Grounding | 92.29% of non-null fields matched to words on the page; 82.03% of boxes at IoU ≥ 0.5 | report | [`extraction_a_adr0012.md`](reports/extraction_a_adr0012.md) |
-| Extractor B fine-tune (Qwen3.5-4B LoRA) | Field F1 93.23% vs Extractor A's 92.75% (Arabic-first 98.38% vs 96.66%); p50 16.35 s vs 26.04 s | all 5 promotion gates, latency ≤ 0.60 × A | [`extractor_b_gates.md`](reports/extractor_b_gates.md) |
-| Trust gate | 0.54% error among auto-accepted fields at α = 1% (56 of 10,318; 95% CI 0.41-0.70%); 98.3% of fields and 676 of 750 invoices fully auto-accepted | ≤ 1% at δ = 5% | [`trust_gate.md`](reports/trust_gate.md) |
+| Extractor B fine-tune (Qwen3.5-4B LoRA) | Field F1 93.23% vs Extractor A's 92.75% (Arabic-first 98.38% vs 96.66%); 4 of 5 promotion gates pass, latency p50 16.35 s against a 15.62 s limit (0.60 × A's 26.04 s) | 5 of 5 promotion gates | [`extractor_b_gates.md`](reports/extractor_b_gates.md) |
+| Trust gate | 0.54% error among auto-accepted fields at α = 1% (56 of 10,318; 95% CI 0.41-0.70%); 98.3% of fields and 676 of 750 invoices fully auto-accepted (offline; the calibrator is not yet active in the worker, [KI-08](KNOWN_ISSUES.md#ki-08-no-calibrated-trust-gate-is-active-in-the-worker-found-2026-10-05)) | ≤ 1% at δ = 5% | [`trust_gate.md`](reports/trust_gate.md) |
 | Parsing, born-digital | 98.24% of 96,444 labelled fields at IoU ≥ 0.5; p50 187 ms per document | ≥ 98% | [`parse.md`](reports/parse.md) |
-| E-invoice output | 5,000 of 5,000 invoices built from factory labels pass the official schematron; 30 of 30 official samples; 18 of 18 built from extracted fields in the live run | 100% | [`gold_xml.md`](reports/gold_xml.md) |
-| Fraud detection (offline engine) | Recall at 1% FPR of 92-100% on each of 8 typologies, minimum over 3 seeds | ≥ 90% per typology | [`fraud.md`](reports/fraud.md) |
-| Attack suite, end to end | 312 attack PDFs in 12 categories through the live stack: 0 of 308 conclusive cases changed a payment; 106 attack invoices approved by a scripted approver were still paid only to the vendor's verified account | 0, every case conclusive | [`attacks_e2e.md`](reports/attacks_e2e.md) |
+| E-invoice output | 5,000 of 5,000 invoices built from factory labels pass the official schematron; 30 of 30 official samples ([harness run](reports/runs/20261014T095257362380-dummy.json)); 18 of 18 built from extracted fields in the live run | 100% | [`gold_xml.md`](reports/gold_xml.md) |
+| Fraud detection (offline engine) | Recall at 1% FPR of 92-100% on each of 8 typologies, minimum over 3 seeds (threshold set on the test split; the calibration-split threshold gives 1.24-2.70% FPR) | ≥ 90% per typology | [`fraud.md`](reports/fraud.md) |
+| Attack suite, end to end | 312 attack PDFs in 12 categories through the live stack: 0 of 308 conclusive cases changed a payment; 106 attack invoices approved by a scripted approver were still paid only to the vendor's verified account; 4 cases were inconclusive, so the gate reads incomplete | 0, every case conclusive | [`attacks_e2e.md`](reports/attacks_e2e.md) |
 | Injection guard | ModernBERT-base fine-tune: F1 0.800 (precision 1.000, recall 0.667, 0 of 406 hard negatives flagged) vs F1 0.658 for `siberiancat/modernbert-prompt-injection` | report | [`guard.md`](reports/guard.md) |
 | Ops chat (stock Qwen3.5-9B) | 65.0% exact tool calls, 92.4% citation faithfulness, 88.2% refusal accuracy on 100 scripted tasks; AgentDojo banking utility 87.5%, attack success 22.2% | report | [`chat_evals.md`](reports/chat_evals.md) |
 | Live end-to-end run | 18 of 18 factory invoices archived after approval; 2 of 2 attack PDFs kept out of payment | report | [`e2e_pipeline.md`](reports/e2e_pipeline.md) |
@@ -325,16 +325,20 @@ Full threat model, STRIDE tables, attack trees and the control catalogue:
 ### Without a GPU
 
 ```bash
+git clone https://github.com/AdityaAg8/sovereign-ap-autopilot.git
+cd sovereign-ap-autopilot
 make bootstrap   # .env with generated secrets, uv sync, pnpm install, pre-commit hooks
 make preview     # the review UI on built-in fixtures at http://localhost:3001
 make lint typecheck test
 uv run playwright install chromium   # the invoice and attack renderers print through Chromium
 make factory     # the synthetic UAE invoice set into data/uae (CPU)
-make eval-quick  # harness self-test and scoreboard (needs the datasets in data/manifest.json)
+make eval-quick  # harness self-test and scoreboard (fetch the datasets first, see below)
 ```
 
 The preview login page lists the demo accounts. Lint, typecheck, the unit tests and the factory
-all run on CPU.
+all run on CPU. On Windows, `make test` runs the suite in a Linux container, so it needs Docker.
+The public eval datasets are fetched with one command each; the table in the
+[evaluation guide](docs/evaluation.md#datasets) lists them.
 
 ### Full stack
 
@@ -511,8 +515,8 @@ real tax filing, and should not move real money.
   took a median 1,459 s from drop to routing on one GPU.
 - Not in v1.0: the arbiter, the teacher round, corrections-driven retraining in the live stack,
   the Extractor A bake-off, DocILE, FATURA test, the Llama Prompt Guard 2 baseline (gated access),
-  a guard-off attack run and a committed Lighthouse report. `make verify-m3`, `m6` and `m9`-`m12`
-  are stubs that exit 1, so `make verify-all` fails ([KI-03](KNOWN_ISSUES.md)).
+  a guard-off attack run and a committed Lighthouse report. Six of the per-area `make verify-*`
+  targets are still stubs that exit 1, so `make verify-all` fails ([KI-03](KNOWN_ISSUES.md)).
 - Tested on Windows 11 with Docker Desktop ([ADR-0006](docs/adr/0006-host-deviation-native-windows.md)).
 
 Open issues and their workarounds are in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).

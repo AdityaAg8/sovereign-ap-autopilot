@@ -15,6 +15,6 @@ Gate: recall at 1% FPR on the test ROC (threshold set on the test clean invoices
 | price_anomaly | 100.0% | PASS | 100.0% | 100.0% |
 | anomaly | 95.0% | PASS | 100.0% | 1.0% |
 
-Deployed threshold, realised FPR on clean test invoices: seed 7: 1.31% of 611, seed 11: 1.24% of 647, seed 23: 2.70% of 667. The cal-chosen threshold drifts above 1% on later months, so production should re-derive it from recent clean traffic (M7.5 LTT-style) rather than fix it once.
+Deployed threshold, realised FPR on clean test invoices: seed 7: 1.31% of 611, seed 11: 1.24% of 647, seed 23: 2.70% of 667. The cal-chosen threshold drifts above 1% on later months, so production should re-derive it from recent clean traffic (as the trust gate does) rather than fix it once.
 
 Overall: PASS.

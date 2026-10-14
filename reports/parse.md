@@ -2,7 +2,7 @@
 
 Generated: 2026-09-25T12:07:22.072324+00:00
 
-Born-digital PDFs are parsed host-side by `apx.parse.digital` (pdfplumber): word/line boxes come straight from the PDF's own text layer, no model call (I1). This is the path the IoU gate below runs against. Scans go through the PaddleOCR-VL service (`apx.parse.client`) and are reported separately as informational only, per the PRD.
+Born-digital PDFs are parsed host-side by `apx.parse.digital` (pdfplumber): word/line boxes come straight from the PDF's own text layer, no model call (I1). This is the path the IoU gate below runs against. Scans go through the PaddleOCR-VL service (`apx.parse.client`) and are reported separately as informational only.
 
 ## Digital-path IoU gate
 
