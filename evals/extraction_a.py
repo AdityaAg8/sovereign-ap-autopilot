@@ -400,7 +400,7 @@ def render_report(
 ) -> str:
     slices = report_slices(rows)
     overall = slice_metrics(rows)
-    title = "# Extractor A (M3.3)" if extractor is ExtractorId.A else "# Extractor B (M7.1)"
+    title = "# Extractor A" if extractor is ExtractorId.A else "# Extractor B"
     command = "`python -m evals.extraction_a`" + (
         "" if extractor is ExtractorId.A else f" `--extractor b --model {model}`"
     )

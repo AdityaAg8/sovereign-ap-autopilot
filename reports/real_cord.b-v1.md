@@ -12,7 +12,7 @@ n = 100, cord test, Extractor B `v1` (extractor-b-v1), zero-shot
 | nted_accuracy | 58.95% | 53.20% to 64.56% (bootstrap) | 100 |
 | valid_json_rate | 100.00% | 96.30% to 100.00% (wilson) | 100 |
 
-Valid-JSON gate (PRD ≥ 99%): PASS. Failures: 0 of 100; every failure counts in every denominator.
+Valid-JSON target (≥ 99%): PASS. Failures: 0 of 100; every failure counts in every denominator.
 Latency: p50 3.3 s, p95 5.9 s per doc.
 
 | Published baseline | Value | Comparable | Note | Source |

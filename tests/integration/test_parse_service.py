@@ -98,7 +98,7 @@ def _percentile(sorted_values: list[float], q: float) -> float:
 def _require_test_data() -> list[Path]:
     if not TEST_DATA_DIR.is_dir():
         pytest.fail(
-            f"{TEST_DATA_DIR} not found -- generate the UAE test split (M2 factory) before "
+            f"{TEST_DATA_DIR} not found -- generate the UAE test split (`make factory`) before "
             "running this test",
             pytrace=False,
         )
@@ -245,14 +245,14 @@ def _write_report(
     latencies_ms = sorted(latencies_ms)
 
     lines = [
-        "# Parse service report (PRD §10 M3.1)",
+        "# Parse service report",
         "",
         f"Generated: {datetime.now(UTC).isoformat()}",
         "",
         "Born-digital PDFs are parsed host-side by `apx.parse.digital` (pdfplumber): word/line "
         "boxes come straight from the PDF's own text layer, no model call (I1). This is the "
         "path the IoU gate below runs against. Scans go through the PaddleOCR-VL service "
-        "(`apx.parse.client`) and are reported separately as informational only, per the PRD.",
+        "(`apx.parse.client`) and are reported separately as informational only.",
         "",
         "## Digital-path IoU gate",
         "",
@@ -284,7 +284,7 @@ def _write_report(
                 "`apx/parse`'s extraction -- so this should not be worked around here by "
                 "loosening the match, weakening the gate, or filtering out affected labels.",
                 "",
-                "1. Pagination-unaware labels (multi-page documents; much reduced by the M2.4 "
+                "1. Pagination-unaware labels (multi-page documents; much reduced by the factory "
                 "label-generation fix, not eliminated). When a long line-item table overflows "
                 "onto a second PDF page, real content reflows there, but some affected labels "
                 "still carry their original single-page `page`/`bbox` -- the parser correctly "
@@ -317,7 +317,7 @@ def _write_report(
             f"- p50: {_percentile(latencies_ms, 0.50):.2f} ms",
             f"- p95: {_percentile(latencies_ms, 0.95):.2f} ms",
             "",
-            "## Scan path (PaddleOCR-VL service) -- informational, not gated",
+            "## Scan path (PaddleOCR-VL service): informational, not gated",
             "",
         ]
     )
@@ -359,7 +359,7 @@ def test_digital_path_iou_gate_and_report() -> None:
     overall = _pass_rate(all_scores)
     assert overall >= PASS_RATE_GATE, (
         f"digital-path IoU>=0.5 pass rate {overall:.4f} on {len(all_scores)} labeled fields is "
-        f"below the {PASS_RATE_GATE:.0%} gate (PRD §10 M3.1); see {REPORT_PATH}"
+        f"below the {PASS_RATE_GATE:.0%} gate; see {REPORT_PATH}"
     )
 
 

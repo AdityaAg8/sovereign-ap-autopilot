@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Literal, TypeVar, cast
 
 from evals.real.models import BeforeAfterReport, RealEvalReport
+from evals.real.run import VALID_JSON_GATE
 from evals.run import RUNS_DIR, RunReport, SetName, SetOutcome, gate_status, summarize_outcome
 from evals.run import _render_table as render_table
 from evals.scoreboard_sources import (
@@ -67,15 +68,17 @@ HARNESS_PREDICTORS: frozenset[str] = frozenset({"dummy"})
 # The deployed chat agent in reports/chat_evals.json (the other entry is the red-team contrast).
 CHAT_MODEL_LABEL = "stock"
 E2E_REPORTS: tuple[str, ...] = ("e2e_pipeline.md", "e2e_pipeline_offset30.md")
+# The current Extractor A run: scans fed as scans (ADR-0012), the rows the trust gate is fitted on.
+EXTRACTION_A_REPORT = "extraction_a_adr0012.md"
 
-Status = Literal["PASS", "FAIL", "REPORTED", "PENDING"]
+Status = Literal["PASS", "FAIL", "REPORTED", "PENDING", "NOT RUN"]
 T = TypeVar("T")
 
 
 @dataclass(frozen=True)
 class Cell:
     """A resolved scoreboard value: what was measured, its status against the gate, why it is
-    pending (PENDING only) and the source file(s) it was read from."""
+    pending or not run (PENDING and NOT RUN only) and the source file(s) it was read from."""
 
     measured: str
     status: Status
@@ -83,7 +86,9 @@ class Cell:
     reason: str | None = None
 
     def status_text(self) -> str:
-        return f"PENDING: {self.reason}" if self.status == "PENDING" else self.status
+        if self.status in ("PENDING", "NOT RUN"):
+            return f"{self.status}: {self.reason}"
+        return self.status
 
     def source_text(self) -> str:
         return "; ".join(s.render() for s in self.sources) or "-"
@@ -91,6 +96,11 @@ class Cell:
 
 def pending(reason: str, *sources: SourceStamp) -> Cell:
     return Cell(measured="pending", status="PENDING", sources=sources, reason=reason)
+
+
+def not_run(reason: str) -> Cell:
+    """An eval that was never run for v1.0, as opposed to one still waiting on a run."""
+    return Cell(measured="not run", status="NOT RUN", reason=reason)
 
 
 def _verdict(word: str) -> Status:
@@ -143,7 +153,7 @@ class Inputs:
         return scores, stamp
 
     def extraction_a(self) -> tuple[ExtractionAReport, SourceStamp] | None:
-        return self.report("extraction_a.md", parse_extraction_a)
+        return self.report(EXTRACTION_A_REPORT, parse_extraction_a)
 
     def gold_xml(self) -> tuple[GoldXmlReport, SourceStamp] | None:
         return self.report("gold_xml.md", parse_gold_xml)
@@ -229,8 +239,8 @@ def newest_cell(*cells: Cell | None) -> Cell | None:
 
 
 def _docile(inputs: Inputs) -> Cell:
-    return run_cell(inputs, "docile") or pending(
-        "needs DOCILE_TOKEN from docile.rossum.ai; no model run on DocILE val yet"
+    return run_cell(inputs, "docile") or not_run(
+        "not run for v1.0; DocILE needs DOCILE_TOKEN from docile.rossum.ai"
     )
 
 
@@ -242,8 +252,8 @@ def _extractor_b_gates_f1(inputs: Inputs) -> Cell | None:
     gates, stamp = loaded
     return Cell(
         measured=(
-            f"Extractor B v{gates.model_version}: EN {gates.uae_f1_en:.2%} (n={gates.uae_n_en}), "
-            f"AR {gates.uae_f1_ar:.2%} (n={gates.uae_n_ar}); Extractor A EN "
+            f"Extractor B registry v{gates.model_version}: EN {gates.uae_f1_en:.2%} "
+            f"(n={gates.uae_n_en}), AR {gates.uae_f1_ar:.2%} (n={gates.uae_n_ar}); Extractor A EN "
             f"{gates.reference_a_f1_en:.2%}, AR {gates.reference_a_f1_ar:.2%}"
         ),
         status="REPORTED",
@@ -308,18 +318,25 @@ def _extractbench(inputs: Inputs) -> Cell:
 
 
 def _valid_json(inputs: Inputs) -> Cell:
+    """The gate covers every set, so a real-track ExtractBench miss fails the row too."""
     loaded = inputs.extraction_a()
     if loaded is None:
-        return pending("reports/extraction_a.md not generated yet")
+        return pending(f"reports/{EXTRACTION_A_REPORT} not generated yet")
     report, stamp = loaded
-    return Cell(
-        measured=(
-            f"{report.valid_json_pct:.2f}% (Extractor A `{report.model}`, UAE test, "
-            f"n={report.n_docs})"
-        ),
-        status=_verdict(report.valid_json_verdict),
-        sources=(stamp,),
+    measured = (
+        f"{report.valid_json_pct:.2f}% (Extractor A `{report.model}`, UAE test, n={report.n_docs})"
     )
+    status = _verdict(report.valid_json_verdict)
+    sources = [stamp]
+    real = inputs.real("extractbench")
+    if real:
+        eb, eb_stamp = max(real, key=lambda item: item[1].at)
+        rate = eb.valid_json_rate.value
+        measured += f"; {rate:.2%} ({_arm_label(eb)}, ExtractBench short, n={eb.n_docs})"
+        if rate < VALID_JSON_GATE:
+            status = "FAIL"
+        sources.append(eb_stamp)
+    return Cell(measured=measured, status=status, sources=tuple(sources))
 
 
 def _schematron(inputs: Inputs) -> Cell:
@@ -343,7 +360,7 @@ def _schematron(inputs: Inputs) -> Cell:
 def _trust_error(inputs: Inputs) -> Cell:
     loaded = inputs.trust_gate()
     if loaded is None:
-        return pending("trust gate not calibrated yet (M7.5 LTT calibration on the cal split)")
+        return pending("trust gate not calibrated yet (Learn-then-Test on the cal split)")
     trust, stamp = loaded
     if trust.test is None:
         return pending(
@@ -365,7 +382,7 @@ def _trust_error(inputs: Inputs) -> Cell:
 def _stp(inputs: Inputs) -> Cell:
     loaded = inputs.trust_gate()
     if loaded is None:
-        return pending("needs the calibrated trust gate (M7.5); no alpha sweep run yet")
+        return pending("needs the calibrated trust gate; no alpha sweep run yet")
     trust, stamp = loaded
     if trust.test is None:
         return pending("trust gate calibrated but not evaluated on UAE test", stamp)
@@ -487,7 +504,7 @@ def _agentdojo(inputs: Inputs) -> Cell:
 
 
 def _latency_vram(inputs: Inputs) -> Cell:
-    parts = ["no isolated per-invoice latency run yet"]
+    parts = ["per-invoice latency not measured on its own"]
     stamps: list[SourceStamp] = []
     smoke = inputs.smoke()
     if smoke is not None:
@@ -499,7 +516,7 @@ def _latency_vram(inputs: Inputs) -> Cell:
         g, stamp = gates
         parts.append(
             f"Extractor B extract stage p50 {g.latency_p50_s:.2f} s / p95 {g.latency_p95_s:.2f} s "
-            f"(n={g.latency_n}), peak {g.extract_peak_vram_gb:.2f} GiB (P2/P4 gate run)"
+            f"(n={g.latency_n}), peak {g.extract_peak_vram_gb:.2f} GiB (promotion gate run)"
         )
         stamps.append(stamp)
     e2e = [item for item in inputs.e2e() if item[0].median_s is not None]
@@ -523,7 +540,7 @@ class ScoreboardRow:
     resolve: Callable[[Inputs], Cell]
 
 
-# Verbatim from PRD §5's scoreboard table -- do not add, remove or reorder rows without an ADR.
+# The project's target table -- do not add, remove or reorder rows without an ADR.
 ROWS: tuple[ScoreboardRow, ...] = (
     ScoreboardRow("Field F1, KILE and LIR", "DocILE val", "Report", _docile),
     ScoreboardRow("Field F1, EN and AR separately", "UAE test", "Report", _uae_f1),
@@ -538,7 +555,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
     ScoreboardRow(
         "Error among auto-accepted fields",
         "UAE test",
-        "≤ α (α = 1%, δ = 5%, §6.1)",  # noqa: RUF001 -- PRD §5/§6.1 wording
+        "≤ α (α = 1%, δ = 5%)",  # noqa: RUF001 -- target wording
         _trust_error,
     ),
     ScoreboardRow(
@@ -565,7 +582,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
     ),
     ScoreboardRow(
         "p50 / p95 seconds per invoice, peak VRAM per stage",
-        "Legion",
+        "This laptop (RTX 4080 Laptop, 12 GB)",
         "Report; whole-card peak ≤ 11.8 GB",
         _latency_vram,
     ),
@@ -576,7 +593,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
 
 
 def supplementary_rows(inputs: Inputs) -> list[list[str]]:
-    """Measured gates from earlier milestones that back the §5 rows but are not §5 rows."""
+    """Measured gates that back the target rows but are not target rows themselves."""
     rows: list[list[str]] = []
     parse = inputs.parse()
     if parse is not None:
@@ -633,9 +650,9 @@ def supplementary_rows(inputs: Inputs) -> list[list[str]]:
     rows.append(
         [
             "FATURA field F1",
-            fatura.measured if fatura else "pending",
+            fatura.measured if fatura else "not run",
             "Report",
-            fatura.status if fatura else "PENDING: no model run on FATURA test yet",
+            fatura.status if fatura else "NOT RUN: no model run on FATURA test for v1.0",
             fatura.source_text() if fatura else "-",
         ]
     )
@@ -652,7 +669,7 @@ def _extractor_b_gates_row(inputs: Inputs) -> list[str]:
     failed = f" (failed: {', '.join(gates.failed)})" if gates.failed else ""
     return [
         name,
-        f"{passed}/{len(gates.results)} passed{failed}; v{gates.model_version}, "
+        f"{passed}/{len(gates.results)} passed{failed}; registry v{gates.model_version}, "
         f"pooled F1 {gates.uae_f1_overall:.2%}, valid JSON {gates.valid_json_rate:.2%} "
         f"(n={gates.uae_n})",
         "all 5 pass",
@@ -662,15 +679,15 @@ def _extractor_b_gates_row(inputs: Inputs) -> list[str]:
 
 
 def _bakeoff_row(inputs: Inputs) -> list[str]:
-    name = "Extractor A bake-off decision (M3.4)"
+    name = "Extractor A bake-off decision"
     loaded = inputs.bakeoff()
     if loaded is None:
         return [
             name,
-            "pending",
+            "not run",
             "Report",
-            "PENDING: reports/bakeoff.json not written yet (`make bakeoff`, then "
-            "`make bakeoff-report`)",
+            "NOT RUN: built, not run for v1.0, so Qwen3.5-9B stays Extractor A (ADR-0020); "
+            "`make bakeoff`, then `make bakeoff-report`",
             "-",
         ]
     bakeoff, stamp = loaded
@@ -733,6 +750,23 @@ def _real_row(
 
 def real_rows(inputs: Inputs) -> list[list[str]]:
     """The ADR-0019 §6 rows. They are not rows until the table lists them."""
+    docile = inputs.real("docile")
+    cord_name, cord_metrics = "CORD v2 test field F1 / nTED accuracy", ("field_f1", "nted_accuracy")
+    cord = sorted(
+        ((r, s) for r, s in inputs.real("cord") if r.split == "test"),
+        key=lambda item: (item[0].extractor, item[0].model_version),
+    )
+    # One row per arm keeps each table cell readable.
+    cord_rows = [
+        _real_row(
+            f"{cord_name} ({r.extractor.upper()} {r.model_version})", [(r, s)], cord_metrics, ""
+        )
+        for r, s in cord
+    ] or [
+        _real_row(
+            cord_name, [], cord_metrics, "`make real-cord SPLIT=test` / `real-cord-b` not run yet"
+        )
+    ]
     rows = [
         _real_row(
             "ExtractBench short value / grounding F1 (real 245, then all 252)",
@@ -740,18 +774,21 @@ def real_rows(inputs: Inputs) -> list[list[str]]:
             ("value_f1.real", "grounding_f1.real", "value_f1.all", "grounding_f1.all"),
             "`make real-extractbench` not run yet",
         ),
-        _real_row(
-            "CORD v2 test field F1 / nTED accuracy (A, B)",
-            [(r, s) for r, s in inputs.real("cord") if r.split == "test"],
-            ("field_f1", "nted_accuracy"),
-            "`make real-cord SPLIT=test` / `real-cord-b` not run yet",
-        ),
+        *cord_rows,
         _real_row(
             "DocILE val field F1, text-only (KILE / LIR)",
-            inputs.real("docile"),
+            docile,
             ("kile_f1", "lir_f1"),
-            "DocILE needs DOCILE_TOKEN (BLOCKED `[dataset:docile]`), then `make real-docile`",
-        ),
+            "",
+        )
+        if docile
+        else [
+            "DocILE val field F1, text-only (KILE / LIR)",
+            "not run",
+            "Report",
+            "NOT RUN: not run for v1.0; needs DOCILE_TOKEN, then `make real-docile`",
+            "-",
+        ],
     ]
     name = "Extractor B before → after on real hold-outs (paired)"
     loaded = inputs.real_before_after()
@@ -772,7 +809,7 @@ def real_rows(inputs: Inputs) -> list[list[str]]:
             [name, " / ".join(parts) or "no paired metric", "Report", "REPORTED", stamp.render()]
         )
     reality = inputs.real("reality")
-    reality_name = "Reality set field accuracy (owner-labelled UAE)"
+    reality_name = "Reality set field accuracy (hand-labelled UAE)"
     if reality:
         row = _real_row(reality_name, reality, ("field_accuracy",), "")
         if any(r.n_docs < 30 for r, _ in reality):
@@ -780,7 +817,7 @@ def real_rows(inputs: Inputs) -> list[list[str]]:
         rows.append(row)
     else:
         rows.append(
-            [reality_name, "pending", "Report", "PENDING: no verified reality documents yet", "-"]
+            [reality_name, "not run", "Report", "NOT RUN: no verified reality documents", "-"]
         )
     return rows
 
@@ -847,6 +884,7 @@ def render_scoreboard(
     cells = [(row, row.resolve(inputs)) for row in ROWS]
     counts = {s: sum(c.status == s for _, c in cells) for s in ("PASS", "FAIL", "REPORTED")}
     n_pending = sum(c.status == "PENDING" for _, c in cells)
+    n_not_run = sum(c.status == "NOT RUN" for _, c in cells)
     generated_at = (now or datetime.now(UTC)).isoformat()
 
     lines = [
@@ -857,11 +895,11 @@ def render_scoreboard(
         "",
         f"- Generated at: {generated_at}",
         (
-            f"- PRD §5 rows: {counts['PASS']} PASS, {counts['FAIL']} FAIL, "
-            f"{counts['REPORTED']} REPORTED, {n_pending} PENDING"
+            f"- Target rows: {counts['PASS']} PASS, {counts['FAIL']} FAIL, "
+            f"{counts['REPORTED']} REPORTED, {n_pending} PENDING, {n_not_run} NOT RUN"
         ),
         "",
-        "## PRD §5 metrics",
+        "## Target metrics",
         "",
         render_table(
             ["Metric", "Set", "Gate", "Measured", "Status", "Source"],
@@ -878,7 +916,7 @@ def render_scoreboard(
             ],
         ),
         "",
-        "## Other measured gates (not PRD §5 rows)",
+        "## Other measured gates",
         "",
         render_table(
             ["Measurement", "Value", "Gate", "Status", "Source"], supplementary_rows(inputs)
@@ -886,15 +924,16 @@ def render_scoreboard(
         "",
         "## Real-data track (ADR-0019; report-only, never gated)",
         "",
-        "Public real documents and the owner's reality set. Each value names its arm, whether it",
+        "Public real documents and a labelled reality set. Each value names its arm, whether it",
         "is zero-shot or in-distribution, n and a 95% CI; failed documents count in every",
         "denominator. Published baselines and their caveats are in each `reports/real_<set>.md`.",
         "",
         render_table(["Measurement", "Value", "Gate", "Status", "Source"], real_rows(inputs)),
         "",
         *_harness_section(harness_runs),
-        "_PASS/FAIL judge a measured value against its PRD §5 gate; REPORTED rows have no",
-        "threshold; PENDING means not measured yet, with the reason and any partial evidence.",
+        "_PASS/FAIL judge a measured value against its target; REPORTED rows have no",
+        "threshold; PENDING means not measured yet, with the reason and any partial evidence;",
+        "NOT RUN means the eval was not run for v1.0.",
         "Source times are the report's own `generated` stamp when it prints one, else its last",
         "git commit. Numbers are never invented (ADR-0005)._",
         "",

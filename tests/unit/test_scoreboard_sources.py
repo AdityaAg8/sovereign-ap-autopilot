@@ -82,6 +82,15 @@ def test_parse_extraction_a() -> None:
     assert report.overall_field_accuracy_pct == 98.12
 
 
+def test_parse_extraction_a_reads_the_older_head_line() -> None:
+    """Reports written before scans were fed as scans only print the Arabic-text count."""
+    old = fx.EXTRACTION_A.replace(
+        "(240 fed as scans, 186 Arabic-first, 480 with Arabic text parsed)",
+        "(480 with Arabic text)",
+    )
+    assert parse_extraction_a(old).n_arabic == 480
+
+
 def test_parse_gold_xml() -> None:
     report = parse_gold_xml(fx.GOLD_XML)
     assert (report.passed, report.total) == (4999, 5000)

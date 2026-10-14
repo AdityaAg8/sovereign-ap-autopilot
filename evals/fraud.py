@@ -214,7 +214,7 @@ def render(results: Sequence[SeedResult]) -> tuple[str, bool]:
     )
     seeds = ", ".join(str(r.seed) for r in results)
     lines = [
-        "# Fraud detection (M8.2)",
+        "# Fraud detection (offline: rules and isolation forest)",
         "",
         f"Factory streams (seeds {seeds}; ~{results[0].invoices} invoices each, 100 cases per "
         "typology in test, 40 in cal, none in train). Isolation forests (amount group and "
@@ -245,7 +245,7 @@ def render(results: Sequence[SeedResult]) -> tuple[str, bool]:
         "",
         f"Deployed threshold, realised FPR on clean test invoices: {fprs}. The cal-chosen "
         "threshold drifts above 1% on later months, so production should re-derive it from "
-        "recent clean traffic (M7.5 LTT-style) rather than fix it once.",
+        "recent clean traffic (as the trust gate does) rather than fix it once.",
         "",
         f"Overall: {'PASS' if passed else 'FAIL'}.",
         "",

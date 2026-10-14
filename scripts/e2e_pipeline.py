@@ -414,7 +414,7 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
     attacks_stopped = sum(attack_held(d) for d in attacks)
     failed_unrouted = sum(d.status == "failed" and d.route is None for d in attacks)
     lines = [
-        "# End-to-end pipeline run (M5.6)",
+        "# End-to-end pipeline run",
         "",
         f"{len(docs)} documents dropped into the inbox of the running stack; review-routed "
         "invoices approved through the API by a seeded approver.",

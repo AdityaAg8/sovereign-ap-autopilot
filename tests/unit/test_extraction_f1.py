@@ -104,6 +104,6 @@ def test_report_title_names_the_extractor() -> None:
     for name in row["fields"].values():
         name.update(correct=False, grounded=False, iou=None)
     b_report = render_report([row], "extractor-b-challenger", ExtractorId.B)
-    assert b_report.startswith("# Extractor B (M7.1)")
+    assert b_report.startswith("# Extractor B\n")
     assert "--extractor b --model extractor-b-challenger" in b_report
-    assert render_report([row], "extractor-a").startswith("# Extractor A (M3.3)")
+    assert render_report([row], "extractor-a").startswith("# Extractor A\n")

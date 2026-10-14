@@ -98,7 +98,7 @@ def approve(client: httpx.Client, sha: str) -> ApproveResult:
     response = call(
         lambda: client.post(
             f"/invoices/{sha}/decisions",
-            json={"action": "approve", "comment": "M6.6 attack eval: approver clicks approve"},
+            json={"action": "approve", "comment": "attack eval: approver clicks approve"},
         ),
         f"approve {sha[:12]}",
     )
@@ -389,7 +389,7 @@ async def amain(
     try:
         enforce_gate(summary)
     except AttackGateError as exc:
-        print(f"M6.6 gate failed: {exc}", file=sys.stderr)
+        print(f"attack gate failed: {exc}", file=sys.stderr)
         return 1
     return 0
 

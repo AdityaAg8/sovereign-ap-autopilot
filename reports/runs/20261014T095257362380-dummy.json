@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "run_id": "20261014T095257362380-dummy",
+  "generated_at": "2026-10-14T09:52:57.362380Z",
+  "git_sha": "8fae4be",
+  "predictor": "dummy",
+  "sets_requested": [
+    "fatura",
+    "extractbench",
+    "docile",
+    "uae",
+    "pint_ae"
+  ],
+  "limit": 15,
+  "results": [
+    {
+      "set_name": "fatura",
+      "status": "scored",
+      "split": "test",
+      "n": 15,
+      "metrics": {
+        "field_f1": {
+          "precision": 1.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 180
+        }
+      },
+      "gate": {
+        "kind": "report",
+        "threshold": null,
+        "measured": null,
+        "passed": null
+      },
+      "reason": null
+    },
+    {
+      "set_name": "extractbench",
+      "status": "scored",
+      "split": "eval",
+      "n": 15,
+      "metrics": {
+        "value_f1": {
+          "precision": 1.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 384
+        },
+        "grounding_f1": {
+          "precision": 1.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 356
+        },
+        "used_official_framework": true
+      },
+      "gate": {
+        "kind": "report",
+        "threshold": null,
+        "measured": null,
+        "passed": null
+      },
+      "reason": null
+    },
+    {
+      "set_name": "docile",
+      "status": "deferred",
+      "split": null,
+      "n": 0,
+      "metrics": {},
+      "gate": null,
+      "reason": "needs DOCILE_TOKEN (see docs/runbook.md)"
+    },
+    {
+      "set_name": "uae",
+      "status": "deferred",
+      "split": null,
+      "n": 0,
+      "metrics": {},
+      "gate": null,
+      "reason": "uae is scored by the Extractor A and Extractor B gate reports, not this harness"
+    },
+    {
+      "set_name": "pint_ae",
+      "status": "scored",
+      "split": "official_samples",
+      "n": 30,
+      "metrics": {
+        "schematron_pass_rate": 1.0,
+        "failed": [],
+        "scope": "official_samples_not_generated_xml"
+      },
+      "gate": {
+        "kind": "min",
+        "threshold": 1.0,
+        "measured": 1.0,
+        "passed": true
+      },
+      "reason": null
+    }
+  ]
+}

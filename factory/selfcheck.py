@@ -567,10 +567,10 @@ def format_report(summary: SelfCheckSummary, *, threshold: float) -> str:
     """Renders `summary` as a small Markdown report."""
     status = "PASS" if summary.overall_rate >= threshold else "FAIL"
     lines = [
-        "# Factory label self-check (M2.4)",
+        "# Factory label self-check",
         "",
         "pdfplumber text at each DOM-labeled box vs. the label's ground-truth value, on every "
-        "digital PDF in the M2.3 UAE invoice dataset.",
+        "digital PDF in the UAE invoice dataset.",
         "",
         f"**Overall exact match: {_rate_cell(summary.overall_matched, summary.overall_total)} "
         f"-- {status}** (threshold {threshold:.1%})",
@@ -627,7 +627,7 @@ def write_report(summary: SelfCheckSummary, path: Path, *, threshold: float) -> 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m factory.selfcheck",
-        description="M2.4 pdfplumber label self-check for the UAE invoice factory dataset.",
+        description="pdfplumber label self-check for the UAE invoice factory dataset.",
     )
     parser.add_argument("--data-dir", type=Path, default=Path("data/uae"))
     parser.add_argument("--report", type=Path, default=Path("reports/factory_selfcheck.md"))

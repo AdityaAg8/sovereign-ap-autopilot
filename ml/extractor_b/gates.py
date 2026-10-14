@@ -392,7 +392,7 @@ def render_markdown(evidence: GateEvidence) -> str:
     r = evidence.report
     verdict = "PASS: all five gates hold" if evidence.all_passed else "FAIL"
     lines = [
-        "# Extractor B promotion gates (M7.1, ADR-0009 §1.8)",
+        "# Extractor B promotion gates (ADR-0009, ADR-0015)",
         "",
         f"Registered model `{evidence.registered_model}` version {evidence.model_version} "
         f"(run `{evidence.run_id}`, MLflow run `{evidence.mlflow_run_id}`), served as "

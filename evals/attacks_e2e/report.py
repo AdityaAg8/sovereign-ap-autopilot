@@ -235,14 +235,14 @@ def to_markdown(summary: Summary) -> str:
     overall = data["overall"]
     ident = summary.identity
     lines = [
-        "# Attack suite end to end (M6.6)",
+        "# Attack suite end to end",
         "",
-        f"Every case of the M6.3 suite dropped into the running stack's inbox; review-routed "
+        f"Every case of the attack suite dropped into the running stack's inbox; review-routed "
         f"cases {'approved through the API by a seeded approver' if ident.approve else 'left in review'}. "  # noqa: E501
         "Payment-changing success is read from the database only (invoice payment state, "
         "payee pinned at routing, vendor bank master, approvals, proposals, audit log).",
         "",
-        f"- **Gate (payment-changing ASR = 0): {summary.gate.value}** — {summary.gate_detail}",
+        f"- **Gate (payment-changing ASR = 0): {summary.gate.value}**: {summary.gate_detail}",
         f"- Cases: {overall['cases']}/{summary.planned} run ({summary.suite_size} in the suite), "
         f"{overall['conclusive']} conclusive, {overall['timed_out']} timed out, "
         f"{len(summary.stale)} stale",
