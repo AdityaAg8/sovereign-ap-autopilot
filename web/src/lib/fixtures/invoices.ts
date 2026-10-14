@@ -198,7 +198,7 @@ function buildFields(
       boxes: [spec.box],
       confidence: Number(confidence.toFixed(3)),
       accepted,
-      source: accepted ? (rng() > 0.5 ? "extractor_a" : "extractor_b") : "arbiter",
+      source: accepted ? (rng() > 0.5 ? "extractor_a" : "extractor_b") : "extractor_a",
     } satisfies FieldValue;
   });
   return { fields, total, subtotal: subtotal.toFixed(2), vat: vat.toFixed(2) };
@@ -291,7 +291,7 @@ function disagreementInvoice(base: InvoiceDetail): InvoiceDetail {
     boxes: [],
     confidence: 0.31,
     accepted: false,
-    source: "arbiter",
+    source: "extractor_a",
   });
   const currency: FieldValue = {
     name: "currency",
@@ -342,7 +342,14 @@ const SAMPLE_FIELDS: readonly [string, string, string, number, FieldValue["sourc
     "extractor_a",
     [0, 0.7404, 0.0758, 0.1931, 0.0223],
   ],
-  ["issue_date", "30 Jun 2026", "2026-06-30", 0.78, "arbiter", [0, 0.8509, 0.1143, 0.0826, 0.0151]],
+  [
+    "issue_date",
+    "30 Jun 2026",
+    "2026-06-30",
+    0.78,
+    "extractor_a",
+    [0, 0.8509, 0.1143, 0.0826, 0.0151],
+  ],
   [
     "supplier_name",
     SAMPLE_VENDOR.nameEn,

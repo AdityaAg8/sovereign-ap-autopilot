@@ -23,7 +23,7 @@ export const FIXTURE_USERS: readonly AuthUser[] = [
     name: "Layla Suleiman",
     email: "admin@sovereign.local",
     roles: ["admin", "approver"],
-    approvalLimitAed: 1000000,
+    approvalLimitAed: 2000000,
   },
 ];
 
