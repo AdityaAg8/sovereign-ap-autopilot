@@ -72,7 +72,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _print_progress(label: str, done: int, total: int) -> None:
-    """One flushed line per finished chat task; tools/ops-dashboard parses `[<model>] chat i/n`."""
+    """One flushed line per finished chat task (`[<model>] chat i/n`), so the log shows progress."""
     print(f"[{label}] chat {done}/{total}", flush=True)
 
 

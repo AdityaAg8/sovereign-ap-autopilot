@@ -57,3 +57,7 @@ AGENTS.md
 .claude/
 # Machine-specific preflight output (scripts/preflight.sh)
 reports/env.md
+# Local developer console and remote-session setup (local-only)
+tools/ops-dashboard/
+scripts/cloud-setup.sh
+.kilo/
