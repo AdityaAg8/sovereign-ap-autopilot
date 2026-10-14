@@ -2,7 +2,8 @@
 while the API shared the host with a GPU-bound worker. Timeouts, transport errors and 5xx are now
 retried with capped backoff; a 4xx is returned at once; a failure that outlasts the retries still
 raises (or returns the last 5xx) instead of being swallowed. Also: an expired token is renewed,
-`--fresh` never re-selects an ingested document, and `--resume` reloads the dropped selection."""
+`--fresh` never re-selects an ingested document, and `--resume` reloads the dropped selection,
+saved with repo-relative paths."""
 
 from __future__ import annotations
 
@@ -154,3 +155,26 @@ def test_selection_round_trips_for_resume(tmp_path: Path) -> None:
     assert [(d.sha, d.kind, d.dropped_at) for d in loaded] == [
         (d.sha, d.kind, d.dropped_at) for d in docs
     ]
+
+
+def test_selection_stores_repo_relative_posix_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(e2e, "ROOT", tmp_path)
+    data = _data(tmp_path)
+    docs = e2e.select(data)
+    for doc in docs:
+        doc.dropped_at = 1000.0
+        if doc.truth is not None:
+            doc.path.with_name(doc.path.name.replace(".pdf", ".truth.json")).write_text(
+                json.dumps(doc.truth), encoding="utf-8"
+            )
+    path = tmp_path / "e2e.selection.json"
+    e2e.save_selection(path, docs)
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    assert [row["path"] for row in rows] == [d.path.relative_to(tmp_path).as_posix() for d in docs]
+    for row in rows:
+        assert row["truth"] is None or not Path(row["truth"]).is_absolute()
+    loaded = e2e.load_selection(path)
+    assert [d.path for d in loaded] == [d.path for d in docs]
+    assert [d.truth_path for d in loaded] == [d.truth_path for d in docs]

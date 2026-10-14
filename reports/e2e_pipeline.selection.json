@@ -1,140 +1,140 @@
 [
  {
   "sha": "77e699564ccd699afe1472deda4d33272cc1e6aa0bf3996b0b3f194697f0e983",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\77e699564ccd699afe1472deda4d33272cc1e6aa0bf3996b0b3f194697f0e983.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\77e699564ccd699afe1472deda4d33272cc1e6aa0bf3996b0b3f194697f0e983.truth.json",
+  "path": "data/uae/test/77e699564ccd699afe1472deda4d33272cc1e6aa0bf3996b0b3f194697f0e983.pdf",
+  "truth": "data/uae/test/77e699564ccd699afe1472deda4d33272cc1e6aa0bf3996b0b3f194697f0e983.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9331563
  },
  {
   "sha": "7a118e8530288ef9189842e57ed4d978b2ae245862328e0a3c2603e51d0160f8",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7a118e8530288ef9189842e57ed4d978b2ae245862328e0a3c2603e51d0160f8.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7a118e8530288ef9189842e57ed4d978b2ae245862328e0a3c2603e51d0160f8.truth.json",
+  "path": "data/uae/test/7a118e8530288ef9189842e57ed4d978b2ae245862328e0a3c2603e51d0160f8.pdf",
+  "truth": "data/uae/test/7a118e8530288ef9189842e57ed4d978b2ae245862328e0a3c2603e51d0160f8.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9416819
  },
  {
   "sha": "7a3e2a8786c37de6748d298b18d525fe57e08c226e3d3a11c82d3dc210856ac1",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7a3e2a8786c37de6748d298b18d525fe57e08c226e3d3a11c82d3dc210856ac1.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7a3e2a8786c37de6748d298b18d525fe57e08c226e3d3a11c82d3dc210856ac1.truth.json",
+  "path": "data/uae/test/7a3e2a8786c37de6748d298b18d525fe57e08c226e3d3a11c82d3dc210856ac1.pdf",
+  "truth": "data/uae/test/7a3e2a8786c37de6748d298b18d525fe57e08c226e3d3a11c82d3dc210856ac1.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9416819
  },
  {
   "sha": "7d843cf020497a1ac5729b3efd8c8894b3d4dafa50f546299bcede1bf52ac0d6",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7d843cf020497a1ac5729b3efd8c8894b3d4dafa50f546299bcede1bf52ac0d6.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7d843cf020497a1ac5729b3efd8c8894b3d4dafa50f546299bcede1bf52ac0d6.truth.json",
+  "path": "data/uae/test/7d843cf020497a1ac5729b3efd8c8894b3d4dafa50f546299bcede1bf52ac0d6.pdf",
+  "truth": "data/uae/test/7d843cf020497a1ac5729b3efd8c8894b3d4dafa50f546299bcede1bf52ac0d6.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9505522
  },
  {
   "sha": "7d96873af0722232876dc57f769fb63953ead49a2d684225afe81f0b1201143b",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7d96873af0722232876dc57f769fb63953ead49a2d684225afe81f0b1201143b.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7d96873af0722232876dc57f769fb63953ead49a2d684225afe81f0b1201143b.truth.json",
+  "path": "data/uae/test/7d96873af0722232876dc57f769fb63953ead49a2d684225afe81f0b1201143b.pdf",
+  "truth": "data/uae/test/7d96873af0722232876dc57f769fb63953ead49a2d684225afe81f0b1201143b.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9576373
  },
  {
   "sha": "846599920cb1f5d8e1334f404f6af511cbfde9a35e73335cd22e8aa304c3a2bd",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\846599920cb1f5d8e1334f404f6af511cbfde9a35e73335cd22e8aa304c3a2bd.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\846599920cb1f5d8e1334f404f6af511cbfde9a35e73335cd22e8aa304c3a2bd.truth.json",
+  "path": "data/uae/test/846599920cb1f5d8e1334f404f6af511cbfde9a35e73335cd22e8aa304c3a2bd.pdf",
+  "truth": "data/uae/test/846599920cb1f5d8e1334f404f6af511cbfde9a35e73335cd22e8aa304c3a2bd.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9651003
  },
  {
   "sha": "867d05616f8eda95ce881b0b196057379bf1de7e00e5702c8d64d499f458deaf",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\867d05616f8eda95ce881b0b196057379bf1de7e00e5702c8d64d499f458deaf.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\867d05616f8eda95ce881b0b196057379bf1de7e00e5702c8d64d499f458deaf.truth.json",
+  "path": "data/uae/test/867d05616f8eda95ce881b0b196057379bf1de7e00e5702c8d64d499f458deaf.pdf",
+  "truth": "data/uae/test/867d05616f8eda95ce881b0b196057379bf1de7e00e5702c8d64d499f458deaf.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9651003
  },
  {
   "sha": "8893bd2c5f37f601ff4f6d4b1d4d2b489089340f255e7ee11b738072fbc746ab",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\8893bd2c5f37f601ff4f6d4b1d4d2b489089340f255e7ee11b738072fbc746ab.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\8893bd2c5f37f601ff4f6d4b1d4d2b489089340f255e7ee11b738072fbc746ab.truth.json",
+  "path": "data/uae/test/8893bd2c5f37f601ff4f6d4b1d4d2b489089340f255e7ee11b738072fbc746ab.pdf",
+  "truth": "data/uae/test/8893bd2c5f37f601ff4f6d4b1d4d2b489089340f255e7ee11b738072fbc746ab.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9736342
  },
  {
   "sha": "8f493dc761f4411190b646cfaa7eafbc55b1302ddf72eb7eca9a46babd6f08ae",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\8f493dc761f4411190b646cfaa7eafbc55b1302ddf72eb7eca9a46babd6f08ae.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\8f493dc761f4411190b646cfaa7eafbc55b1302ddf72eb7eca9a46babd6f08ae.truth.json",
+  "path": "data/uae/test/8f493dc761f4411190b646cfaa7eafbc55b1302ddf72eb7eca9a46babd6f08ae.pdf",
+  "truth": "data/uae/test/8f493dc761f4411190b646cfaa7eafbc55b1302ddf72eb7eca9a46babd6f08ae.truth.json",
   "kind": "EN digital",
   "dropped_at": 1791177609.9736342
  },
  {
   "sha": "92a565fe5d4d0cb1ccefaa6420c1f7b16f0fafc5d6d867372c9a2926601ef968",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\92a565fe5d4d0cb1ccefaa6420c1f7b16f0fafc5d6d867372c9a2926601ef968.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\92a565fe5d4d0cb1ccefaa6420c1f7b16f0fafc5d6d867372c9a2926601ef968.truth.json",
+  "path": "data/uae/test/92a565fe5d4d0cb1ccefaa6420c1f7b16f0fafc5d6d867372c9a2926601ef968.pdf",
+  "truth": "data/uae/test/92a565fe5d4d0cb1ccefaa6420c1f7b16f0fafc5d6d867372c9a2926601ef968.truth.json",
   "kind": "AR-first digital",
   "dropped_at": 1791177609.9894602
  },
  {
   "sha": "a1f931809628891b957d6062aa3b3a2532469f3c91eeb9897661a5820d0280f9",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\a1f931809628891b957d6062aa3b3a2532469f3c91eeb9897661a5820d0280f9.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\a1f931809628891b957d6062aa3b3a2532469f3c91eeb9897661a5820d0280f9.truth.json",
+  "path": "data/uae/test/a1f931809628891b957d6062aa3b3a2532469f3c91eeb9897661a5820d0280f9.pdf",
+  "truth": "data/uae/test/a1f931809628891b957d6062aa3b3a2532469f3c91eeb9897661a5820d0280f9.truth.json",
   "kind": "AR-first digital",
   "dropped_at": 1791177609.9894602
  },
  {
   "sha": "a3a051e968d164f1f7b48dabae461bc9a3096f69cd55b596dc07e0f465d00928",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\a3a051e968d164f1f7b48dabae461bc9a3096f69cd55b596dc07e0f465d00928.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\a3a051e968d164f1f7b48dabae461bc9a3096f69cd55b596dc07e0f465d00928.truth.json",
+  "path": "data/uae/test/a3a051e968d164f1f7b48dabae461bc9a3096f69cd55b596dc07e0f465d00928.pdf",
+  "truth": "data/uae/test/a3a051e968d164f1f7b48dabae461bc9a3096f69cd55b596dc07e0f465d00928.truth.json",
   "kind": "AR-first digital",
   "dropped_at": 1791177609.9894602
  },
  {
   "sha": "c36e1da8de6c3153ec685508725887de1906f34ab326385fd4365d10ddbd058b",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\c36e1da8de6c3153ec685508725887de1906f34ab326385fd4365d10ddbd058b.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\c36e1da8de6c3153ec685508725887de1906f34ab326385fd4365d10ddbd058b.truth.json",
+  "path": "data/uae/test/c36e1da8de6c3153ec685508725887de1906f34ab326385fd4365d10ddbd058b.pdf",
+  "truth": "data/uae/test/c36e1da8de6c3153ec685508725887de1906f34ab326385fd4365d10ddbd058b.truth.json",
   "kind": "AR-first digital",
   "dropped_at": 1791177610.0062923
  },
  {
   "sha": "683d90a5492951ac6c44f6c7187df67b2e87c82d5d8940ef4b67f3c9052477ed",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\e2e_scans\\683d90a5492951ac6c44f6c7187df67b2e87c82d5d8940ef4b67f3c9052477ed.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\7c067728aa30e4c95d937f1a85261b731eca234718de20d24176975823048e1e.truth.json",
+  "path": "data/e2e_scans/683d90a5492951ac6c44f6c7187df67b2e87c82d5d8940ef4b67f3c9052477ed.pdf",
+  "truth": "data/uae/test/7c067728aa30e4c95d937f1a85261b731eca234718de20d24176975823048e1e.truth.json",
   "kind": "scanned",
   "dropped_at": 1791177610.0105724
  },
  {
   "sha": "d3fb3c81eb2ac031c17c4c2c008fad89763c43d70f92d5d637c23ca4983c62c5",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\e2e_scans\\d3fb3c81eb2ac031c17c4c2c008fad89763c43d70f92d5d637c23ca4983c62c5.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\81702f26c3a477641eea91816c75732a00b726e482df66ee5c5fff9271934e2b.truth.json",
+  "path": "data/e2e_scans/d3fb3c81eb2ac031c17c4c2c008fad89763c43d70f92d5d637c23ca4983c62c5.pdf",
+  "truth": "data/uae/test/81702f26c3a477641eea91816c75732a00b726e482df66ee5c5fff9271934e2b.truth.json",
   "kind": "scanned",
   "dropped_at": 1791177610.0105724
  },
  {
   "sha": "3cbaf0497746a00bb1d42c08e3b2dced60387f07546ea10a5a01723312479113",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\e2e_scans\\3cbaf0497746a00bb1d42c08e3b2dced60387f07546ea10a5a01723312479113.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\9f74534a38cd88dc577fa237c61e8d4818fff9edd66bb1970785184014d48721.truth.json",
+  "path": "data/e2e_scans/3cbaf0497746a00bb1d42c08e3b2dced60387f07546ea10a5a01723312479113.pdf",
+  "truth": "data/uae/test/9f74534a38cd88dc577fa237c61e8d4818fff9edd66bb1970785184014d48721.truth.json",
   "kind": "scanned",
   "dropped_at": 1791177610.0210989
  },
  {
   "sha": "6cbf1fe055ac489ce4c632a6089f0f671bd16b2a883c39bbfa5dffded67b48b5",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\e2e_scans\\6cbf1fe055ac489ce4c632a6089f0f671bd16b2a883c39bbfa5dffded67b48b5.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\ad214183e6b42cdec1461f7267c9bdc8aeea326710e992444489b352e695ae15.truth.json",
+  "path": "data/e2e_scans/6cbf1fe055ac489ce4c632a6089f0f671bd16b2a883c39bbfa5dffded67b48b5.pdf",
+  "truth": "data/uae/test/ad214183e6b42cdec1461f7267c9bdc8aeea326710e992444489b352e695ae15.truth.json",
   "kind": "scanned",
   "dropped_at": 1791177610.0210989
  },
  {
   "sha": "0d54fd15e6e4f1e7e15d9740dc424e27a862faf032fee41ef515f6ce8819c86d",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\0d54fd15e6e4f1e7e15d9740dc424e27a862faf032fee41ef515f6ce8819c86d.pdf",
-  "truth": "D:\\Projects\\sovereign-ap-autopilot\\data\\uae\\test\\0d54fd15e6e4f1e7e15d9740dc424e27a862faf032fee41ef515f6ce8819c86d.truth.json",
+  "path": "data/uae/test/0d54fd15e6e4f1e7e15d9740dc424e27a862faf032fee41ef515f6ce8819c86d.pdf",
+  "truth": "data/uae/test/0d54fd15e6e4f1e7e15d9740dc424e27a862faf032fee41ef515f6ce8819c86d.truth.json",
   "kind": "zero-rated",
   "dropped_at": 1791177610.037125
  },
  {
   "sha": "0d0e8d0a877776caa8470da0226909a772a4b9b8d50fa88c7501878065da5eab",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\attacks\\0d0e8d0a877776caa8470da0226909a772a4b9b8d50fa88c7501878065da5eab.pdf",
+  "path": "data/attacks/0d0e8d0a877776caa8470da0226909a772a4b9b8d50fa88c7501878065da5eab.pdf",
   "truth": null,
   "kind": "attack",
   "dropped_at": 1791177610.037125
  },
  {
   "sha": "0d2f782a95cc5275e48feaddc93e316000ecd05c6c96093374093f3c03430098",
-  "path": "D:\\Projects\\sovereign-ap-autopilot\\data\\attacks\\0d2f782a95cc5275e48feaddc93e316000ecd05c6c96093374093f3c03430098.pdf",
+  "path": "data/attacks/0d2f782a95cc5275e48feaddc93e316000ecd05c6c96093374093f3c03430098.pdf",
   "truth": null,
   "kind": "attack",
   "dropped_at": 1791177610.037125

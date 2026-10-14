@@ -414,7 +414,7 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
     attacks_stopped = sum(attack_held(d) for d in attacks)
     failed_unrouted = sum(d.status == "failed" and d.route is None for d in attacks)
     lines = [
-        "# End-to-end pipeline run (M5.6)",
+        "# End-to-end pipeline run",
         "",
         f"{len(docs)} documents dropped into the inbox of the running stack; review-routed "
         "invoices approved through the API by a seeded approver.",
@@ -441,12 +441,17 @@ def report(docs: list[Doc], client: httpx.Client, out: Path) -> tuple[int, int]:
     return archived, len(factory)
 
 
+def _repo_relative(path: Path) -> str:
+    """POSIX path relative to the repo root, so a saved selection holds no machine paths."""
+    return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
+
+
 def save_selection(path: Path, docs: list[Doc]) -> None:
     rows = [
         {
             "sha": d.sha,
-            "path": str(d.path),
-            "truth": None if d.truth_path is None else str(d.truth_path),
+            "path": _repo_relative(d.path),
+            "truth": None if d.truth_path is None else _repo_relative(d.truth_path),
             "kind": d.kind,
             "dropped_at": d.dropped_at,
         }
@@ -458,12 +463,12 @@ def save_selection(path: Path, docs: list[Doc]) -> None:
 def load_selection(path: Path) -> list[Doc]:
     docs = []
     for row in json.loads(path.read_text(encoding="utf-8")):
-        pdf = Path(row["path"])
+        pdf = ROOT / row["path"]  # an absolute path (data outside the repo) stays absolute
         truth_path: Path | None = None
         if row["kind"] != "attack":
             # Selections written before scanned picks had their own upload name the truth by
             # the PDF's name; those only ever held born-digital files.
-            truth_path = Path(row["truth"]) if row.get("truth") else pdf.with_suffix(".truth.json")
+            truth_path = ROOT / row["truth"] if row.get("truth") else pdf.with_suffix(".truth.json")
         truth = None if truth_path is None else json.loads(truth_path.read_text("utf-8"))
         docs.append(
             Doc(
@@ -513,7 +518,7 @@ def main() -> int:
             docs = select(args.data, args.offset, known if args.fresh else None)
             planned = sum(count for *_, count in PICK) + N_ATTACKS
             if len(docs) != planned:
-                # A smaller set would pass on fewer invoices than the M5.6 check promises.
+                # A smaller set would pass on fewer invoices than the end-to-end check promises.
                 print(f"only {len(docs)}/{planned} documents available at offset {args.offset}")
                 return 2
             for doc in docs:
