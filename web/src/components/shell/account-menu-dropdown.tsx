@@ -1,4 +1,4 @@
-/** The topbar account menu's real Radix dropdown (name, roles, sign out), loaded on the first
+/** The sidebar account menu's real Radix dropdown (name, roles, sign out), loaded on the first
  * interaction by `account-menu.tsx`. Opens immediately when the stand-in trigger was already
  * activated; a focused stand-in is never swapped (see lib/deferred-control.ts). */
 
@@ -32,7 +32,7 @@ export function AccountMenuDropdown({
       <DropdownMenuTrigger asChild>
         <AccountMenuTrigger user={user} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent side="top" align="start" className="w-56">
         <DropdownMenuLabel>
           <div className="flex flex-col">
             <span className="font-medium">{user.name}</span>

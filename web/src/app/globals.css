@@ -1,5 +1,5 @@
-/* Design tokens for the "Ledger" direction (web/DESIGN.md): color (light/dark), type scale,
-   spacing, radii, motion and focus states shared by every screen in the review UI. */
+/* Design tokens for the "Ledger" system (web/DESIGN.md): color (light and dark designed as a
+   pair), type, radii, elevation, motion and focus states shared by every screen of the review UI. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -10,10 +10,10 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* Arabic text gets IBM Plex Sans Arabic from the `:lang(ar)` override below, scoped to
-     wherever that font is actually loaded (`(app)/vendors/layout.tsx`) -- not listed here, so
+     wherever that font is actually loaded (`(app)/vendors/layout.tsx`): not listed here, so
      this global chain never depends on a variable most routes never define (see layout.tsx). */
-  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, "Cascadia Code", monospace;
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-data), ui-monospace, "Cascadia Code", monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -22,6 +22,7 @@
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
@@ -49,6 +50,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-raised: var(--raised);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -56,97 +58,124 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-panel: var(--panel-shadow);
+  --shadow-bar: var(--bar-shadow);
+  --shadow-paper: var(--paper-shadow);
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1.4;
-  /* Overrides Tailwind's default ease-in/out/in-out curves with the Ledger direction's easings
-     (web/DESIGN.md) — every `ease-out`/`ease-in`/`ease-in-out` utility picks these up for free. */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Overrides Tailwind's default ease-in/out/in-out curves with the system's easings
+     (web/DESIGN.md): every `ease-out`/`ease-in`/`ease-in-out` utility picks these up for free. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
+/* Light: a cool paper canvas, white panels, an ink-teal sidebar and one teal accent taken from
+   the invoice documents' own rule color. */
 :root {
-  --background: oklch(0.99 0.002 95);
-  --foreground: oklch(0.19 0.012 260);
+  --background: oklch(0.979 0.004 205);
+  --foreground: oklch(0.2 0.02 235);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.19 0.012 260);
+  --card-foreground: oklch(0.2 0.02 235);
+  --raised: oklch(0.99 0.002 205);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.012 260);
-  --primary: oklch(0.32 0.06 260);
-  --primary-foreground: oklch(0.99 0.002 95);
-  --secondary: oklch(0.95 0.006 260);
-  --secondary-foreground: oklch(0.19 0.012 260);
-  --muted: oklch(0.96 0.004 260);
-  --muted-foreground: oklch(0.47 0.014 260);
-  --accent: oklch(0.55 0.19 260);
-  --accent-foreground: oklch(0.99 0.002 95);
-  --destructive: oklch(0.48 0.19 25);
-  --destructive-foreground: oklch(0.99 0.002 95);
-  --success: oklch(0.42 0.12 155);
-  --success-foreground: oklch(0.99 0.002 95);
-  --warning: oklch(0.44 0.13 75);
-  --warning-foreground: oklch(0.19 0.012 260);
-  --border: oklch(0.9 0.006 260);
-  --input: oklch(0.9 0.006 260);
-  --ring: oklch(0.55 0.19 260);
-  --chart-1: oklch(0.55 0.19 260);
-  --chart-2: oklch(0.5 0.13 155);
-  --chart-3: oklch(0.58 0.15 75);
-  --chart-4: oklch(0.55 0.2 25);
-  --chart-5: oklch(0.47 0.014 260);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.97 0.004 260);
-  --sidebar-foreground: oklch(0.19 0.012 260);
-  --sidebar-primary: oklch(0.32 0.06 260);
-  --sidebar-primary-foreground: oklch(0.99 0.002 95);
-  --sidebar-accent: oklch(0.93 0.01 260);
-  --sidebar-accent-foreground: oklch(0.19 0.012 260);
-  --sidebar-border: oklch(0.9 0.006 260);
-  --sidebar-ring: oklch(0.55 0.19 260);
-  /* Plain custom properties (no @theme registration needed — used via the `duration-(--x)`
+  --popover-foreground: oklch(0.2 0.02 235);
+  --primary: oklch(0.46 0.085 192);
+  --primary-foreground: oklch(0.99 0.003 200);
+  --secondary: oklch(0.955 0.006 210);
+  --secondary-foreground: oklch(0.2 0.02 235);
+  --muted: oklch(0.958 0.006 210);
+  --muted-foreground: oklch(0.47 0.02 232);
+  --accent: oklch(0.48 0.085 192);
+  --accent-foreground: oklch(0.99 0.003 200);
+  --destructive: oklch(0.51 0.19 27);
+  --destructive-foreground: oklch(0.99 0.003 200);
+  --success: oklch(0.47 0.11 158);
+  --success-foreground: oklch(0.99 0.003 200);
+  --warning: oklch(0.52 0.12 66);
+  --warning-foreground: oklch(0.99 0.003 200);
+  --border: oklch(0.915 0.008 215);
+  --input: oklch(0.665 0.014 220);
+  --ring: oklch(0.48 0.085 192);
+  --chart-1: oklch(0.48 0.085 192);
+  --chart-2: oklch(0.47 0.11 158);
+  --chart-3: oklch(0.52 0.12 66);
+  --chart-4: oklch(0.51 0.19 27);
+  --chart-5: oklch(0.47 0.02 232);
+  --radius: 0.5625rem;
+  --panel-shadow: 0 1px 2px oklch(0.2 0.02 235 / 0.04), 0 1px 1px oklch(0.2 0.02 235 / 0.03);
+  --bar-shadow: 0 -6px 16px -10px oklch(0.2 0.02 235 / 0.18);
+  --paper-shadow: 0 1px 2px oklch(0.2 0.02 235 / 0.06), 0 8px 24px -12px oklch(0.2 0.02 235 / 0.18);
+  --sidebar: oklch(0.235 0.03 222);
+  --sidebar-foreground: oklch(0.87 0.012 210);
+  --sidebar-muted: oklch(0.7 0.02 215);
+  --sidebar-primary: oklch(0.8 0.1 185);
+  --sidebar-primary-foreground: oklch(0.2 0.03 222);
+  --sidebar-accent: oklch(0.31 0.032 222);
+  --sidebar-accent-foreground: oklch(0.985 0.004 200);
+  --sidebar-border: oklch(0.3 0.028 222);
+  --sidebar-ring: oklch(0.8 0.1 185);
+  /* Plain custom properties (no @theme registration needed: used via the `duration-(--x)`
      arbitrary-value syntax) for the three motion speeds in web/DESIGN.md. */
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 240ms;
 }
 
+/* Dark: elevation reads as lightness (sidebar < canvas < panel < popover), shadows are dropped,
+   and the accent and status hues are lifted so text on the dark panels stays above 4.5:1. */
 .dark {
-  --background: oklch(0.17 0.009 260);
-  --foreground: oklch(0.94 0.006 260);
-  --card: oklch(0.205 0.01 260);
-  --card-foreground: oklch(0.94 0.006 260);
-  --popover: oklch(0.205 0.01 260);
-  --popover-foreground: oklch(0.94 0.006 260);
-  --primary: oklch(0.8 0.09 260);
-  --primary-foreground: oklch(0.17 0.009 260);
-  --secondary: oklch(0.26 0.011 260);
-  --secondary-foreground: oklch(0.94 0.006 260);
-  --muted: oklch(0.24 0.011 260);
-  --muted-foreground: oklch(0.68 0.013 260);
-  --accent: oklch(0.74 0.15 260);
-  --accent-foreground: oklch(0.14 0.01 260);
-  --destructive: oklch(0.7 0.18 25);
-  --destructive-foreground: oklch(0.14 0.01 260);
-  --success: oklch(0.72 0.15 155);
-  --success-foreground: oklch(0.14 0.01 260);
-  --warning: oklch(0.78 0.14 80);
-  --warning-foreground: oklch(0.14 0.01 260);
-  --border: oklch(0.3 0.013 260);
-  --input: oklch(0.3 0.013 260);
-  --ring: oklch(0.74 0.15 260);
-  --chart-1: oklch(0.74 0.15 260);
-  --chart-2: oklch(0.72 0.15 155);
-  --chart-3: oklch(0.78 0.14 80);
-  --chart-4: oklch(0.7 0.18 25);
-  --chart-5: oklch(0.68 0.013 260);
-  --sidebar: oklch(0.19 0.009 260);
-  --sidebar-foreground: oklch(0.94 0.006 260);
-  --sidebar-primary: oklch(0.8 0.09 260);
-  --sidebar-primary-foreground: oklch(0.14 0.01 260);
-  --sidebar-accent: oklch(0.26 0.011 260);
-  --sidebar-accent-foreground: oklch(0.94 0.006 260);
-  --sidebar-border: oklch(0.3 0.013 260);
-  --sidebar-ring: oklch(0.74 0.15 260);
+  --background: oklch(0.172 0.012 232);
+  --foreground: oklch(0.94 0.008 210);
+  --card: oklch(0.206 0.014 232);
+  --card-foreground: oklch(0.94 0.008 210);
+  --raised: oklch(0.225 0.015 232);
+  --popover: oklch(0.232 0.016 232);
+  --popover-foreground: oklch(0.94 0.008 210);
+  --primary: oklch(0.79 0.1 185);
+  --primary-foreground: oklch(0.18 0.025 222);
+  --secondary: oklch(0.255 0.016 232);
+  --secondary-foreground: oklch(0.94 0.008 210);
+  --muted: oklch(0.245 0.015 232);
+  --muted-foreground: oklch(0.71 0.016 220);
+  --accent: oklch(0.79 0.1 185);
+  --accent-foreground: oklch(0.18 0.025 222);
+  --destructive: oklch(0.72 0.16 25);
+  --destructive-foreground: oklch(0.18 0.02 232);
+  --success: oklch(0.76 0.13 160);
+  --success-foreground: oklch(0.18 0.02 232);
+  --warning: oklch(0.81 0.12 80);
+  --warning-foreground: oklch(0.18 0.02 232);
+  --border: oklch(0.285 0.016 232);
+  --input: oklch(0.51 0.018 228);
+  --ring: oklch(0.79 0.1 185);
+  --chart-1: oklch(0.79 0.1 185);
+  --chart-2: oklch(0.76 0.13 160);
+  --chart-3: oklch(0.81 0.12 80);
+  --chart-4: oklch(0.72 0.16 25);
+  --chart-5: oklch(0.71 0.016 220);
+  --panel-shadow: 0 0 0 0 transparent;
+  --bar-shadow: 0 -1px 0 oklch(1 0 0 / 0.02);
+  --paper-shadow: 0 8px 24px -12px oklch(0 0 0 / 0.6);
+  --sidebar: oklch(0.142 0.012 232);
+  --sidebar-foreground: oklch(0.84 0.01 215);
+  --sidebar-muted: oklch(0.64 0.014 220);
+  --sidebar-primary: oklch(0.79 0.1 185);
+  --sidebar-primary-foreground: oklch(0.18 0.025 222);
+  --sidebar-accent: oklch(0.22 0.016 232);
+  --sidebar-accent-foreground: oklch(0.97 0.006 205);
+  --sidebar-border: oklch(0.225 0.014 232);
+  --sidebar-ring: oklch(0.79 0.1 185);
+}
+
+/* The one container style for every panel on the canvas: a white (dark: lifted) surface with a
+   hairline and a 1px shadow in light mode only. */
+@utility panel {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--panel-shadow);
 }
 
 @layer base {
@@ -156,29 +185,39 @@
   html {
     @apply font-sans;
     font-size: 16px;
+    scrollbar-color: var(--border) transparent;
   }
   body {
     @apply bg-background text-foreground text-sm;
     font-feature-settings: "tnum" 1;
+    caret-color: var(--accent);
+  }
+  ::selection {
+    background-color: color-mix(in oklch, var(--accent) 24%, transparent);
   }
   /* Arabic content keeps the paired Plex Sans Arabic weights regardless of the shell direction.
      The explicit fallback argument (rather than a second comma-separated font name) matters:
      `--font-plex-sans-arabic` is only ever defined inside (app)/vendors/layout.tsx's subtree, so
-     everywhere else this must degrade to plain Plex Sans instead of making the whole
-     `font-family` value invalid. */
+     everywhere else this must degrade to the UI face instead of making the whole `font-family`
+     value invalid. */
   :lang(ar) {
-    font-family: var(--font-plex-sans-arabic, var(--font-plex-sans, sans-serif));
+    font-family: var(--font-plex-sans-arabic, var(--font-ui, sans-serif));
   }
   /* Tabular, mono figures anywhere money, dates, ids or confidence values render. */
   .tabular-mono {
-    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-family: var(--font-data), ui-monospace, monospace;
     font-feature-settings: "tnum" 1;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
   /* Visible on keyboard focus only; never animated so it appears the instant focus lands. */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  /* The sidebar is a dark surface in both themes: its ring uses the lifted teal. */
+  [data-surface="spine"] :focus-visible {
+    outline-color: var(--sidebar-ring);
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -192,29 +231,16 @@
   }
 }
 
-/* Operations view. Motion carries meaning only: tokens ride a pipeline segment while
-   invoices are in flight, active stations and resident models ping softly, and an activity row
-   glows once when its invoice moves. Under reduced motion the tokens are removed and the rest
-   collapse to their end state via the global rule above. */
-@keyframes ops-ride {
-  from {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 0;
-  }
+/* The accountant's double rule under a final total: the system's one signature mark, used on
+   the invoice total and in the brand mark, nowhere else. */
+.ledger-total {
+  padding-bottom: 2px;
+  border-bottom: 3px double var(--accent);
 }
-.ops-ride {
-  animation: ops-ride 2.1s linear infinite both;
-}
+
+/* Operations view. Motion carries meaning only: the live dot and resident models ping softly,
+   and an activity row glows once when its invoice moves. Under reduced motion the ping is removed
+   and the glow collapses to its end state via the global rule above. */
 @keyframes ops-ping {
   0% {
     transform: scale(1);
@@ -231,7 +257,7 @@
 }
 @keyframes ops-fresh {
   from {
-    background-color: color-mix(in oklch, var(--accent) 16%, transparent);
+    background-color: color-mix(in oklch, var(--accent) 14%, transparent);
   }
   to {
     background-color: transparent;
@@ -241,7 +267,6 @@
   animation: ops-fresh 1.8s var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
-  .ops-ride,
   .ops-ping {
     display: none;
   }
@@ -258,7 +283,7 @@
 }
 .inbox-grid {
   display: grid;
-  column-gap: 0.75rem;
+  column-gap: 1rem;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 .inbox-grid > * {
@@ -270,7 +295,7 @@
 }
 @container inbox (min-width: 720px) {
   .inbox-grid {
-    grid-template-columns: 7.5rem minmax(0, 1fr) 8.5rem 8.5rem 6.5rem;
+    grid-template-columns: 8rem minmax(0, 1fr) 8.5rem 9rem 6.5rem;
   }
   .inbox-grid > :is(.ic-num, .ic-status, .ic-received) {
     display: block;
@@ -281,7 +306,7 @@
 }
 @container inbox (min-width: 1024px) {
   .inbox-grid {
-    grid-template-columns: 7.5rem minmax(0, 1fr) 8.5rem 6rem 8.5rem 6.5rem 3.5rem 6.5rem;
+    grid-template-columns: 8rem minmax(0, 1fr) 8.5rem 5.5rem 9rem 6.5rem 3rem 6.5rem;
   }
   .inbox-grid > :is(.ic-route, .ic-conf, .ic-flags) {
     display: block;
