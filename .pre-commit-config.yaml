@@ -54,24 +54,23 @@ repos:
         args: [--maxkb=1024]
         stages: [pre-commit, pre-push, manual]
         # web/public/pdfjs/pdf.worker.min.mjs is pdfjs-dist's own pre-minified worker build,
-        # vendored so the pdf.js viewer (PRD §10 M5.4) never depends on a runtime CDN fetch;
-        # it can't be made smaller without breaking it. .claude/skills holds vendored agent skills
-        # (the cloud-session kit), kept byte-identical to their upstream copies.
-        exclude: ^(web/public/pdfjs/|\.claude/skills/)
+        # vendored so the pdf.js viewer never depends on a runtime CDN fetch; it can't be made
+        # smaller without breaking it.
+        exclude: ^web/public/pdfjs/
       - id: end-of-file-fixer
         name: fix end of files
         entry: uv run python -m pre_commit_hooks.end_of_file_fixer
         language: system
         types: [text]
         stages: [pre-commit, pre-push, manual]
-        exclude: ^(web/public/pdfjs/|\.claude/skills/)
+        exclude: ^web/public/pdfjs/
       - id: trailing-whitespace
         name: trim trailing whitespace
         entry: uv run python -m pre_commit_hooks.trailing_whitespace_fixer
         language: system
         types: [text]
         stages: [pre-commit, pre-push, manual]
-        exclude: ^(web/public/pdfjs/|\.claude/skills/)
+        exclude: ^web/public/pdfjs/
       - id: check-merge-conflict
         name: check for merge conflicts
         entry: uv run python -m pre_commit_hooks.check_merge_conflict

@@ -260,7 +260,7 @@ gpu-queue:
 
 ## --- ADR-0012 §7: M3.3 before/after on the same documents ---------------------------
 M33_DATA_DIR ?= data/uae/test
-M33_BEFORE ?= .claude/worktrees/int-m3b/logs/extraction_a.jsonl
+M33_BEFORE ?= logs/extraction_a.jsonl
 M33_AFTER ?= logs/extraction_a.adr0012.jsonl
 
 # --concurrency 1: extractor-a serves one slot (ADR-0013 amdt 1), so a second request in flight

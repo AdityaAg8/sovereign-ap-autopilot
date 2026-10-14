@@ -43,16 +43,17 @@ node_modules/
 Thumbs.db
 
 
-# Local-only planning state. CLAUDE.md, PRD.md and .claude/{agents,rules,skills,settings.json}
-# are committed as the cloud-session kit, so cloud sessions get the same agents and skills.
+# Local-only notes, planning files and editor/agent tooling; they are not part of the project.
 PROGRESS.md
 BLOCKED.md
 KICKOFF.md
 REVIEW.md
+PRD.md
+CLAUDE.md
 CLAUDE.local.md
-.claude/worktrees/
-.claude/state/
-.claude/hooks/
-.claude/launch.json
-.claude/settings.local.json
-.claude/cloud-prompts.md
+AGENTS.md
+**/CLAUDE.md
+**/AGENTS.md
+.claude/
+# Machine-specific preflight output (scripts/preflight.sh)
+reports/env.md
