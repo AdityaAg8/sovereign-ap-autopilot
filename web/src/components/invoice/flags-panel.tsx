@@ -29,7 +29,7 @@ export function FlagsPanel({ flags }: { flags: readonly Flag[] }) {
           <li key={flag.id} className="flex items-start gap-2.5 px-4 py-3">
             <Icon className={cn("mt-0.5 size-4 shrink-0", className)} aria-hidden />
             <div className="space-y-0.5">
-              <p className="text-sm font-medium">
+              <p className="text-sm font-medium first-letter:uppercase">
                 {flag.rule.replaceAll("_", " ")}{" "}
                 <span className={cn("text-xs font-normal", className)}>· {label}</span>
               </p>

@@ -51,10 +51,10 @@ export function FieldBoxOverlay({
             className={cn(
               "pointer-events-auto absolute rounded-[3px] border transition-[border-color,background-color,box-shadow] duration-(--duration-base) ease-out",
               active
-                ? "border-accent bg-accent/10 shadow-[0_0_0_1px_var(--accent)]"
+                ? "border-accent bg-accent/10 ring-accent ring-1"
                 : accepted
-                  ? "border-border/70 hover:border-accent/60 bg-transparent"
-                  : "border-warning/70 hover:border-accent/60 bg-warning/5",
+                  ? "hover:border-accent/60 border-transparent bg-transparent"
+                  : "border-warning/70 hover:border-accent/60 bg-warning/[0.06] border-dashed",
             )}
             style={{
               left: `${box.x0 * 100}%`,

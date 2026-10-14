@@ -15,7 +15,8 @@ import { useRegisterShortcuts } from "@/lib/shortcuts/registry";
 
 // Shortcut hints are text, so they keep the label's full color (AA 4.5:1); a faint keycap
 // border, not reduced opacity, is what sets them apart from the label.
-const KBD = "ms-1 rounded border border-current/30 px-1 text-[0.6875rem] leading-4";
+const KBD =
+  "ms-1 inline-grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded border border-current/30 px-1 font-mono text-2xs leading-none";
 
 const SHORTCUTS = [
   { combo: "a", description: "Approve" },
@@ -68,7 +69,8 @@ export function ReviewActionBar({
       disabled={disabled || pending || Boolean(approveBlockedReason)}
       onClick={onApprove}
       aria-describedby={approveError ? "approve-error" : undefined}
-      className="gap-1.5"
+      size="lg"
+      className="gap-1.5 px-3"
     >
       <Check className="size-4" /> Approve <kbd className={KBD}>A</kbd>
     </Button>
@@ -77,7 +79,7 @@ export function ReviewActionBar({
   const names = approveError?.fields.map((f) => classifiedLabel(f, true) ?? fieldLabel(f)) ?? [];
 
   return (
-    <div className="border-border bg-background border-t">
+    <div className="border-border bg-card shadow-bar relative z-[2] border-t">
       {/* Always mounted so screen readers pick up the message when it is inserted. */}
       <div aria-live="assertive" aria-atomic="true">
         {approveError && (
@@ -110,7 +112,8 @@ export function ReviewActionBar({
           variant="outline"
           disabled={disabled || pending}
           onClick={onFix}
-          className="gap-1.5"
+          size="lg"
+          className="gap-1.5 px-3"
         >
           <Pencil className="size-4" /> Fix <kbd className={KBD}>F</kbd>
         </Button>
@@ -118,7 +121,8 @@ export function ReviewActionBar({
           variant="destructive"
           disabled={disabled || pending}
           onClick={onReject}
-          className="ms-auto gap-1.5"
+          size="lg"
+          className="ms-auto gap-1.5 px-3"
         >
           <X className="size-4" /> Reject <kbd className={KBD}>R</kbd>
         </Button>
