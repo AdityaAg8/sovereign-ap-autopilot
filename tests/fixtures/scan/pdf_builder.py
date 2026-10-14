@@ -1,9 +1,9 @@
-"""Builds small PDFs in memory with reportlab for the hidden-content scan tests: clean
-invoices, and one fixture per attack technique (A01-A06) plus an Arabic
-false-positive case. No network access and no bundled binaries -- everything is generated here.
-Zero-width and bidi control characters silently vanish through reportlab's base-14 fonts (they
-are outside WinAnsiEncoding), so any fixture carrying one embeds a TTF font vendored under
-tests/fixtures/fonts (DejaVu Sans, Noto Naskh Arabic; licenses alongside), so it runs on any OS."""
+"""Builds small PDFs in memory with reportlab for the hidden-content scan tests: clean invoices,
+and one fixture per attack technique (A01-A06) plus an Arabic false-positive case. No network
+access and no bundled binaries -- everything is generated here. Zero-width and bidi control
+characters silently vanish through reportlab's base-14 fonts (they are outside WinAnsiEncoding), so
+any fixture carrying one embeds a TTF font vendored under tests/fixtures/fonts (DejaVu Sans, Noto
+Naskh Arabic; licenses alongside), so it runs on any OS."""
 
 from __future__ import annotations
 

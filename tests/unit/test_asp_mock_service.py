@@ -1,8 +1,8 @@
 """Unit tests for `apx.asp_mock.service.MockAsp`: submit/store are idempotent by key, a
 rejected document raises `DocumentRejectedError` carrying the schematron rule IDs, and 20
-concurrent duplicate submits for the same key yield exactly one archive record.
-Uses a fake `SchematronValidator` throughout: the
-real PINT AE validator is exercised end to end in `test_asp_mock_app.py`."""
+concurrent duplicate submits for the same key yield exactly one archive record. Uses a
+fake `SchematronValidator` throughout: the real PINT AE validator is exercised end to end
+in `test_asp_mock_app.py`."""
 
 from __future__ import annotations
 

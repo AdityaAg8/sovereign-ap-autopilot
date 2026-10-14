@@ -1,8 +1,7 @@
-"""Pure promotion decider (ADR-0015): compares champion and challenger
-`ShadowEval`s from one session on gates G1-G11 and returns PROMOTE only if every absolute rule
-holds, no relative gate regressed and pooled UAE F1 gained at least 0.5 points. Anything that
-makes the evidence incomplete or incomparable raises a typed `PromotionError`; nothing promotes
-by default."""
+"""Pure promotion decider (ADR-0015): compares champion and challenger `ShadowEval`s from one
+session on gates G1-G11 and returns PROMOTE only if every absolute rule holds, no relative gate
+regressed and pooled UAE F1 gained at least 0.5 points. Anything that makes the evidence
+incomplete or incomparable raises a typed `PromotionError`; nothing promotes by default."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""Postgres adapters for the invoice workflow's ports: the vendor directory P1/P2
-routing reads, the fraud rules' history snapshot, and `SqlInvoiceRecords`, which keeps the
-`invoices`, `fields` and `fraud_flags` rows the review UI and API read in step with the workflow."""
+"""Postgres adapters for the invoice workflow's ports: the vendor directory P1/P2 routing reads, the
+fraud rules' history snapshot, and `SqlInvoiceRecords`, which keeps the `invoices`, `fields` and
+`fraud_flags` rows the review UI and API read in step with the workflow."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Password hashing (argon2) and JWT access tokens (PyJWT, HS256): issues short-lived tokens at
-login and verifies them on every request via `JwtTokenVerifier`
-(apx.api.interfaces .TokenVerifier)."""
+login and verifies them on every request via `JwtTokenVerifier` (apx.api.interfaces
+.TokenVerifier)."""
 
 from __future__ import annotations
 

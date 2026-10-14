@@ -3,8 +3,8 @@ schema (approvals, bank details, proposal execution). Every method re-derives th
 subject from the database inside its own transaction and compares it against `grant.
 subject_digest`, raising `PolicyDeniedError` (rule STALE_GRANT) if reality moved since the
 grant was issued; idempotent replays (a retried API call, a duplicated signal) are no-ops
-(I3, ADR-0008). Each approval stores `approval_digest`, which the
-workflow re-checks before paying, and an invoice rejected once is never approved."""
+(I3, ADR-0008). Each approval stores `approval_digest`, which the workflow re-checks
+before paying, and an invoice rejected once is never approved."""
 
 from __future__ import annotations
 

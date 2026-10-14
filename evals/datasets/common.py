@@ -72,8 +72,8 @@ def download_resumable(
 
 
 def append_blocked_entry(tag: str, title: str, why: str, command: str) -> None:
-    """Appends a BLOCKED.md entry unless one with this `[tag]` is
-    already present, so re-running a deferred fetch does not duplicate the entry."""
+    """Appends a BLOCKED.md entry unless one with this `[tag]` is already present,
+    so re-running a deferred fetch does not duplicate the entry."""
     marker = f"[{tag}]"
     existing = BLOCKED_MD.read_text(encoding="utf-8") if BLOCKED_MD.exists() else "# BLOCKED\n"
     if marker in existing:

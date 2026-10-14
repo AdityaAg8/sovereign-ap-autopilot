@@ -1,8 +1,8 @@
-"""`InvoiceWorkflow` buffers a `review` signal that lands before
-its review wait (the API may approve as soon as `route` commits AWAITING_REVIEW), still acts on it
-only once `confirm_review` backs it, and ends FAILED when a recorded approval went stale. The
-`workflow.patched` guard keeps histories recorded before the fix replaying deterministically:
-an old history whose early signal was dropped is replayed against today's workflow."""
+"""`InvoiceWorkflow` buffers a `review` signal that lands before its review wait (the API may
+approve as soon as `route` commits AWAITING_REVIEW), still acts on it only once `confirm_review`
+backs it, and ends FAILED when a recorded approval went stale. The `workflow.patched` guard keeps
+histories recorded before the fix replaying deterministically: an old history whose early signal
+was dropped is replayed against today's workflow."""
 
 from __future__ import annotations
 

@@ -1,7 +1,6 @@
-"""Unit tests for evals/scorers/perf.py's latency/VRAM aggregation
-("p50/p95 seconds per invoice, peak VRAM per stage"). Uses an injected fake clock and VRAM sampler
-so this
-needs no real GPU and no real wall-clock waiting."""
+"""Unit tests for evals/scorers/perf.py's latency/VRAM aggregation ("p50/p95 seconds per invoice,
+peak VRAM per stage"). Uses an injected fake clock and VRAM sampler so this needs no real GPU and
+no real wall-clock waiting."""
 
 from __future__ import annotations
 

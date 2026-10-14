@@ -1,10 +1,10 @@
-"""Unit tests for evals/scorers/extractbench.py: the built-in fallback on
-hand-computed cases, the official-framework aggregation path against a hand-built fixture of the
-official scorer's own metric shape (`framework_available` made True by a tiny stub clone,
-`run_official_scorer` stubbed rather than the unit under test), and one `external`-marked
-test that runs the real `data/external/ExtractBench` clone end to end: gold scored against
-itself (expect ~100%) and against a copy with exactly one field perturbed (expect a lower score,
-by an amount derived from the baseline's own counts rather than hardcoded)."""
+"""Unit tests for evals/scorers/extractbench.py: the built-in fallback on hand-computed cases,
+the official-framework aggregation path against a hand-built fixture of the official scorer's
+own metric shape (`framework_available` made True by a tiny stub clone, `run_official_scorer`
+stubbed rather than the unit under test), and one `external`-marked test that runs the real
+`data/external/ExtractBench` clone end to end: gold scored against itself (expect ~100%) and
+against a copy with exactly one field perturbed (expect a lower score, by an amount derived from
+the baseline's own counts rather than hardcoded)."""
 
 from __future__ import annotations
 

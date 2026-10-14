@@ -1,10 +1,8 @@
 """factory/build.py: the UAE invoice factory CLI. Plans a deterministic-from-seed dataset of
 invoices (exact train/cal/test counts, exact Arabic-first and Augraphy-scan-variant fractions via
-stratified sampling), renders each one across a pool of worker processes
-(one Chromium browser context per worker, "parallelize rendering... multiple browser
-contexts/processes"),
-writes the PDF/labels/ERP-truth/scan-PNG artifacts, and registers the results into
-`data/manifest.json` and the `uae` section of `evals/splits.json`."""
+stratified sampling), renders them in parallel across a pool of worker processes (one Chromium
+browser context per worker), writes the PDF/labels/ERP-truth/scan-PNG artifacts, and registers
+the results into `data/manifest.json` and the `uae` section of `evals/splits.json`."""
 
 from __future__ import annotations
 

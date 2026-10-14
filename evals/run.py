@@ -1,10 +1,9 @@
-"""Eval runner CLI: scores a predictor against fatura, extractbench, docile,
-uae and pint_ae using evals/scorers/*, loading document identity from data/manifest.json and
-split assignment from evals/splits.json, and writes one small JSON report per run to
-reports/runs/<run_id>.json. Sets that cannot be scored yet
-(docile without a DOCILE_TOKEN, uae before the factory exists) come back as "deferred" rows rather
-than errors, so `make
-eval-quick` always succeeds end to end on a fresh clone."""
+"""Eval runner CLI: scores a predictor against fatura, extractbench, docile, uae and pint_ae using
+evals/scorers/*, loading document identity from data/manifest.json and split assignment from
+evals/splits.json, and writes one small JSON report per run to reports/runs/<run_id>.json. Sets
+that cannot be scored yet (docile without a DOCILE_TOKEN, uae before the factory exists) come back
+as "deferred" rows rather than errors, so `make eval-quick` always succeeds end to end on a fresh
+clone."""
 
 from __future__ import annotations
 
@@ -71,9 +70,8 @@ class GateResult(BaseModel):
 
 
 class SetOutcome(BaseModel):
-    """One eval set's result within a run: either scored
-    (with metrics and, where defines one, a gate) or deferred (with a human-readable reason, never a
-    stack trace)."""
+    """One eval set's result within a run: either scored (with metrics and, where the set has one,
+    a gate) or deferred (with a human-readable reason, never a stack trace)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -237,16 +235,15 @@ def _first_quote(rule: Mapping[str, Any] | None) -> str | None:
 
 def _first_grounding(rule: Mapping[str, Any] | None) -> tuple[int | None, list[float] | None]:
     """Returns the (page, bbox) of the first evidence entry that carries a bbox -- the field's
-    real grounding location for the official framework's bbox-based grounding metric.
-    Unlike `_first_quote`, this does not require a non-empty `quote`: a coarse
-    field such as a checkbox has `quote: null` on its only evidence entry but still has a citable
-    page/bbox, and skipping it here would leave every boolean field ungrounded for no reason.
-    The quote and the page/bbox may therefore come from different evidence entries; each feeds
-    only its own metric. Mirrors the gold-loading convention
-    `tests/unit/test_scorers_extractbench.py` already verifies against the real official framework
-    clone. Malformed bbox evidence (page not a 1-indexed int, bbox not 4 numbers [x, y, w, h])
-    raises ValueError instead of silently dropping the field from grounding or handing the
-    framework a citation it cannot grade."""
+    real grounding location for the official framework's bbox-based grounding metric. Unlike
+    `_first_quote`, this does not require a non-empty `quote`: a coarse field such as a checkbox
+    has `quote: null` on its only evidence entry but still has a citable page/bbox, and skipping
+    it here would leave every boolean field ungrounded for no reason. The quote and the page/bbox
+    may therefore come from different evidence entries; each feeds only its own metric. Mirrors
+    the gold-loading convention `tests/unit/test_scorers_extractbench.py` already verifies against
+    the real official framework clone. Malformed bbox evidence (page not a 1-indexed int, bbox not
+    4 numbers [x, y, w, h]) raises ValueError instead of silently dropping the field from
+    grounding or handing the framework a citation it cannot grade."""
     if not rule:
         return None, None
     for evidence in rule.get("evidence") or []:

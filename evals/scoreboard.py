@@ -1,10 +1,10 @@
-"""Scoreboard generator (ADR-0005): renders reports/scoreboard.md with
-one row per metric, each taken from the newest authoritative measured source -- model runs
-in reports/runs/*.json, the JSON evidence (chat_evals, attacks_e2e, trust_gate, extractor_b_gates,
-bakeoff) or a generated report read by the strict parsers
-in evals/scoreboard_sources.py -- with its gate, status and source timestamp. Dummy-predictor
-runs are listed only as harness self-tests, never as model scores; unmeasured rows stay PENDING
-with the reason. `scripts/sync_readme.py` mirrors the output into README.md."""
+"""Scoreboard generator (ADR-0005): renders reports/scoreboard.md with one row per metric, each
+taken from the newest authoritative measured source -- model runs in reports/runs/*.json, the JSON
+evidence (chat_evals, attacks_e2e, trust_gate, extractor_b_gates, bakeoff) or a generated report
+read by the strict parsers in evals/scoreboard_sources.py -- with its gate, status and source
+timestamp. Dummy-predictor runs are listed only as harness self-tests, never as model scores;
+unmeasured rows stay PENDING with the reason. `scripts/sync_readme.py` mirrors the output into
+README.md."""
 
 from __future__ import annotations
 

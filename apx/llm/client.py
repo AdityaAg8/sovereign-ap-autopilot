@@ -1,9 +1,9 @@
 """`LlamaSwapClient`: the `apx.llm.interfaces.LlmClient` over llama-swap's OpenAI-compatible API
-on the internal network (I2). Structured calls always send the extraction
-settings -- thinking off, JSON-schema constrained output, the request's temperature and seed,
-logprobs on -- and every transport or protocol failure is a typed error, never an empty result.
-The one retry here is bounded, logged backoff on llama-swap's 429/503 "busy" answers
-(`ModelBusyError` once exhausted); worker-side slot limits (`apx.llm.slots`) keep those rare."""
+on the internal network (I2). Structured calls always send the extraction settings -- thinking
+off, JSON-schema constrained output, the request's temperature and seed, logprobs on -- and
+every transport or protocol failure is a typed error, never an empty result. The one retry here
+is bounded, logged backoff on llama-swap's 429/503 "busy" answers (`ModelBusyError` once
+exhausted); worker-side slot limits (`apx.llm.slots`) keep those rare."""
 
 from __future__ import annotations
 

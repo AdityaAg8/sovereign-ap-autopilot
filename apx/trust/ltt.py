@@ -72,13 +72,12 @@ def learn_then_test(
     k_j = #(p >= λ_j), m_j = #(p >= λ_j and wrong), p_j = BinomCDF(m_j; k_j, alpha). The testable
     grid is the λ_j with k_j >= `min_accepted` (k_min); the others are an untestable prefix,
     recorded as skipped with their label-free k_j and never read labels. Over the testable grid,
-    walk while p_j <= delta and stop at the first failure; λ̂ = last passing λ_j
-    (ADR-0009 §6 as amended). The returned `steps` always cover the *full* grid: rows at and before
-    the
-    stop carry the walk's real pass/fail; rows after it are still computed from the LTT labels
-    (ADR-0009 §6/§7 promise the full step table to MLflow, the audit chain and the error curve)
-    but marked `informational=True`, since they took no part in the sequential decision and can
-    never move λ̂. Raises TrustGateError on length mismatch, bad grid or min_accepted < 1.
+    walk while p_j <= delta and stop at the first failure; λ̂ = last passing λ_j (ADR-0009 §6 as
+    amended). The returned `steps` always cover the *full* grid: rows at and before the stop carry
+    the walk's real pass/fail; rows after it are still computed from the LTT labels (ADR-0009 §6/§7
+    promise the full step table to MLflow, the audit chain and the error curve) but marked
+    `informational=True`, since they took no part in the sequential decision and can never move λ̂.
+    Raises TrustGateError on length mismatch, bad grid or min_accepted < 1.
 
     `calibrator_version` is left as "" and `n_fit_fields` as 0 on the returned `ThresholdResult`:
     this function only sees the LTT partition, not the fitted `Calibrator` or the FIT count. The

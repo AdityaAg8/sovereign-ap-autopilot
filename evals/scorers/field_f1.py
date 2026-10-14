@@ -1,10 +1,10 @@
-"""Shared field-level precision/recall/F1 core used by the FATURA and UAE scorers:
-both compare a predicted (doc_id, field_name) -> value mapping against gold on
-normalized exact match. Kept as one pure, typed function so both scorers report identically
-comparable numbers for the scoreboard. For a UAE header field (`apx.common.compare.
-FIELD_KIND_BY_NAME`), normalization delegates to the same comparator as the trust gate
-(ADR-0009 §4.1), so the F1 promotion gate and the trust labels agree on what "correct" means;
-other fields (FATURA, ExtractBench) keep the plain NFKC + whitespace-collapse rule unchanged."""
+"""Shared field-level precision/recall/F1 core used by the FATURA and UAE scorers: both compare
+a predicted (doc_id, field_name) -> value mapping against gold on normalized exact match. Kept
+as one pure, typed function so both scorers report identically comparable numbers for the
+scoreboard. For a UAE header field (`apx.common.compare. FIELD_KIND_BY_NAME`), normalization
+delegates to the same comparator as the trust gate (ADR-0009 §4.1), so the F1 promotion gate and
+the trust labels agree on what "correct" means; other fields (FATURA, ExtractBench) keep the
+plain NFKC + whitespace-collapse rule unchanged."""
 
 from __future__ import annotations
 

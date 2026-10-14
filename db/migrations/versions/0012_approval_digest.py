@@ -1,8 +1,8 @@
 """add `approvals.invoice_digest`: the `apx.policy.writer.approval_digest` of the invoice and its
 vendor payee when the approval was written. `InvoiceWorkflow` re-derives it from the current rows
 before it builds or sends an e-invoice after a review signal, so a raw Temporal signal with no
-matching approval can never lead to payment. Nullable: rows written before this
-migration carry none and the workflow treats them as unbacked.
+matching approval can never lead to payment. Nullable: rows written before this migration carry
+none and the workflow treats them as unbacked.
 
 Revision ID: 0012_approval_digest
 Revises: 0011_document_failure

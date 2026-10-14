@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verifies the project foundations: lint, typecheck, unit tests, header check, web
-# lint/typecheck/build all green, and every foundation artifact exists.
-# Prints a PASS/FAIL table and exits nonzero if any gate fails; wired to `make verify-m0`.
+# lint/typecheck/build all green, and every foundation artifact exists. Prints a PASS/FAIL
+# table and exits nonzero if any gate fails; wired to `make verify-m0`.
 set +e
 set +u
 

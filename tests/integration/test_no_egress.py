@@ -1,11 +1,11 @@
-"""Integration proof for ADR-0001: from inside the `app`-network
-containers this milestone owns (llama-swap, toolbox), DNS resolution and a TCP connect to a
-public host must fail; `gateway` (the one container that also joins the non-internal `edge`
-network) is checked differently -- it does have outbound routing, so this proves its nginx
-config only ever reaches its declared proxy targets, never an arbitrary host. Needs a live
-`make up` stack and a working Docker CLI; marked `integration` so it never runs in CI or the
-default `pytest`/`make test` invocation. A Docker/stack problem is a test
-failure with a clear message, never a silent skip."""
+"""Integration proof for ADR-0001: from inside the `app`-network containers this milestone
+owns (llama-swap, toolbox), DNS resolution and a TCP connect to a public host must fail;
+`gateway` (the one container that also joins the non-internal `edge` network) is checked
+differently -- it does have outbound routing, so this proves its nginx config only ever
+reaches its declared proxy targets, never an arbitrary host. Needs a live `make up` stack
+and a working Docker CLI; marked `integration` so it never runs in CI or the default
+`pytest`/`make test` invocation. A Docker/stack problem is a test failure with a clear
+message, never a silent skip."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """FastAPI application factory: wires the auth/invoices/proposals/uploads/vendors routers, CORS
 locked to the single web origin, security response headers and the typed-error exception
-handlers (docs/security.md B8/B9). Typed OpenAPI comes free from the pydantic
-models on every route."""
+handlers (docs/security.md B8/B9). Typed OpenAPI comes free from the pydantic models on every
+route."""
 
 from __future__ import annotations
 

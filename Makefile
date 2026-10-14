@@ -134,8 +134,8 @@ down:
 	cd infra && $(COMPOSE) down
 
 # One-time (idempotent) for installs whose Postgres volume was created with the old default
-# password: `make env` adds the generated secrets to .env, this sets both
-# roles' passwords to them over the container's local socket, then `make up` recreates the app.
+# password: `make env` adds the generated secrets to .env, this sets both roles' passwords to
+# them over the container's local socket, then `make up` recreates the app.
 .PHONY: rotate-db-password
 rotate-db-password: env
 	@echo "==> setting the apx and apx_agent_ro Postgres passwords from .env (values never printed)"

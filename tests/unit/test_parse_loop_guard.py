@@ -1,9 +1,8 @@
-"""Unit tests for infra/docker/parse/app.py's loop guard and strip re-read
-(ADR-0013 amendment 2): token-level loop detection, loop-tail cutting, strip geometry, merging
-strips
-back to page coordinates and the page policy's truncation flag and deadline, all with a fake
-`generate` so they run on a host with no GPU and no `torch`. The token fixture is the model's own
-tokenizer encoding of two live PaddleOCR-VL-1.6 outputs (scratch probe, 2026-09-27)."""
+"""Unit tests for infra/docker/parse/app.py's loop guard and strip re-read (ADR-0013 amendment
+2): token-level loop detection, loop-tail cutting, strip geometry, merging strips back to page
+coordinates and the page policy's truncation flag and deadline, all with a fake `generate` so
+they run on a host with no GPU and no `torch`. The token fixture is the model's own tokenizer
+encoding of two live PaddleOCR-VL-1.6 outputs (scratch probe, 2026-09-27)."""
 
 from __future__ import annotations
 

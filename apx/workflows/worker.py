@@ -3,8 +3,8 @@ converter (every `InvoiceActivities` type is a Pydantic model, which the default
 converter cannot serialise) and the `Worker`s bound to `DefaultInvoiceActivities` (plus the
 `ReviewGuardActivities` review checks): one for the workflow and its CPU/IO activities, and one
 for the llama-swap activities on `LLM_TASK_QUEUE` with a hard cap on concurrent activities
-(ADR-0013 backpressure). This module only assembles what it is given;
-`apx.workflows.main` builds the real dependencies."""
+(ADR-0013 backpressure). This module only assembles what it is given; `apx.workflows.main` builds
+the real dependencies."""
 
 from __future__ import annotations
 

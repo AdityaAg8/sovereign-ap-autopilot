@@ -1,7 +1,7 @@
 """Unit tests for `apx.audit.anchor`: the pure `verify_anchors` cross-check (database/file
 mismatch, a broken anchor chain, and a missing or changed anchored row) and the anchor file's
-append/read round-trip (I4). No database is used;
-`PgAuditFullVerifier` is exercised by `tests/integration/test_audit_anchor.py`."""
+append/read round-trip (I4). No database is used; `PgAuditFullVerifier` is exercised by
+`tests/integration/test_audit_anchor.py`."""
 
 from __future__ import annotations
 

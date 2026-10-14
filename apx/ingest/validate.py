@@ -1,9 +1,7 @@
 """Upload hardening shared by every ingest path (watcher and API upload): magic-byte media-type
-sniffing (never the client's declared content type or a filename extension), the size cap, the
-PDF page/encryption checks and the raster caps
-(docs/security.md B1). The only home of this logic: the API upload route and the inbox watcher both
-reach
-it through `Ingestor`."""
+sniffing (never the client's declared content type or a filename extension), the size cap, the PDF
+page/encryption checks and the raster caps (docs/security.md B1). The only home of this logic: the
+API upload route and the inbox watcher both reach it through `Ingestor`."""
 
 from __future__ import annotations
 

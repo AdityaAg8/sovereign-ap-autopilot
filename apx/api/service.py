@@ -2,11 +2,11 @@
 List/filter/paginate, invoice detail (masking `iban` fields from non-admins, docs/security.md
 B5), field edits (audit event + label row), decisions and proposal execution (P1-P5, I3: every
 payment-affecting action goes `PolicyGuard` -> `SqlPaymentStateWriter`, then signals the
-invoice's workflow), a document-serving lookup and a polling-based SSE status stream.
-Review decisions follow the invoice state machine: reject only while awaiting review,
-send-to-review only before routing (a durable hold the workflow honours), else 409; a rejection
-whose signal failed is re-sent by repeating it. Also `DbVendorService`, the
-vendor list/detail read model for the web UI's vendor view."""
+invoice's workflow), a document-serving lookup and a polling-based SSE status stream. Review
+decisions follow the invoice state machine: reject only while awaiting review, send-to-review
+only before routing (a durable hold the workflow honours), else 409; a rejection whose signal
+failed is re-sent by repeating it. Also `DbVendorService`, the vendor list/detail read model
+for the web UI's vendor view."""
 
 from __future__ import annotations
 
@@ -218,8 +218,8 @@ def refuse_totals_mismatch(route_reasons: Sequence[Mapping[str, object]] | None)
 class DbInvoiceService:
     """`apx.api.interfaces.InvoiceService` backed by Postgres. Every method opens its own
     `AsyncSession` (matching `apx.audit.chain.PgAuditLog`'s convention), and every state change
-    appends its audit event inside the same transaction
-    (`append_in_transaction`): the change and its entry commit together or not at all."""
+    appends its audit event inside the same transaction (`append_in_transaction`): the change
+    and its entry commit together or not at all."""
 
     def __init__(
         self, settings: ApiSettings | None = None, *, signaller: ReviewSignaller | None = None
@@ -374,13 +374,13 @@ class DbInvoiceService:
     async def edit_field(self, invoice_id: InvoiceId, edit: FieldEdit, user: User) -> None:
         """Applies a reviewer's field fix: appends the new (human-sourced) `fields` row and a
         `labels` row that snapshots the *previous* value/box/source/model-revision alongside
-        the correction, then audits both the before and after value
-        (every correction is a complete, self-contained record -- invoice, field, before/after
-        value, box, reviewer, timestamp and the model/revision that produced the original).
-        An edit is accepted in any status (it is also a training label), but one that changes
-        the review corrections of an approved invoice the workflow has not yet confirmed
-        invalidates that approval: `confirm_review` finds the rows no longer match the
-        approval's `corrections_digest` and ends the invoice FAILED."""
+        the correction, then audits both the before and after value (every correction is a
+        complete, self-contained record -- invoice, field, before/after value, box, reviewer,
+        timestamp and the model/revision that produced the original). An edit is accepted in
+        any status (it is also a training label), but one that changes the review corrections
+        of an approved invoice the workflow has not yet confirmed invalidates that approval:
+        `confirm_review` finds the rows no longer match the approval's `corrections_digest`
+        and ends the invoice FAILED."""
         async with get_session() as session:
             previous = await self._write_field_edit(session, invoice_id, edit, user)
             await self._audit_field_edit(session, invoice_id, edit, user, previous)
@@ -879,9 +879,8 @@ class DbInvoiceService:
 
 
 async def _rejection_to_resend(session: AsyncSession, invoice: Invoice) -> bool:
-    """True when `invoice` is BLOCKED by a recorded REJECT decision
-    (writes both in one transaction), so a repeated reject re-sends the signal instead of answering
-    409."""
+    """True when `invoice` is BLOCKED by a recorded REJECT decision (writes both in one
+    transaction), so a repeated reject re-sends the signal instead of answering 409."""
     if invoice.status is not DbInvoiceStatus.BLOCKED:
         return False
     rejected = await session.scalar(
@@ -936,12 +935,11 @@ def _proposed_edit(row: ProposalRow) -> FieldEdit:
 
 
 class DbVendorService:
-    """`GET /vendors` and `GET /vendors/{id}`: search/paginated list
-    and a detail view with bank details always masked to the last 4 IBAN characters (ADR-0008
-    line 85), each one's G-3 `verified` generated column, and the vendor's most recent invoices.
-    Like `DbInvoiceService`, every method opens its own `AsyncSession`; reads are not audited,
-    matching every other read in this API (only field edits, decisions and proposal execution
-    are)."""
+    """`GET /vendors` and `GET /vendors/{id}`: search/paginated list and a detail view with bank
+    details always masked to the last 4 IBAN characters (ADR-0008 line 85), each one's G-3
+    `verified` generated column, and the vendor's most recent invoices. Like `DbInvoiceService`,
+    every method opens its own `AsyncSession`; reads are not audited, matching every other read
+    in this API (only field edits, decisions and proposal execution are)."""
 
     async def list(self, *, q: str | None, limit: int, offset: int) -> VendorPage:
         limit = max(1, min(limit, _MAX_PAGE_SIZE))

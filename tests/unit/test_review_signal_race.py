@@ -1,9 +1,9 @@
-"""The `route` activity commits AWAITING_REVIEW to Postgres
-before the workflow's in-memory status says so (it changes only after `route` and `review_hold`
-complete), and the `review` signal handler drops any signal that arrives before that. A reviewer
-(or a scripted approver) acting in that window gets a 204, the approval row is written, and the
-workflow keeps waiting forever with the invoice APPROVED in the database. Emulated here by
-delivering the signal while `review_hold` is still running."""
+"""The `route` activity commits AWAITING_REVIEW to Postgres before the workflow's in-memory
+status says so (it changes only after `route` and `review_hold` complete), and the `review`
+signal handler drops any signal that arrives before that. A reviewer (or a scripted approver)
+acting in that window gets a 204, the approval row is written, and the workflow keeps waiting
+forever with the invoice APPROVED in the database. Emulated here by delivering the signal while
+`review_hold` is still running."""
 
 from __future__ import annotations
 

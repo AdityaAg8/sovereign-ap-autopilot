@@ -1,7 +1,6 @@
 """Fetches the ExtractBench short split (252 docs: metadata plus source PDFs) from HF
 `llamaindex/ExtractBench` and clones the official `run-llama/ExtractBench` scoring framework
-pinned to a fixed commit into data/external/. Eval-only; not
-used for training."""
+pinned to a fixed commit into data/external/. Eval-only; not used for training."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """Fetches CORD v2 (HF `naver-clova-ix/cord-v2`, CC-BY-4.0) at a pinned revision into data/cord/,
 verifies each parquet shard against its pinned sha256, and unpacks one image plus one index line
-per receipt so the real-data track can parse and score them (ADR-0019 §1, §8).
-The 1.8 GB train split needs `allow_large` (the >1 GB download rule)."""
+per receipt so the real-data track can parse and score them (ADR-0019 §1, §8). The 1.8 GB train
+split needs `allow_large` (the >1 GB download rule)."""
 
 from __future__ import annotations
 

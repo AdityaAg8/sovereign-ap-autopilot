@@ -57,7 +57,7 @@ class ToolResult(Frozen):
 
 
 # --------------------------------------------------------------------------------------------
-# Shared vocabulary (ADR-0010). Restates ADR-0008 names that are not yet on main.
+# Shared vocabulary (ADR-0010). Restates ADR-0008 names from apx.policy.interfaces.
 # --------------------------------------------------------------------------------------------
 
 ToolName = Literal[
@@ -71,8 +71,8 @@ ToolName = Literal[
 ToolEffect = Literal["read", "propose"]
 
 ToolOrigin = Literal["agent", "chat", "mcp"]
-"""Who is calling a tool. Same values as ADR-0008 `ProposalOrigin`; replace with a re-export of
-`apx.policy.interfaces.ProposalOrigin` once the policy engine is on main."""
+"""Who is calling a tool. Same values as ADR-0008 `apx.policy.interfaces.ProposalOrigin`, which
+could replace it as a re-export."""
 
 ToolProposalKind = Literal["approve_payment", "request_info"]
 """The only proposal kinds any tool creates; a subset of ADR-0008 AGENT_PROPOSAL_KINDS."""

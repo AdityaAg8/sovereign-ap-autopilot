@@ -1,7 +1,7 @@
-"""Unit tests for scan-input fidelity (ADR-0012 amendment 3): `has_scan`
-factory documents are fed as an image-only PDF of their scan PNGs, which the real parser routes to
-the (faked) OCR service page by page in the label box frame; the extraction harness records the
-input kind, slices its report by it and re-runs pre-schema-4 rows; the e2e script drops the scan."""
+"""Unit tests for scan-input fidelity (ADR-0012 amendment 3): `has_scan` factory documents are fed
+as an image-only PDF of their scan PNGs, which the real parser routes to the (faked) OCR service
+page by page in the label box frame; the extraction harness records the input kind, slices its
+report by it and re-runs pre-schema-4 rows; the e2e script drops the scan."""
 
 from __future__ import annotations
 

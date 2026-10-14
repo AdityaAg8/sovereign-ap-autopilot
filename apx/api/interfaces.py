@@ -34,9 +34,9 @@ class InvoiceSummary(Frozen):
 
 class InvoiceFieldView(Frozen):
     """One field as shown to a reviewer: value, confidence, grounding box and provenance.
-    `value` is masked for `name == "iban"` unless the caller is an admin
-    (docs/security.md B5, ADR-0008 T2: IBANs are always shown masked to the last 4 characters
-    except to the role that manages vendor bank master data)."""
+    `value` is masked for `name == "iban"` unless the caller is an admin (docs/security.md
+    B5, ADR-0008 T2: IBANs are always shown masked to the last 4 characters except to the
+    role that manages vendor bank master data)."""
 
     name: str
     value: str | None

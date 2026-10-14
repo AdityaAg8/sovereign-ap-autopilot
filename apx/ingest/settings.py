@@ -1,7 +1,7 @@
 """Environment-driven configuration for `apx.ingest`: the watch-folder and content-addressed
 store locations, and the upload hardening limits every ingest path enforces.
-`max_bytes`/`max_pages` default to 20 MB / 30 pages, the only upload limits
-(the API upload route and the inbox watcher both enforce them through `Ingestor`)."""
+`max_bytes`/`max_pages` default to 20 MB / 30 pages, the only upload limits (the API upload
+route and the inbox watcher both enforce them through `Ingestor`)."""
 
 from __future__ import annotations
 

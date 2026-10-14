@@ -1,12 +1,12 @@
 """Integration test for the ADR-0010 D2 read-only boundary against a real, throwaway Postgres
-container: `apx_agent_ro` can SELECT only the three masked views and a write through its
-session fails at the database level; every one of the six tools is run through the real
-`PgSqlReader` and `PgAgentToolbox`, proving their SQL is parameterised (a SQL-injection-style
-`vendor_query` neither errors nor changes any row) and that no tool call changes payment or bank
-state (row counts and full-row snapshots of `invoices`/`bank_details` are identical before and
-after, and only the propose tools add exactly one `proposals` row). Marked
-`integration` (needs Docker), so it is excluded from the default `make test`/CI selection and
-runs via `pytest -m integration`."""
+container: `apx_agent_ro` can SELECT only the three masked views and a write through its session
+fails at the database level; every one of the six tools is run through the real `PgSqlReader`
+and `PgAgentToolbox`, proving their SQL is parameterised (a SQL-injection-style `vendor_query`
+neither errors nor changes any row) and that no tool call changes payment or bank state (row
+counts and full-row snapshots of `invoices`/`bank_details` are identical before and after, and
+only the propose tools add exactly one `proposals` row). Marked `integration` (needs Docker), so
+it is excluded from the default `make test`/CI selection and runs via `pytest -m
+integration`."""
 
 from __future__ import annotations
 

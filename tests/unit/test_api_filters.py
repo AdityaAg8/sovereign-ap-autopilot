@@ -1,7 +1,7 @@
-"""Unit tests that SQL-injection payloads in invoice list filters are inert:
-`apx.api.queries` builds every filter with SQLAlchemy `.where()`/`.ilike()`, which always binds
-values as parameters, so a malicious filter value can never change the query's shape. Compiling
-with `literal_binds` and inspecting the rendered SQL proves the payload text never appears as
+"""Unit tests that SQL-injection payloads in invoice list filters are inert: `apx.api.queries`
+builds every filter with SQLAlchemy `.where()`/`.ilike()`, which always binds values as
+parameters, so a malicious filter value can never change the query's shape. Compiling with
+`literal_binds` and inspecting the rendered SQL proves the payload text never appears as
 executable SQL -- it only ever appears quoted as a string literal."""
 
 from __future__ import annotations

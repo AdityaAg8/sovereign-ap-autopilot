@@ -1,8 +1,8 @@
-"""Page-embedding provider for fraud page similarity:
-`HttpPageEmbedder`, structurally an `apx.fraud.interfaces.PageEmbedder`, posts one
-rendered page PNG to the local embedding service and returns its vector. Typed errors only: an
-unreachable, busy or failing service raises `PageEmbeddingUnavailableError`, a malformed answer
-`ModelOutputError`, never an empty or made-up vector."""
+"""Page-embedding provider for fraud page similarity: `HttpPageEmbedder`, structurally an
+`apx.fraud.interfaces.PageEmbedder`, posts one rendered page PNG to the local embedding service
+and returns its vector. Typed errors only: an unreachable, busy or failing service raises
+`PageEmbeddingUnavailableError`, a malformed answer `ModelOutputError`, never an empty or
+made-up vector."""
 
 from __future__ import annotations
 

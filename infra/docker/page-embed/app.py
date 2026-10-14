@@ -1,9 +1,9 @@
-"""GPU-backed page-embedding service: Qwen3-VL-Embedding-2B turns
-one rendered page image per POST /embed into an L2-normalized 2048-d vector for fraud
-near-duplicate detection (`apx.llm.embedding.HttpPageEmbedder` is the client). The model lives
-in a child process that loads on the first page and is stopped by POST /unload, which returns
-all of its GPU memory, so the worker's GPU stage scheduler can hand the card on (ADR-0013).
-Served here rather than by llama-swap: the pinned checkpoint is safetensors, with no GGUF."""
+"""GPU-backed page-embedding service: Qwen3-VL-Embedding-2B turns one rendered page image per
+POST /embed into an L2-normalized 2048-d vector for fraud near-duplicate detection
+(`apx.llm.embedding.HttpPageEmbedder` is the client). The model lives in a child process that
+loads on the first page and is stopped by POST /unload, which returns all of its GPU memory,
+so the worker's GPU stage scheduler can hand the card on (ADR-0013). Served here rather than
+by llama-swap: the pinned checkpoint is safetensors, with no GGUF."""
 
 from __future__ import annotations
 

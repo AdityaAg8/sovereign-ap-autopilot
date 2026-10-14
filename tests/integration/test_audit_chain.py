@@ -1,9 +1,9 @@
 """Integration tests for the hash-chained audit log against a real, throwaway Postgres
-container (I4): 50 concurrent `PgAuditLog.append` calls must produce
-one valid, unforked chain, and editing a past row after bypassing the append-only trigger (as
-a superuser would have to) must be caught by `PgAuditVerifier`. Marked `integration`, so it
-needs Docker and does not run as part of the plain unit-test sweep unless explicitly selected
-(`pytest -m integration`)."""
+container (I4): 50 concurrent `PgAuditLog.append` calls must produce one valid, unforked
+chain, and editing a past row after bypassing the append-only trigger (as a superuser would
+have to) must be caught by `PgAuditVerifier`. Marked `integration`, so it needs Docker and
+does not run as part of the plain unit-test sweep unless explicitly selected (`pytest -m
+integration`)."""
 
 from __future__ import annotations
 

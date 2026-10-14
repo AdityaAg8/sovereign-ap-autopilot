@@ -1,16 +1,16 @@
-"""Smoke-tests every runtime model pinned in infra/models.lock.json: the
-extract/arbitrate LLMs through llama-swap's OpenAI-compatible API, the guard/parse models
-directly through transformers, and the two embedding models through sentence-transformers
-(both ship in that format, not a plain `AutoModel` checkpoint). For each it loads the model,
-samples peak GPU memory every 200 ms, times one request, and checks the extraction-
-call rules (JSON schema output, one tool call, logprobs, thinking disabled) or embedding
-dimensions. Writes reports/smoke.md and exits nonzero if any runtime model fails; an
-unreachable model or a missing optional dependency (torch/transformers/sentence-transformers
-are not pinned in pyproject.toml -- they belong to a later milestone's `ml/` work, and are
-installed instead in infra/docker/toolbox/Dockerfile's image) is reported as a FAIL with a
-reason, never skipped. Intended to run inside that `toolbox` container (`make smoke`), which
-has a real GPU and those packages; running it directly on the host is also safe, it just
-reports every transformers-backed model as FAIL with "not installed"."""
+"""Smoke-tests every runtime model pinned in infra/models.lock.json: the extract/arbitrate
+LLMs through llama-swap's OpenAI-compatible API, the guard/parse models directly through
+transformers, and the two embedding models through sentence-transformers (both ship in that
+format, not a plain `AutoModel` checkpoint). For each it loads the model, samples peak GPU
+memory every 200 ms, times one request, and checks the extraction-call rules (JSON schema
+output, one tool call, logprobs, thinking disabled) or embedding dimensions. Writes
+reports/smoke.md and exits nonzero if any runtime model fails; an unreachable model or a
+missing optional dependency (torch/transformers/sentence-transformers are not pinned in
+pyproject.toml -- they belong to a later milestone's `ml/` work, and are installed instead
+in infra/docker/toolbox/Dockerfile's image) is reported as a FAIL with a reason, never
+skipped. Intended to run inside that `toolbox` container (`make smoke`), which has a real
+GPU and those packages; running it directly on the host is also safe, it just reports every
+transformers-backed model as FAIL with "not installed"."""
 
 from __future__ import annotations
 

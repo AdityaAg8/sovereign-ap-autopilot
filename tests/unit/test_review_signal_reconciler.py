@@ -1,8 +1,8 @@
-"""`ReviewSignalReconciler` re-delivers a recorded review decision
-whose signal never reached a workflow still waiting in review (a Temporal outage after the API
-committed, or a real signal dropped while an unbacked one was being checked). Fake stores and
-deliveries drive the pass logic; a time-skipping Temporal server runs the dropped-signal case
-end to end through the real `TemporalReviewDelivery` and `InvoiceWorkflow`."""
+"""`ReviewSignalReconciler` re-delivers a recorded review decision whose signal never reached
+a workflow still waiting in review (a Temporal outage after the API committed, or a real
+signal dropped while an unbacked one was being checked). Fake stores and deliveries drive the
+pass logic; a time-skipping Temporal server runs the dropped-signal case end to end through
+the real `TemporalReviewDelivery` and `InvoiceWorkflow`."""
 
 from __future__ import annotations
 

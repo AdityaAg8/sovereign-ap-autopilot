@@ -1,6 +1,6 @@
-"""attacks: the adversarial invoice suite
-(attack suite row) -- deterministic, committed manifests plus generators that render them into UAE
-invoice PDFs at test/run time for the hidden-content scanner and the end-to-end attack eval."""
+"""attacks: the adversarial invoice suite (attack suite row) -- deterministic, committed manifests
+plus generators that render them into UAE invoice PDFs at test/run time for the hidden-content
+scanner and the end-to-end attack eval."""
 
 from __future__ import annotations
 

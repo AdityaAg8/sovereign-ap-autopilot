@@ -1,6 +1,6 @@
-"""pgvector-backed page similarity: `PgPageVectorStore` keeps one
-Qwen3-VL-Embedding-2B vector per invoice page in `page_embeddings` and answers vendor-scoped cosine
-top-k; `PgPageSimilarityIndexes.for_vendor` gives the fraud engine a `PageSimilarityIndex` over one
+"""pgvector-backed page similarity: `PgPageVectorStore` keeps one Qwen3-VL-Embedding-2B vector per
+invoice page in `page_embeddings` and answers vendor-scoped cosine top-k;
+`PgPageSimilarityIndexes.for_vendor` gives the fraud engine a `PageSimilarityIndex` over one
 vendor's pages that embeds each page once, for both the lookup and the later `add`.
 
 Typed errors only: a malformed vector (wrong size, non-finite, all zeros) is a `FraudError`, an

@@ -1,13 +1,12 @@
-"""Review guard against a throwaway Postgres: every review
-transition through the API (reject only while awaiting review, send-to-review only before routing,
-both 409 otherwise), the workflow's `review_hold` and `confirm_review` activities over the real
-rows (a signal with no digest-matched approval is never backed), proposal acceptance that either
-acts or is refused, and the role an approval is recorded under. A stale recorded approval
-raises `StaleApprovalError`, a retried hold never reopens an approval, a repeated
-reject re-sends its signal, and decisions, edits and accepted proposals commit with their
-audit entry. An approval signal's corrections must match the ones recorded with the
-approval, and an edit after the approval makes it stale. Reuses `test_api_authz.py`'s
-helpers on its own container name and port."""
+"""Review guard against a throwaway Postgres: every review transition through the API (reject only
+while awaiting review, send-to-review only before routing, both 409 otherwise), the workflow's
+`review_hold` and `confirm_review` activities over the real rows (a signal with no digest-matched
+approval is never backed), proposal acceptance that either acts or is refused, and the role an
+approval is recorded under. A stale recorded approval raises `StaleApprovalError`, a retried hold
+never reopens an approval, a repeated reject re-sends its signal, and decisions, edits and
+accepted proposals commit with their audit entry. An approval signal's corrections must match the
+ones recorded with the approval, and an edit after the approval makes it stale. Reuses
+`test_api_authz.py`'s helpers on its own container name and port."""
 
 from __future__ import annotations
 
@@ -394,10 +393,10 @@ def test_confirm_review_checks_the_signal_corrections_against_the_approval(
 
 
 async def _reconciler_scenario() -> None:
-    """The reconciler's store finds an APPROVED invoice and a rejected
-    BLOCKED one whose decision is older than the grace period, rebuilds the signal the API would
-    send (a backed one: `confirm_review` accepts it), skips undecided or fresh decisions, and
-    counts its audited re-sends."""
+    """The reconciler's store finds an APPROVED invoice and a rejected BLOCKED one whose
+    decision is older than the grace period, rebuilds the signal the API would send (a backed
+    one: `confirm_review` accepts it), skips undecided or fresh decisions, and counts its
+    audited re-sends."""
     approved = InvoiceId(_invoice_id("rc-approved"))
     rejected = InvoiceId(_invoice_id("rc-rejected"))
     fresh = _invoice_id("rc-fresh")

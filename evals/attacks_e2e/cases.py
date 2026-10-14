@@ -1,7 +1,7 @@
-"""Prepares the attack suite for the end-to-end live run: picks the cases (all, a
-category subset, or a limit spread across categories), renders each committed case against the
-ERP the stack was seeded with so attacks target real vendors with verified accounts, and records
-each case's truth (genuine vendor and total, attacker IBANs). Renders are cached by case digest."""
+"""Prepares the attack suite for the end-to-end live run: picks the cases (all, a category subset,
+or a limit spread across categories), renders each committed case against the ERP the stack was
+seeded with so attacks target real vendors with verified accounts, and records each case's truth
+(genuine vendor and total, attacker IBANs). Renders are cached by case digest."""
 
 from __future__ import annotations
 

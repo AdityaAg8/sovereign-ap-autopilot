@@ -38,7 +38,8 @@ _LOGPROB_FLOOR = -20.0
 # Latent-accuracy parameters (ADR-0009 §7 amendment; were logit 0.95, 0.6, 1.2): field effects
 # b_f ~ N(logit(P), SD²) and per-field noise e ~ N(0, E_SD²). Most latent variance now sits in the
 # field effect, which the features see through the field one-hot, instead of in e, which they
-# see only through saturating logprob-like transforms. Every other generator constant is as in §7.
+# see only through saturating logprob-like transforms. Every other generator constant is as in
+# ADR-0009 §7.
 _FIELD_EFFECT_MEAN_P = 0.997
 _FIELD_EFFECT_SD = 2.0
 _FIELD_NOISE_SD = 0.6

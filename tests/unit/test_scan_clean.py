@@ -1,6 +1,6 @@
-"""Baseline and fail-closed tests for `PdfHiddenContentDetector`: a
-plain multi-page invoice never flags, and a document that cannot be parsed raises `ScanError`
-rather than silently reporting zero flags (a failed scan must never look clean)."""
+"""Baseline and fail-closed tests for `PdfHiddenContentDetector`: a plain multi-page invoice
+never flags, and a document that cannot be parsed raises `ScanError` rather than silently
+reporting zero flags (a failed scan must never look clean)."""
 
 from __future__ import annotations
 

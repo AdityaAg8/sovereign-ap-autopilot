@@ -225,9 +225,8 @@ def verify_anchors(
     0. If the file is a non-empty, exact prefix of `db_anchors` (every anchor the file has
        matches the database one-for-one, and the database has one or more further anchors the
        file lacks), step 1's identity check is skipped for that trailing gap -- it is judged
-       instead by steps 2-3 below, on `db_anchors` alone
-       (see `to_heal_in_file` on the result, the non-atomic DB-commit-then-file-append crash
-       window). A file with *no*
+       instead by steps 2-3 below, on `db_anchors` alone (see `to_heal_in_file` on the
+       result, the non-atomic DB-commit-then-file-append crash window). A file with *no*
        anchors at all never qualifies here, even if the database has some -- see the module
        docstring on why an empty file must stay a hard mismatch.
     1. Otherwise, `db_anchors` and `file_anchors` must be identical, position by position -- a
@@ -381,9 +380,9 @@ async def _write_anchor(session: AsyncSession) -> AuditAnchorRecord | None:
 class PgAuditFullVerifier:
     """Runs the full audit verification -- hash chain plus head-anchor cross-checks -- against
     Postgres and the external anchor file, and, only on a clean result, advances the anchor to
-    the chain's current head (I4). This is what the nightly job
-    (`python -m apx.audit verify`) runs; `apx.audit.verify.PgAuditVerifier` (chain-only, no
-    anchor side effects) remains available for callers that just need the hash-chain check."""
+    the chain's current head (I4). This is what the nightly job (`python -m apx.audit verify`)
+    runs; `apx.audit.verify.PgAuditVerifier` (chain-only, no anchor side effects) remains
+    available for callers that just need the hash-chain check."""
 
     async def verify(self) -> FullVerifyResult:
         try:

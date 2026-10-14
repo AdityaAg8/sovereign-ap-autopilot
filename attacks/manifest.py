@@ -1,8 +1,7 @@
-"""attacks/manifest.py: the 12-category attack catalogue
-(traceable to docs/security.md §7 A01-A12), the `AttackCase` schema committed under
-`attacks/manifests/`, and
-the pure, seed-derived rules (goal, language, placement) every case and its rendering hook agree
-on so a manifest entry and the PDF actually produced from it never drift apart."""
+"""attacks/manifest.py: the 12-category attack catalogue (traceable to docs/security.md §7
+A01-A12), the `AttackCase` schema committed under `attacks/manifests/`, and the pure,
+seed-derived rules (goal, language, placement) every case and its rendering hook agree on so a
+manifest entry and the PDF actually produced from it never drift apart."""
 
 from __future__ import annotations
 
@@ -191,11 +190,10 @@ def derive_goal_and_lang(category: str, seed: int) -> tuple[Goal, Lang]:
 
 
 class AttackCase(BaseModel):
-    """One committed attack case
-    (category, goal, payload text, placement, expected detection surface, seed"). Rendering
-    parameters (layout/vendor/tax/lines) are
-    included so `attacks.render` can reproduce the exact same invoice deterministically without
-    consulting anything outside this one record."""
+    """One committed attack case (category, goal, payload text, placement, expected detection
+    surface, seed"). Rendering parameters (layout/vendor/tax/lines) are included so
+    `attacks.render` can reproduce the exact same invoice deterministically without consulting
+    anything outside this one record."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -220,10 +218,9 @@ def manifest_path(category: str) -> Path:
 
 
 def save_cases(category: str, cases: Iterable[AttackCase]) -> Path:
-    """Writes one category's cases to `attacks/manifests/<category>.json`, sorted by id, with
-    LF endings and stable key order
-    (so regenerating from the same seed produces a clean, or empty, diff -- "deterministic from a
-    seed")."""
+    """Writes one category's cases to `attacks/manifests/<category>.json`, sorted by id, with LF
+    endings and stable key order (so regenerating from the same seed produces a clean, or empty,
+    diff -- "deterministic from a seed")."""
     ordered = sorted(cases, key=lambda c: c.id)
     payload = [case.model_dump(mode="json") for case in ordered]
     path = manifest_path(category)

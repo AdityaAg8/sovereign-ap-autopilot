@@ -1,6 +1,7 @@
 """Paired before/after comparison of two Extractor A eval row files (ADR-0012 §7): per-field
 accuracy deltas on the same documents with paired-bootstrap 95% CIs and exact McNemar p-values,
-valid-JSON rates, latency p50/p95 and classified-value accuracy per tax case, plus the §7 gate.
+valid-JSON rates, latency p50/p95 and classified-value accuracy per tax case, plus the ADR-0012
+§7 gate.
 
 Usage: python -m evals.extraction_a_compare --before OLD.jsonl --after NEW.jsonl [--report PATH]
 """

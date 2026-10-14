@@ -1,9 +1,8 @@
 """Unit tests for `attacks.render`: renders one committed case per category and verifies its
-payload actually lands in the PDF in the category's intended hidden form
-("generated PDFs actually contain the payload in the intended hidden form"), that rendering is
-byte-identical across repeated calls with the same seed, and that `evals.splits.register_documents`
-accepts the resulting sha256s into the `attacks` eval set without leakage
-(`evals/splits.py`)."""
+payload actually lands in the PDF in the category's intended hidden form ("generated PDFs actually
+contain the payload in the intended hidden form"), that rendering is byte-identical across repeated
+calls with the same seed, and that `evals.splits.register_documents` accepts the resulting sha256s
+into the `attacks` eval set without leakage (`evals/splits.py`)."""
 
 from __future__ import annotations
 

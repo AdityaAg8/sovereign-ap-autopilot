@@ -1,6 +1,6 @@
-"""Tests for `apx.extract.pipeline`: A and B both run, disputes go to the arbiter
-only when there is one and something to settle, the arbiter rules only on disputed fields, and an
-invalid A falls back to B's values."""
+"""Tests for `apx.extract.pipeline`: A and B both run, disputes go to the arbiter only when there
+is one and something to settle, the arbiter rules only on disputed fields, and an invalid A falls
+back to B's values."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""The bake-off arms and budget (ADR-0013): the served extractor-a baseline, the
-two challengers and the MTP latency arm, each a llama-swap alias with its prompt mode, plus the
-decision constants (≥ 1.0 F1 point at ≤ 1.5x latency, whole-card ≤ 11.8 GB, models ≤ 9.5 GB)."""
+"""The bake-off arms and budget (ADR-0013): the served extractor-a baseline, the two challengers
+and the MTP latency arm, each a llama-swap alias with its prompt mode, plus the decision
+constants (≥ 1.0 F1 point at ≤ 1.5x latency, whole-card ≤ 11.8 GB, models ≤ 9.5 GB)."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ MODEL_BUDGET_GB: Final[float] = 9.5
 """VRAM budget (ADR-0013): a stage's models with their working context, i.e. peak minus the idle
 desktop reading taken right before the model loads (GiB)."""
 F1_MARGIN_POINTS: Final[float] = 1.0
-"""Bake-off rule: a challenger must beat the baseline's UAE field F1 by at least 1.0 point."""
+"""A bake-off challenger must beat the baseline's UAE field F1 by at least 1.0 point."""
 LATENCY_RATIO_MAX: Final[float] = 1.5
-"""Bake-off rule: ... at a p50 latency of at most 1.5x the baseline's."""
+"""A bake-off challenger's p50 latency must be at most 1.5x the baseline's."""
 VALID_JSON_MIN: Final[float] = 0.99
 """The Extractor A valid-JSON gate: a champion A must keep it (ADR-0016)."""
 PROBE_PAGES: Final[int] = 5

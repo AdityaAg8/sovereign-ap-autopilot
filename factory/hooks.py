@@ -78,5 +78,5 @@ FRAUD_TYPOLOGY_HOOKS = HookRegistry(kind="fraud typology")
 invoices and similar. Empty until the fraud suite registers into it."""
 
 ATTACK_HOOKS = HookRegistry(kind="attack")
-"""Attack-suite hooks: hidden text, zero-width characters, bidi overrides,
-homoglyph vendor names, fake approval stamps and similar. Empty until `attacks` registers."""
+"""Attack-suite hooks: hidden text, zero-width characters, bidi overrides, homoglyph vendor
+names, fake approval stamps and similar. Empty until `attacks` registers."""

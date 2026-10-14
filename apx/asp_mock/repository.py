@@ -41,8 +41,8 @@ class AspRepository(Protocol):
         """Returns the existing record for `key` if one exists and its `xml_sha256` matches;
         raises `IdempotencyConflictError` if one exists with a *different* `xml_sha256`.
         Otherwise calls `build()` exactly once and stores its result, even when many callers
-        race on the same key concurrently
-        (exactly-once under concurrent duplicate sends)."""
+        race on the same key concurrently (exactly-once under concurrent duplicate
+        sends)."""
         ...
 
 

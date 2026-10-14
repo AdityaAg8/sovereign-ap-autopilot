@@ -1,9 +1,9 @@
-"""Unit tests for the metadata-injection technique (A10): a long free-text Info dict
-value, a zero-width-carrying XMP stream, and an annotation are all flagged PDF_METADATA; the
-standard Producer/CreationDate/... boilerplate every PDF writer sets is never flagged.
-Also covers two hardening cases: an undecodable XMP stream must fail closed with
-`ScanError` rather than being treated as empty/clean, and a baseline Info dict key (Producer,
-Creator, ...) is exempt from the length heuristic but never from the suspicious-codepoint check."""
+"""Unit tests for the metadata-injection technique (A10): a long free-text Info dict value, a
+zero-width-carrying XMP stream, and an annotation are all flagged PDF_METADATA; the standard
+Producer/CreationDate/... boilerplate every PDF writer sets is never flagged. Also covers two
+hardening cases: an undecodable XMP stream must fail closed with `ScanError` rather than being
+treated as empty/clean, and a baseline Info dict key (Producer, Creator, ...) is exempt from the
+length heuristic but never from the suspicious-codepoint check."""
 
 from __future__ import annotations
 

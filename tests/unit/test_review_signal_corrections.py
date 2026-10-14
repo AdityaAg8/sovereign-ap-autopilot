@@ -1,8 +1,8 @@
-"""KNOWN_ISSUES KI-02: `InvoiceWorkflow` hands the corrections carried by a
-`review` signal to `confirm_review` and asks it to check them, so the activity can refuse a signal
-whose corrections are not the ones recorded with the approval. The `workflow.patched` marker keeps
-histories recorded before the change replaying: a pre-change history, whose `confirm_review` got
-only the invoice id and the decision, replays deterministically against today's workflow."""
+"""KNOWN_ISSUES KI-02: `InvoiceWorkflow` hands the corrections carried by a `review` signal to
+`confirm_review` and asks it to check them, so the activity can refuse a signal whose corrections
+are not the ones recorded with the approval. The `workflow.patched` marker keeps histories
+recorded before the change replaying: a pre-change history, whose `confirm_review` got only the
+invoice id and the decision, replays deterministically against today's workflow."""
 
 from __future__ import annotations
 

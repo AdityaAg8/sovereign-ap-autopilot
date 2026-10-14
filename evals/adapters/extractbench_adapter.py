@@ -1,12 +1,12 @@
 """Adapter between our own ExtractBench field records (evals/scorers/extractbench.py) and the
-official run-llama/ExtractBench scoring framework. The
-framework pins its own dependency set (parse-bench, pydantic, scikit-learn, ...) via
-data/external/ExtractBench/pyproject.toml + uv.lock; rather than adding that to this project's
-own dependencies, we run its real `compute_unified_evidence_metrics` scorer -- the same function
-its own evaluation runner and its `extract-bench score-case` CLI call -- inside the clone's own
-`uv`-managed environment, via `uv run --project <clone> python _extractbench_runner.py`, feeding
-it a JSON batch of cases on stdin and reading the per-document metric results back from stdout.
-This process never imports `extract_bench` itself; only the subprocess it launches does."""
+official run-llama/ExtractBench scoring framework. The framework pins its own dependency set
+(parse-bench, pydantic, scikit-learn, ...) via data/external/ExtractBench/pyproject.toml +
+uv.lock; rather than adding that to this project's own dependencies, we run its real
+`compute_unified_evidence_metrics` scorer -- the same function its own evaluation runner and its
+`extract-bench score-case` CLI call -- inside the clone's own `uv`-managed environment, via `uv
+run --project <clone> python _extractbench_runner.py`, feeding it a JSON batch of cases on stdin
+and reading the per-document metric results back from stdout. This process never imports
+`extract_bench` itself; only the subprocess it launches does."""
 
 from __future__ import annotations
 

@@ -1,9 +1,9 @@
 """reports/bakeoff.md, its machine-readable twin reports/bakeoff.json (read by the scoreboard) and
-the ADR-0016 decision block from the bake-off rows:
-per arm UAE field F1 (EN/AR/pooled), valid JSON, p50/p95 latency, ExtractBench short value F1,
-probe and eval-run VRAM, then the decision rule: Qwen3.5-9B stays unless a challenger beats
-it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists;
-a challenger the pre-registered futility rule stopped at an interim look loses (ADR-0016 amdt 1).
+the ADR-0016 decision block from the bake-off rows: per arm UAE field F1 (EN/AR/pooled), valid
+JSON, p50/p95 latency, ExtractBench short value F1, probe and eval-run VRAM, then the decision
+rule: Qwen3.5-9B stays unless a challenger beats it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within
+the C2 budget. PENDING until every row exists; a challenger the pre-registered futility rule
+stopped at an interim look loses (ADR-0016 amdt 1).
 
 Usage: python -m evals.bakeoff.report [--no-adr] [--json reports/bakeoff.json]
 """

@@ -1,8 +1,8 @@
-"""Static checks on `infra/compose.yaml` and the gateway nginx configs
-(docs/security.md G-1/G-2): no secret has a literal default, every published port is loopback-only,
-Postgres and the Temporal UI are published only by the opt-in `devports` profile, and that
-profile's Temporal UI proxy is read-only. The live `docker compose config` parse is an
-integration test at the end of this file."""
+"""Static checks on `infra/compose.yaml` and the gateway nginx configs (docs/security.md G-1/G-2):
+no secret has a literal default, every published port is loopback-only, Postgres and the Temporal
+UI are published only by the opt-in `devports` profile, and that profile's Temporal UI proxy is
+read-only. The live `docker compose config` parse is an integration test at the end of this
+file."""
 
 from __future__ import annotations
 

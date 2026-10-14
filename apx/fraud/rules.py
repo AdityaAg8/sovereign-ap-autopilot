@@ -57,10 +57,9 @@ def _recency_score(days_since: int, window_days: int) -> Score:
 @dataclass(frozen=True, slots=True)
 class DuplicateInvoiceRule:
     """Exact-key duplicate detection, plus perceptual-hash and (optional) learned-embedding
-    near-duplicate detection over page images
-    ("duplicates ... perceptual hash ... Qwen3-VL-Embedding-2B page similarity"). The
-    embedding-backed index lives in
-    `apx/fraud/page_similarity.py`; this rule only depends on the `PageSimilarityIndex` Protocol."""
+    near-duplicate detection over page images (Qwen3-VL-Embedding-2B page similarity). The
+    embedding-backed index lives in `apx/fraud/page_similarity.py`; this rule only depends on the
+    `PageSimilarityIndex` Protocol."""
 
     window_days: int = 14
     max_hamming_distance: int = 6
@@ -212,8 +211,7 @@ def _min_hamming_distance(
 @dataclass(frozen=True, slots=True)
 class SplitInvoiceRule:
     """Flags several invoices from one vendor, each individually under the approval limit,
-    whose sum within a short window reaches or exceeds it
-    ("split invoices under the approval limit within N days")."""
+    whose sum within `window_days` days reaches or exceeds it."""
 
     approval_limit: Money
     window_days: int = 7
@@ -367,8 +365,8 @@ class NewVendorHighAmountRule:
 
 @dataclass(frozen=True, slots=True)
 class SharedIbanRule:
-    """Flags an IBAN also used to pay a different vendor
-    ("the same IBAN shared by different vendors"), a common shell-vendor / impersonation pattern."""
+    """Flags an IBAN also used to pay a different vendor, a common shell-vendor / impersonation
+    pattern."""
 
     rule_id: str = "shared_iban"
     typology: FraudTypology = FraudTypology.VENDOR_IMPERSONATION
@@ -406,7 +404,7 @@ class SharedIbanRule:
 @dataclass(frozen=True, slots=True)
 class PriceVarianceRule:
     """Flags invoice lines whose unit price differs from the PO line they bill by more than a
-    tolerance ("price variance against the PO"). Lines are attributed to PO lines only by
+    tolerance, checked against the PO. Lines are attributed to PO lines only by
     `attribute_po_line` (stated reference, else unique description + quantity), never by
     position. Lines that cannot be attributed get one low-severity `po_line_unmatched` flag
     scored below the review threshold: the reviewer sees them, but they are not a variance."""

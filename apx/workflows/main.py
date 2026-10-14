@@ -425,9 +425,9 @@ def build_reconciler(
 
 def startup_checks() -> None:
     """Process-wide guards that must hold before any activity runs: PIL refuses to decode an
-    image over the raster cap, the learning splits file is readable and the
-    shared approval limit parses and agrees with any legacy setting. A failure raises a
-    typed `ConfigError` and the worker does not start."""
+    image over the raster cap, the learning splits file is readable and the shared approval
+    limit parses and agrees with any legacy setting. A failure raises a typed `ConfigError`
+    and the worker does not start."""
     Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
     require_splits()
     load_approval_limit()

@@ -1,5 +1,5 @@
-"""Unit tests for `apx.scan.cli`: scans a directory of PDFs and
-reports flag counts per technique, and never counts a `ScanError` file as clean."""
+"""Unit tests for `apx.scan.cli`: scans a directory of PDFs and reports flag counts
+per technique, and never counts a `ScanError` file as clean."""
 
 from __future__ import annotations
 

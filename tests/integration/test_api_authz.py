@@ -1,15 +1,14 @@
-"""Integration tests for the API's authorisation matrix against a real, throwaway
-Postgres container (P1-P5): P3 gates an above-limit approval on the
-approver role, P2 bars the bank-detail changer from approving that vendor for 30 days, an
-admin-only user cannot approve payments, field edits need the reviewer role, a proposal
-executes only for its kind's required role, approvals need AWAITING_REVIEW, are idempotent
-and signal the invoice's workflow (all via PolicyGuard -> SqlPaymentStateWriter), and every
-decision/edit appends to the audit chain
-(I4). A SQL-injection payload in the list filter is also proven inert end to end. The
-vendor endpoints (masked bank details, the G-3 verified flag, recent invoices) and the
-document-serving route (authz matrix across every role plus path-traversal attempts,
-docs/security.md B1) are covered here too, reusing the same throwaway Postgres container. Marked
-`integration`, so it needs Docker (`pytest -m integration`)."""
+"""Integration tests for the API's authorisation matrix against a real, throwaway Postgres
+container (P1-P5): P3 gates an above-limit approval on the approver role, P2 bars the
+bank-detail changer from approving that vendor for 30 days, an admin-only user cannot approve
+payments, field edits need the reviewer role, a proposal executes only for its kind's required
+role, approvals need AWAITING_REVIEW, are idempotent and signal the invoice's workflow (all via
+PolicyGuard -> SqlPaymentStateWriter), and every decision/edit appends to the audit chain (I4).
+A SQL-injection payload in the list filter is also proven inert end to end. The vendor endpoints
+(masked bank details, the G-3 verified flag, recent invoices) and the document-serving route
+(authz matrix across every role plus path-traversal attempts, docs/security.md B1) are covered
+here too, reusing the same throwaway Postgres container. Marked `integration`, so it needs
+Docker (`pytest -m integration`)."""
 
 from __future__ import annotations
 
@@ -587,10 +586,10 @@ def test_proposal_accept_requires_its_kinds_capability(api_schema: str) -> None:
 
 
 async def _approval_preconditions_scenario() -> None:
-    """Approvals go through `SqlPaymentStateWriter`, so only an
-    AWAITING_REVIEW invoice can be approved, a repeated approval is an idempotent no-op (one
-    approval row), and every approval -- direct or via an approve_payment proposal -- signals
-    the invoice's workflow. A change_bank proposal lands through the same writer."""
+    """Approvals go through `SqlPaymentStateWriter`, so only an AWAITING_REVIEW invoice can
+    be approved, a repeated approval is an idempotent no-op (one approval row), and every
+    approval -- direct or via an approve_payment proposal -- signals the invoice's workflow.
+    A change_bank proposal lands through the same writer."""
     signaller = _RecordingSignaller()
     received_id = _invoice_id("precondition-received")
     blocked_id = _invoice_id("precondition-blocked")

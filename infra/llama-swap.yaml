@@ -1,8 +1,8 @@
-# llama-swap config for the extract/arbitrate stages: one group per
-# pipeline stage so only the models a stage needs are resident on the single RTX 4080
-#12 GB at once. Model files are the exact ones pinned in infra/models.lock.json,
-# mounted read-only at /models by infra/compose.yaml -- llama-swap never fetches from the
-# network here (that already happened on the host via `make models`).
+# llama-swap config for the extract/arbitrate stages: one group per pipeline stage so
+# only the models a stage needs are resident on the single RTX 4080 12 GB at once. Model
+# files are the exact ones pinned in infra/models.lock.json, mounted read-only at /models
+# by infra/compose.yaml -- llama-swap never fetches from the network here (that already
+# happened on the host via `make models`).
 #
 # Extraction-call policy -- thinking disabled, temperature <= 0.2, fixed
 # seed, JSON-schema output and logprobs -- is applied per request by apx/llm, not baked
@@ -151,10 +151,10 @@ models:
     checkEndpoint: /health
     ttl: 600
 
-  # Extractor A bake-off: offline challengers of extractor-a, never
-  # runtime aliases (apx.llm.client RUNTIME_MODEL_ALIASES), called only by `evals.bakeoff`. Each
-  # runs one slot of 12288 tokens, the same per-slot context extractor-a gives one invoice, since
-  # the bake-off is sequential. `make bakeoff-probe` measures each one before any eval hours.
+  # Extractor A bake-off: offline challengers of extractor-a, never runtime aliases
+  # (apx.llm.client RUNTIME_MODEL_ALIASES), called only by `evals.bakeoff`. Each runs one slot of
+  # 12288 tokens, the same per-slot context extractor-a gives one invoice, since the bake-off is
+  # sequential. `make bakeoff-probe` measures each one before any eval hours.
   bakeoff-q38-27b:
     name: "Bake-off: Qwen3.8-27B UD-IQ2_XXS + mmproj"
     description: "Bake-off challenger, text + page images like extractor-a. Offline only."

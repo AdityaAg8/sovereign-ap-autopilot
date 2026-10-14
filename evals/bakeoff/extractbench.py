@@ -1,9 +1,9 @@
-"""ExtractBench short arm of the Extractor A bake-off: builds one
-schema-constrained request per document from its own `data_schema` (parse text, page images when
-the arm reads images, a size-capped schema digest), turns the answer into an identity-stamped
-row and scores rows through `evals.scorers.extractbench` (the official framework if cloned). A
-request has a hard wall-clock bound: a timeout or HTTP 5xx on one document is a recorded failed
-row (`error_kind`) scored as misses against the arm; only a down or busy server ends a run."""
+"""ExtractBench short arm of the Extractor A bake-off: builds one schema-constrained request per
+document from its own `data_schema` (parse text, page images when the arm reads images, a
+size-capped schema digest), turns the answer into an identity-stamped row and scores rows
+through `evals.scorers.extractbench` (the official framework if cloned). A request has a hard
+wall-clock bound: a timeout or HTTP 5xx on one document is a recorded failed row (`error_kind`)
+scored as misses against the arm; only a down or busy server ends a run."""
 
 from __future__ import annotations
 

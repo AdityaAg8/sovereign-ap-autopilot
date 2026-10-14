@@ -1,7 +1,7 @@
 """CLI logic for `uv run python -m evals.datasets fetch [--set NAME]`: runs the DocILE,
 FATURA, ExtractBench, AgentDojo, prompt-injections and CORD v2 fetchers and (re)writes
-data/manifest.json, one dataset entry per set, present or deferred
-(ADR-0019 §8 for CORD's `--splits` and `--allow-large`)."""
+data/manifest.json, one dataset entry per set, present or deferred (ADR-0019 §8 for
+CORD's `--splits` and `--allow-large`)."""
 
 from __future__ import annotations
 

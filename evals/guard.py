@@ -1,6 +1,6 @@
-"""Injection-guard eval: `build` writes the leak-checked guard dataset to
-data/guard/, and `report` turns per-model score files (from `python -m ml.guard.infer`) into
-reports/guard.md with P/R/F1, per-category recall on the adversarial suite and hard-negative FPR."""
+"""Injection-guard eval: `build` writes the leak-checked guard dataset to data/guard/, and `report`
+turns per-model score files (from `python -m ml.guard.infer`) into reports/guard.md with P/R/F1,
+per-category recall on the adversarial suite and hard-negative FPR."""
 
 from __future__ import annotations
 

@@ -173,11 +173,10 @@ async def test_vendor_history_caps_accounts_and_sets_truncated() -> None:
 
 
 async def test_vendor_history_bank_change_audit_id_is_always_none_today() -> None:
-    """F2 pin: `bank_details_history` has no column linking a change row back to the
-    `audit_log` id that recorded it
-    (schema gap noted in `PgAgentToolbox.vendor_history` and ADR-0010's follow-ups), so
-    `BankChangeView.audit_id` is always None even when the
-    reader returns a change row. Update this test, not just the toolbox, once that join exists."""
+    """F2 pin: `bank_details_history` has no column linking a change row back to the `audit_log`
+    id that recorded it (schema gap noted in `PgAgentToolbox.vendor_history` and ADR-0010's
+    follow-ups), so `BankChangeView.audit_id` is always None even when the reader returns a change
+    row. Update this test, not just the toolbox, once that join exists."""
     header = [
         {
             "vendor_id": VendorId("v1"),

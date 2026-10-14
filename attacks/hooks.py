@@ -38,11 +38,11 @@ if TYPE_CHECKING:
 _TEXT_SOURCE = TemplateTextSource()
 
 # `(category, seed) -> payload_text`, populated by `load_payload_overrides` from whatever a
-# committed manifest actually recorded. Consulted before falling back to
-# `TemplateTextSource`, so a case enriched later by `attacks.generate --redteam`
-# (red-team outputs are cached to manifests) renders the exact cached text a manifest recorded
-# instead of the hook silently recomputing plain template text from the seed and drifting
-# from what the manifest says was injected.
+# committed manifest actually recorded. Consulted before falling back to `TemplateTextSource`,
+# so a case enriched later by `attacks.generate --redteam` (red-team outputs are cached to
+# manifests) renders the exact cached text a manifest recorded instead of the hook silently
+# recomputing plain template text from the seed and drifting from what the manifest says was
+# injected.
 _PAYLOAD_OVERRIDES: dict[tuple[str, int], str] = {}
 
 

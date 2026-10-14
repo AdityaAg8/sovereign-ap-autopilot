@@ -53,9 +53,8 @@ def normalize_for_compare(text: str) -> str:
     presentation-form glyphs (the isolated/initial/medial/final shapes pdfplumber reads back out
     of a PDF's ToUnicode CMap, plus ligatures such as lam-alef) to their plain base letters, digit
     scripts are normalized, bidi-control and NUL filler characters are dropped, and whitespace
-    runs collapse to a single space
-    (a value that wraps across `Label.line_boxes` is rejoined with a literal space that has no
-    rendered glyph of its own)."""
+    runs collapse to a single space (a value that wraps across `Label.line_boxes` is rejoined with
+    a literal space that has no rendered glyph of its own)."""
     text = unicodedata.normalize("NFKC", text)
     text = normalize_digits(text)
     text = text.translate(_STRIP_TABLE)

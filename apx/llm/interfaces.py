@@ -70,8 +70,8 @@ class ToolSpec(Frozen):
 
 
 class StructuredRequest(Frozen):
-    """Tool-free, JSON-schema constrained request. Has no `tools` field by
-    construction: this is the only request type extractors and the arbiter may build (I2)."""
+    """Tool-free, JSON-schema constrained request. Has no `tools` field by construction: this
+    is the only request type extractors and the arbiter may build (I2)."""
 
     model: str
     messages: tuple[ChatMessage, ...]

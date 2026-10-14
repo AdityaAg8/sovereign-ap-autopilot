@@ -1,7 +1,7 @@
-"""Operations dashboard: the KPIs -- straight-through rate, auto-accept error
-rate, model and end-to-end latency, attacks blocked, review queue size -- plus a live pipeline
-snapshot (invoices per stage, most recent activity, which models llama-swap holds). Every
-number is one SQL aggregate over the system of record, so it can be re-derived independently
+"""Operations dashboard: the KPIs -- straight-through rate, auto-accept error rate, model and
+end-to-end latency, attacks blocked, review queue size -- plus a live pipeline snapshot
+(invoices per stage, most recent activity, which models llama-swap holds). Every number is one
+SQL aggregate over the system of record, so it can be re-derived independently
 (`tests/integration/test_api_authz.py::test_ops_dashboard_numbers_equal_independent_checks`
 does exactly that)."""
 

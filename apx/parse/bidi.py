@@ -1,8 +1,8 @@
-"""Visual-to-logical reordering of one PDF text line for the born-digital parse path.
-A PDF text layer draws shaped Arabic glyphs left to right in visual order, so
-pdfplumber returns each Arabic word's letters reversed, as presentation forms; this module undoes
-the Unicode Bidirectional Algorithm's reordering (UAX #9 rules W4-W7, N1-N2, I1-I2, L2) per word,
-so `apx.parse.digital` can emit logical text while every word keeps its own box (I1)."""
+"""Visual-to-logical reordering of one PDF text line for the born-digital parse path. A PDF text
+layer draws shaped Arabic glyphs left to right in visual order, so pdfplumber returns each Arabic
+word's letters reversed, as presentation forms; this module undoes the Unicode Bidirectional
+Algorithm's reordering (UAX #9 rules W4-W7, N1-N2, I1-I2, L2) per word, so `apx.parse.digital`
+can emit logical text while every word keeps its own box (I1)."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""Unit tests for the API's Temporal wiring (review F3/F4): the workflow
-starter uses the document sha256 as the workflow id and treats an already-started workflow as
-success, the review signaller delivers `ReviewDecision` and turns delivery failures into a typed
+"""Unit tests for the API's Temporal wiring (review F3/F4): the workflow starter uses the
+document sha256 as the workflow id and treats an already-started workflow as success, the review
+signaller delivers `ReviewDecision` and turns delivery failures into a typed
 `WorkflowSignalError`, and both fail loudly when `API_TEMPORAL_ADDRESS` is unset. A stub client
 stands in for the Temporal server; the units under test are real."""
 

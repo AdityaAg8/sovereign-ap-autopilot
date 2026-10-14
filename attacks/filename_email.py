@@ -1,9 +1,8 @@
 """attacks/filename_email.py: builds a filesystem-legal-but-malicious filename and a simulated
-phishing/BEC email body for the "filename/email-body injection" category
-(docs/security.md A11). Unlike every other category, this one never touches the invoice's
-rendered content -- the payload lives entirely in the untrusted text surfaces an ingest
-pipeline sees before the document is even opened (`ingest:filename`, `ingest:email_body`,
-docs/security.md SEC-13)."""
+phishing/BEC email body for the "filename/email-body injection" category (docs/security.md
+A11). Unlike every other category, this one never touches the invoice's rendered content --
+the payload lives entirely in the untrusted text surfaces an ingest pipeline sees before the
+document is even opened (`ingest:filename`, `ingest:email_body`, docs/security.md SEC-13)."""
 
 from __future__ import annotations
 

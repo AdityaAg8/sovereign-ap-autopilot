@@ -1,8 +1,8 @@
-"""The runtime injection guard (P4, ADR-0017): scores a document's
-text spans with an `InjectionClassifier`, reads the review and block thresholds chosen on the
-cal split from the checkpoint's guard.json, and turns every span at or above review into an
-INJECTION scan flag whose score lands on the policy engine's own P4 scale. Fails closed: a
-missing artifact or a classifier failure raises `ScanError`, never an empty (clean) result."""
+"""The runtime injection guard (P4, ADR-0017): scores a document's text spans with an
+`InjectionClassifier`, reads the review and block thresholds chosen on the cal split from the
+checkpoint's guard.json, and turns every span at or above review into an INJECTION scan flag
+whose score lands on the policy engine's own P4 scale. Fails closed: a missing artifact or a
+classifier failure raises `ScanError`, never an empty (clean) result."""
 
 from __future__ import annotations
 

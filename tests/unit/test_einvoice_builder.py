@@ -1,10 +1,9 @@
 """Unit tests for `apx.einvoice.builder`: PINT AE UBL 2.1 Invoice/CreditNote XML built from
 `InvoiceFields` plus a `factory.erp`-generated vendor's admin-verified IBAN passes the runtime
 schematron 100% for every VAT category (S, Z, E, AE, O) and for a credit note; a missing
-mandatory element fails with its rule ID
-(all three marked `artifacts`, they need the real pinned PINT AE data). The builder's own
-input-validation errors (no verified IBAN, unknown
-VAT category, missing or non-AED currency, missing VAT rate or category) and the canonical-diff
+mandatory element fails with its rule ID (all three marked `artifacts`, they need the real
+pinned PINT AE data). The builder's own input-validation errors (no verified IBAN, unknown VAT
+category, missing or non-AED currency, missing VAT rate or category) and the canonical-diff
 stability check need no schematron run at all, so they stay unmarked and run in the default
 suite."""
 

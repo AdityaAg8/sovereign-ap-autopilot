@@ -1,8 +1,8 @@
 """Postgres-backed `AuditLog`: appends to `audit_log` under a transaction-scoped advisory lock so
-concurrent writers extend the hash chain one at a time and it can never fork
-(I4). `append_in` (and `append_in_transaction` for any `AuditLog`) writes the event
-inside the caller's transaction, so a state change and its audit entry commit or roll back
-together: no phantom entry for a rolled-back write, no committed write without its entry."""
+concurrent writers extend the hash chain one at a time and it can never fork (I4). `append_in`
+(and `append_in_transaction` for any `AuditLog`) writes the event inside the caller's
+transaction, so a state change and its audit entry commit or roll back together: no phantom entry
+for a rolled-back write, no committed write without its entry."""
 
 from __future__ import annotations
 

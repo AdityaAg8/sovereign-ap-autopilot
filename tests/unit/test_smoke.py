@@ -1,6 +1,6 @@
-"""Unit tests for scripts/smoke.py: nvidia-smi output parsing, the VRAM
-sampler thread, report rendering, and the llama-swap check logic run against a fake HTTP
-transport (httpx.MockTransport) -- no GPU, no network, no real llama-swap server."""
+"""Unit tests for scripts/smoke.py: nvidia-smi output parsing, the VRAM sampler thread,
+report rendering, and the llama-swap check logic run against a fake HTTP transport
+(httpx.MockTransport) -- no GPU, no network, no real llama-swap server."""
 
 from __future__ import annotations
 

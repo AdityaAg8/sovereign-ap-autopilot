@@ -72,9 +72,8 @@ class DecisionAction(StrEnum):
 
 
 class LabelSplit(StrEnum):
-    """Dataset split a label belongs to
-    (I5: eval/cal/test data never reach training); `None` means the label is not yet assigned to a
-    split."""
+    """Dataset split a label belongs to (I5: eval/cal/test data never reach training); `None`
+    means the label is not yet assigned to a split."""
 
     TRAIN = "train"
     CAL = "cal"

@@ -1,7 +1,7 @@
 """Purchase order and line data shared by validate (3-way match) and fraud (PO price-variance
 rule), plus the deterministic invoice-line -> PO-line attribution the price-variance rule uses,
-kept in `common` so neither module has to import the other
-(docs/architecture.md import-direction rule)."""
+kept in `common` so neither module has to import the other (docs/architecture.md
+import-direction rule)."""
 
 from __future__ import annotations
 

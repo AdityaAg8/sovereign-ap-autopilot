@@ -1,6 +1,5 @@
-"""Unit tests for the persisted trust calibrator
-(`apx.trust.artifact` and `apx.trust.calibration.FrozenCalibrator`): the artifact reproduces the
-fitted calibrator's
+"""Unit tests for the persisted trust calibrator (`apx.trust.artifact` and
+`apx.trust.calibration.FrozenCalibrator`): the artifact reproduces the fitted calibrator's
 predictions exactly, the store pins each artifact's sha256 and refuses missing or tampered files,
 and the ADR-0015 invalidation marker written by a promotion is read and cleared correctly."""
 

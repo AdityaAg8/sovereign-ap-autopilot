@@ -107,9 +107,9 @@ def build_label_set(
     line_field_names: frozenset[str],
 ) -> LabelSet:
     """Pure transform from one `factory.render` JS collection into a `LabelSet`: deterministic,
-    same `raw` input always yields the same labels. Raises `ValueError` if a
-    `data-field` name is not part of the extraction schema, or if a field rendered with no
-    visible box at all (a template bug, not something to silently drop)."""
+    same `raw` input always yields the same labels. Raises `ValueError` if a `data-field` name
+    is not part of the extraction schema, or if a field rendered with no visible box at all (a
+    template bug, not something to silently drop)."""
     known = header_field_names | line_field_names
     labels: list[Label] = []
     for entry in raw["fields"]:

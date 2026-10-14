@@ -1,7 +1,6 @@
 """Unit tests for `apx.ingest.validate`, the upload hardening shared by the watcher and the API
-upload path: magic-byte sniffing ignores the claimed content type,
-the size and page caps are enforced, and an encrypted or malformed PDF is rejected. No database
-or network is needed."""
+upload path: magic-byte sniffing ignores the claimed content type, the size and page caps are
+enforced, and an encrypted or malformed PDF is rejected. No database or network is needed."""
 
 from __future__ import annotations
 

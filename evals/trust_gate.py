@@ -1,10 +1,10 @@
-"""Trust cal job and gate (ADR-0009 §5-§8; ADR-0015): fits the trust
-calibrator on UAE cal rows of A and B, picks λ̂ by Learn-then-Test for alpha in {0.5, 1, 2}% at
-delta = 5%, saves the versioned artifact under data/trust/, measures the error among
-auto-accepted fields on UAE test rows, and only when that test gate passes and the artifact was
-fitted on the served champions activates it and clears the ADR-0015 invalidation. Writes
-reports/trust_gate.md + .json. `--extractors a` (ADR-0018 §5) fits and gates the champion A alone,
-with the same alpha, delta, λ grid and test gate, and never activates (the runtime serves B).
+"""Trust cal job and gate (ADR-0009 §5-§8; ADR-0015): fits the trust calibrator on UAE cal rows of
+A and B, picks λ̂ by Learn-then-Test for alpha in {0.5, 1, 2}% at delta = 5%, saves the versioned
+artifact under data/trust/, measures the error among auto-accepted fields on UAE test rows, and
+only when that test gate passes and the artifact was fitted on the served champions activates it
+and clears the ADR-0015 invalidation. Writes reports/trust_gate.md + .json. `--extractors a`
+(ADR-0018 §5) fits and gates the champion A alone, with the same alpha, delta, λ grid and test
+gate, and never activates (the runtime serves B).
 
 Usage: python -m evals.trust_gate calibrate [--extractors a b] [--cal-a-rows ...] ...
        python -m evals.trust_gate verify     (the real-data half of `make verify-m7`)

@@ -1,8 +1,8 @@
 """attacks/generate.py: `python -m attacks.generate` builds the attack-suite manifests
 deterministically from one suite seed and writes them to `attacks/manifests/<category>.json`.
-The default run uses only `attacks.textsource.TemplateTextSource` and never
-touches a GPU or the network; `--redteam` additionally asks the uncensored Qwen3.5-9B red-team
-model (`attacks.textsource.LlamaSwapRedTeamTextSource`) to enrich every case's payload text and
+The default run uses only `attacks.textsource.TemplateTextSource` and never touches a GPU or
+the network; `--redteam` additionally asks the uncensored Qwen3.5-9B red-team model
+(`attacks.textsource.LlamaSwapRedTeamTextSource`) to enrich every case's payload text and
 writes the result straight back into the manifest, so it is fetched at most once per case
 ("cache outputs to manifests")."""
 

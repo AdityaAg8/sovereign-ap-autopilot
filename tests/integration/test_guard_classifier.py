@@ -4,7 +4,7 @@ hard negatives ("pay to the account on file") must stay below it, and a full `De
 pass must flag an injected PDF line and leave a clean invoice alone. Needs torch + transformers
 (the apx image) and the local checkpoint, so it is `integration` and never runs in CI:
 
-    docker build -f infra/docker/apx/Dockerfile -t apx-guard-test:local.
+    docker build -f infra/docker/apx/Dockerfile -t apx-guard-test:local .
     docker run --rm --user root -e APX_GUARD_MODEL_DIR=/models/guard-modernbert \
       -v "$PWD:/src:ro" \
       -v "$PWD/data/guard/checkpoints/guard-modernbert:/models/guard-modernbert:ro" \

@@ -1,8 +1,7 @@
-"""Extraction prompt builder: turns a `ParsedDocument` into a tool-free
-`StructuredRequest` holding the parse text in reading order plus downscaled page images, under
-the extraction call settings (thinking off, schema-constrained JSON, temperature 0, fixed seed,
-logprobs on). Document content is fenced as data: the system prompt says it never carries
-instructions."""
+"""Extraction prompt builder: turns a `ParsedDocument` into a tool-free `StructuredRequest`
+holding the parse text in reading order plus downscaled page images, under the extraction call
+settings (thinking off, schema-constrained JSON, temperature 0, fixed seed, logprobs on).
+Document content is fenced as data: the system prompt says it never carries instructions."""
 
 from __future__ import annotations
 

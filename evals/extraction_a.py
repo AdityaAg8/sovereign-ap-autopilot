@@ -1,26 +1,25 @@
-"""Extractor A eval: runs the live Extractor A over the UAE factory test split
-(document ids from evals/splits.json, files from a factory output dir), grounds each field onto
-the parse words and writes `reports/extraction_a.md`: valid-JSON rate (gate ≥ 99%), grounding
-rate, field accuracy against the factory labels, box agreement and latency. Per-document rows go
-to a resumable JSONL under logs/ so an interrupted GPU run continues where it stopped; each row
-carries the run identity (alias, served GGUF sha256, prompt version) and the serving identity
-(llama-swap args of the alias, parser build), and a resume refuses a file written by another
-build, prompt, server config or parser. Rows also record the client concurrency they were run at,
-so a consumer of their latency (the bake-off's arm a reuse) can check it was measured one
-request at a time. Parses come from the shared `evals.parse_cache`
-(`--no-parse-cache` parses inline), so a resume or a later eval never re-OCRs a scan.
-`--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
-llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
-`--split cal` runs the same harness over the UAE cal split for the trust calibration; every
-row also records what the trust features need (mean/min logprob, final value, OCR support).
-A `has_scan` document is fed as its runtime scan form (evals.scan_input: the scan PNGs as an
-image-only PDF, parsed by the OCR service like any scanned upload); every row records its
-`input_kind` and the report splits every metric by input kind and Arabic-first layout.
-Every row (A and B) is scored on the parse words (grounding, box IoU, OCR support for the trust
+"""Extractor A eval: runs the live Extractor A over the UAE factory test split (document ids from
+evals/splits.json, files from a factory output dir), grounds each field onto the parse words and
+writes `reports/extraction_a.md`: valid-JSON rate (gate ≥ 99%), grounding rate, field accuracy
+against the factory labels, box agreement and latency. Per-document rows go to a resumable JSONL
+under logs/ so an interrupted GPU run continues where it stopped; each row carries the run
+identity (alias, served GGUF sha256, prompt version) and the serving identity (llama-swap args of
+the alias, parser build), and a resume refuses a file written by another build, prompt, server
+config or parser. Rows also record the client concurrency they were run at, so a consumer of their
+latency (the bake-off's arm a reuse) can check it was measured one request at a time. Parses come
+from the shared `evals.parse_cache` (`--no-parse-cache` parses inline), so a resume or a later
+eval never re-OCRs a scan. `--extractor b --model <alias>` runs the same harness for Extractor B
+(image-only prompt, any llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8
+P1/P3 gates require. `--split cal` runs the same harness over the UAE cal split for the trust
+calibration; every row also records what the trust features need (mean/min logprob, final value,
+OCR support). A `has_scan` document is fed as its runtime scan form (evals.scan_input: the scan
+PNGs as an image-only PDF, parsed by the OCR service like any scanned upload); every row records
+its `input_kind` and the report splits every metric by input kind and Arabic-first layout. Every
+row (A and B) is scored on the parse words (grounding, box IoU, OCR support for the trust
 features), so B runs the full parse too. A transient parse-service failure is retried with backoff
 (`evals.parse_cache.retrying`); a document that still fails gets no row, is appended to
-`<rows>.parse_failures.jsonl`, counted in the report and fails the run (exit 1); a resume
-retries it.
+`<rows>.parse_failures.jsonl`, counted in the report and fails the run (exit 1); a resume retries
+it.
 
 Usage: python -m evals.extraction_a --data-dir <factory out>/test [--limit N] [--base-url URL]
        [--extractor a|b] [--model ALIAS] [--split test|cal] [--parse-cache DIR | --no-parse-cache]

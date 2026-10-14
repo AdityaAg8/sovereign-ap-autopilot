@@ -1,9 +1,9 @@
-"""The review decisions must respect the invoice state
-machine. A rejected invoice can never be approved afterwards, and `send_to_review` never pulls
-an invoice out of a terminal or in-flight payment state (SENT, ARCHIVED, BLOCKED, FAILED,
-APPROVED) back into the review queue, where a later approval would write a second payment
-decision for it. Runs against a throwaway Postgres like `test_api_authz.py`, whose helpers it
-reuses, on its own container name and port so the two modules can run side by side."""
+"""The review decisions must respect the invoice state machine. A rejected invoice can never
+be approved afterwards, and `send_to_review` never pulls an invoice out of a terminal or
+in-flight payment state (SENT, ARCHIVED, BLOCKED, FAILED, APPROVED) back into the review
+queue, where a later approval would write a second payment decision for it. Runs against a
+throwaway Postgres like `test_api_authz.py`, whose helpers it reuses, on its own container
+name and port so the two modules can run side by side."""
 
 from __future__ import annotations
 

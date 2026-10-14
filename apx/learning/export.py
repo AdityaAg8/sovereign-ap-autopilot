@@ -1,10 +1,9 @@
-"""Retraining export (I5): turns reviewer corrections in the `labels`
-table into a JSON-lines training manifest for `ml/`, reading only corrections already
-assigned to the training split. The query below is the only thing that decides which rows are
-eligible; `_require_train_split` re-checks every fetched row by identity against
-`LabelSplit.TRAIN` before it is written out, so a future change to the query (or to this
-function) that widens what gets exported fails loudly instead of silently leaking eval data
-into training."""
+"""Retraining export (I5): turns reviewer corrections in the `labels` table into a JSON-lines
+training manifest for `ml/`, reading only corrections already assigned to the training split.
+The query below is the only thing that decides which rows are eligible;
+`_require_train_split` re-checks every fetched row by identity against `LabelSplit.TRAIN`
+before it is written out, so a future change to the query (or to this function) that widens
+what gets exported fails loudly instead of silently leaking eval data into training."""
 
 from __future__ import annotations
 

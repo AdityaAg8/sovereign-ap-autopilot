@@ -306,8 +306,8 @@ def _generate_lines(rng: random.Random, n_lines: int, tax_case: TaxCase) -> tupl
 
 def compute_totals(lines: tuple[InvoiceLine, ...]) -> tuple[Decimal, Decimal, Decimal]:
     """Subtotal, VAT total and grand total for `lines`: line-level rounding then summed, matching
-    the rounding convention used inside the Jinja2 templates
-    (acceptance: "VAT totals in HTML equal ERP math")."""
+    the rounding convention used inside the Jinja2 templates (acceptance: "VAT totals in HTML
+    equal ERP math")."""
     subtotal = sum((line.net_amount for line in lines), start=Decimal("0"))
     vat_total = sum((line.vat_amount for line in lines), start=Decimal("0"))
     total = subtotal + vat_total

@@ -1,8 +1,7 @@
-"""Behavioural proof that no `apx.agent` tool changes payment state
-(P5, ADR-0008 K3, ADR-0010 D2): with a spy `SqlReader`/`ProposalSink`, every one of the six tools
-performs only `fetch_all` reads and, for the two propose tools, exactly one `submit` of a
-pending proposal whose kind is in `TOOL_PROPOSAL_KINDS`. A read tool given a `DenyingSink` must
-never call it at all."""
+"""Behavioural proof that no `apx.agent` tool changes payment state (P5, ADR-0008 K3, ADR-0010
+D2): with a spy `SqlReader`/`ProposalSink`, every one of the six tools performs only `fetch_all`
+reads and, for the two propose tools, exactly one `submit` of a pending proposal whose kind is in
+`TOOL_PROPOSAL_KINDS`. A read tool given a `DenyingSink` must never call it at all."""
 
 from __future__ import annotations
 

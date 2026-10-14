@@ -1,11 +1,10 @@
 """Tests evals/pint_ae's fetch+compile+validate pipeline against the real, pinned PINT AE
-artifacts: every official sample XML validates clean, and a sample
-mutated to drop a mandatory element fails with the expected schematron rule ID. The first run
-fetches the ~1 MB pinned bundle from docs.peppol.eu (network); evals/pint_ae/fetch.py caches it
-under data/pint_ae/, so repeat runs are offline. Marked `artifacts`
-(unit tests must never touch the network) and excluded from the default `pytest` selection -- run
-via
-`uv run python -m evals.pint_ae.fetch && uv run pytest -m artifacts`."""
+artifacts: every official sample XML validates clean, and a sample mutated to drop a mandatory
+element fails with the expected schematron rule ID. The first run fetches the ~1 MB pinned bundle
+from docs.peppol.eu (network); evals/pint_ae/fetch.py caches it under data/pint_ae/, so repeat
+runs are offline. Marked `artifacts` (unit tests must never touch the network) and excluded from
+the default `pytest` selection -- run via `uv run python -m evals.pint_ae.fetch && uv run pytest
+-m artifacts`."""
 
 from __future__ import annotations
 

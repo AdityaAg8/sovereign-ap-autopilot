@@ -291,10 +291,8 @@ def _capture_page_screenshot(page: Page, *, y: float) -> bytes:
 
 
 class RenderWorker:
-    """One Chromium browser + context, reused across many `render()` calls. Not thread-safe;
-    create one instance per worker process when parallelizing
-    ("parallelize rendering... multiple browser contexts/processes"), typically via
-    `factory.build`'s
+    """One Chromium browser + context, reused across many `render()` calls. Not thread-safe; to
+    render in parallel, create one instance per worker process, typically via `factory.build`'s
     process-pool initializer."""
 
     def __init__(self, *, scale: float = 2.0) -> None:

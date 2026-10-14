@@ -287,7 +287,8 @@ def test_scoreboard_markdown_tables_are_pipe_aligned(tmp_path: Path) -> None:
     `_render_table` is meant to produce (design bar: aligned tables)."""
     markdown = render_scoreboard([], reader=_reader(tmp_path), now=NOW)
     tables = _tables(markdown)
-    # §5 table (6 columns), supplementary table and the ADR-0019 real-data table (5 columns).
+    # The scoreboard metrics table (6 columns), the supplementary table and the ADR-0019
+    # real-data table (5 columns).
     assert [t[0].count("|") for t in tables] == [7, 6, 6]
     for table in tables:
         assert len({len(line) for line in table}) == 1

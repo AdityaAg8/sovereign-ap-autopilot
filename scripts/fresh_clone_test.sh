@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Fresh-clone check: clones a committed ref into a temporary directory and proves
-# the tracked tree alone installs, lints, type-checks, passes the unit tests, validates the
-# Compose file and builds the apx image -- nothing untracked (planning files, data/, models/,
-# a local .venv or .env) is needed. Writes reports/fresh_clone.md. Usage: fresh_clone_test.sh [ref]
+# Fresh-clone check: clones a committed ref into a temporary directory and proves the tracked tree
+# alone installs, lints, type-checks, passes the unit tests, validates the Compose file and builds
+# the apx image -- nothing untracked (planning files, data/, models/, a local .venv or .env) is
+# needed. Writes reports/fresh_clone.md. Usage: fresh_clone_test.sh [ref]
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

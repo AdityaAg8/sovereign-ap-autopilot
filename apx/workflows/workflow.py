@@ -2,10 +2,10 @@
 auto-completing or waiting for a human review signal based on `apx.policy`'s routing decision.
 Deterministic by construction: activities (in `apx.workflows.activities`) do every I/O call,
 external side effect and wall-clock read; this file only sequences them and holds in-memory
-state for the `status` query. A `review` signal is acted on only once
-`confirm_review` finds it backed by the database; an unbacked one is ignored, and
-one that arrives before the review wait is buffered for it. An approval's
-corrections are checked there too: they must be the ones recorded with the approval."""
+state for the `status` query. A `review` signal is acted on only once `confirm_review` finds
+it backed by the database; an unbacked one is ignored, and one that arrives before the review
+wait is buffered for it. An approval's corrections are checked there too: they must be the
+ones recorded with the approval."""
 
 from __future__ import annotations
 
@@ -400,16 +400,16 @@ class InvoiceWorkflow:
         self._status = InvoiceStatus.ARCHIVED
 
     async def _await_backed_review(self, invoice_id: InvoiceId) -> ReviewDecision:
-        """Waits for a `review` signal the database backs. The signal alone is not
-        authority (anyone who can reach Temporal can send one), so before the workflow builds or
-        sends anything, `confirm_review` must find the approval row with a digest matching the
-        current invoice (or the recorded rejection). An unbacked signal is audited there and
-        dropped, and the invoice stays awaiting review for a real decision. An approval the API
-        did record but whose digest or payee has since moved raises `StaleApprovalError`
-        (non-retryable), so the run ends FAILED with that reason instead of waiting forever for
-        a decision nobody can send again. The signal's corrections, which
-        `apply_review` applies next, must digest to those recorded with the approval, and an edit
-        of the invoice's corrections since the approval makes it stale."""
+        """Waits for a `review` signal the database backs. The signal alone is not authority
+        (anyone who can reach Temporal can send one), so before the workflow builds or sends
+        anything, `confirm_review` must find the approval row with a digest matching the current
+        invoice (or the recorded rejection). An unbacked signal is audited there and dropped, and
+        the invoice stays awaiting review for a real decision. An approval the API did record but
+        whose digest or payee has since moved raises `StaleApprovalError` (non-retryable), so the
+        run ends FAILED with that reason instead of waiting forever for a decision nobody can
+        send again. The signal's corrections, which `apply_review` applies next, must digest to
+        those recorded with the approval, and an edit of the invoice's corrections since the
+        approval makes it stale."""
         guarded = workflow.patched(REVIEW_GUARD_PATCH)
         while True:
             await workflow.wait_condition(lambda: self._review is not None)
@@ -434,13 +434,13 @@ class InvoiceWorkflow:
 
     @workflow.signal
     def review(self, decision: ReviewDecision) -> None:
-        """Delivered once a human reviewer decides a REVIEW-routed invoice. Kept while
-        the workflow waits for review, or buffered for that wait when it arrives earlier: the
-        `route` activity commits AWAITING_REVIEW before this workflow's own status says so, and
-        the API may already have approved and signalled. Buffering is safe because
-        `confirm_review` still refuses anything the database does not back; if the route turns
-        out AUTO or BLOCK the buffered decision is never read. Ignored once a decision is held
-        or after the review point, so a duplicate or stray signal cannot flip a decided invoice."""
+        """Delivered once a human reviewer decides a REVIEW-routed invoice. Kept while the workflow
+        waits for review, or buffered for that wait when it arrives earlier: the `route` activity
+        commits AWAITING_REVIEW before this workflow's own status says so, and the API may already
+        have approved and signalled. Buffering is safe because `confirm_review` still refuses
+        anything the database does not back; if the route turns out AUTO or BLOCK the buffered
+        decision is never read. Ignored once a decision is held or after the review point, so a
+        duplicate or stray signal cannot flip a decided invoice."""
         if self._review is not None:
             return
         if self._status is InvoiceStatus.AWAITING_REVIEW:

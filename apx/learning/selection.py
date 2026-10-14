@@ -1,9 +1,9 @@
-"""Active-learning candidate selection: scores every (invoice, field) pair
-that has not yet been reviewer-corrected on three deterministic signals -- low model
-confidence, extractor A/B disagreement and how often that field name has needed correction
-historically -- and ranks them for the next round of human review. The rule is a fixed
-weighted sum with no learned or tuned parameters, so a run is exactly reproducible from the
-same database state (I6: no threshold here is adjusted to make anything pass)."""
+"""Active-learning candidate selection: scores every (invoice, field) pair that has not yet
+been reviewer-corrected on three deterministic signals -- low model confidence, extractor
+A/B disagreement and how often that field name has needed correction historically -- and
+ranks them for the next round of human review. The rule is a fixed weighted sum with no
+learned or tuned parameters, so a run is exactly reproducible from the same database state
+(I6: no threshold here is adjusted to make anything pass)."""
 
 from __future__ import annotations
 

@@ -1,10 +1,9 @@
-"""In-memory token-bucket throttle for `POST /auth/login`
-(docs/security.md B8): an account bucket per normalised email slows password guessing against one
-account, and a
-coarse per-client-IP bucket with a much higher limit caps one source's total attempts. Keys are
-sha256 digests in capped maps, so memory stays bounded whatever the usernames look like; a refused
-request never creates an account bucket, and eviction drops the fullest old bucket, so a spray of
-usernames cannot flush a drained account's bucket back to full."""
+"""In-memory token-bucket throttle for `POST /auth/login` (docs/security.md B8): an account bucket
+per normalised email slows password guessing against one account, and a coarse per-client-IP
+bucket with a much higher limit caps one source's total attempts. Keys are sha256 digests in
+capped maps, so memory stays bounded whatever the usernames look like; a refused request never
+creates an account bucket, and eviction drops the fullest old bucket, so a spray of usernames
+cannot flush a drained account's bucket back to full."""
 
 from __future__ import annotations
 

@@ -149,13 +149,13 @@ services:
       start_period: 15s
 
   llama-swap:
-    # CUDA build; models/ is downloaded and checksum-verified on the host by `make models`
-    # (never inside this network) and mounted read-only. See infra/llama-swap.yaml.
-    # Pinned by digest (the "next verified build" rule): v93-cuda-b4879 (llama.cpp
-    # b4879, ~early 2025) predates the Qwen3.5/Gemma-4 architectures the model plan pins, and failed every
-    # chat-completions request with "unable to start process: can not start(), upstream proxy
-    # missing". Re-resolved 2026-09-22 to the newest tagged CUDA build, v257-cuda-b11096 (same
-    # digest as the floating `cuda` tag then); re-run `make smoke` before bumping this further.
+    # CUDA build; models/ is downloaded and checksum-verified on the host by `make models` (never
+    # inside this network) and mounted read-only. See infra/llama-swap.yaml. Pinned by digest (the
+    # "next verified build" rule): v93-cuda-b4879 (llama.cpp b4879, ~early 2025) predates the
+    # Qwen3.5/Gemma-4 architectures the model plan pins, and failed every chat-completions request
+    # with "unable to start process: can not start(), upstream proxy missing". Re-resolved
+    # 2026-09-22 to the newest tagged CUDA build, v257-cuda-b11096 (same digest as the floating
+    # `cuda` tag then); re-run `make smoke` before bumping this further.
     image: ghcr.io/mostlygeek/llama-swap@sha256:a6f3a605d29695112945a577f53d7e1f0888e3421e1ceba897cea971c1d6f2c1
     restart: unless-stopped
     command: ["-config", "/config/llama-swap.yaml", "-listen", ":8080"]
@@ -185,12 +185,12 @@ services:
       start_period: 20s
 
   parse:
-    # Real PaddleOCR-VL-1.6 GPU service, replacing the early placeholder.
-    # Serves the scan path only: born-digital PDFs are parsed host-side by apx.parse.digital
-    # (pdfplumber), so the ≥98% IoU gate never depends on this container being up. GPU memory
-    # is capped in-process (PADDLE_GPU_MEM_FRACTION, default 0.35 of the card, ~4.3 GB on 12 GB
-    # -- comfortably above the ~3.2 GB peak reports/smoke.md measured) rather than here, since
-    # only the process itself can bound its own CUDA allocator.
+    # Real PaddleOCR-VL-1.6 GPU service, replacing the early placeholder. Serves the scan path
+    # only: born-digital PDFs are parsed host-side by apx.parse.digital (pdfplumber), so the
+    # ≥98% IoU gate never depends on this container being up. GPU memory is capped in-process
+    # (PADDLE_GPU_MEM_FRACTION, default 0.35 of the card, ~4.3 GB on 12 GB -- comfortably above
+    # the ~3.2 GB peak reports/smoke.md measured) rather than here, since only the process
+    # itself can bound its own CUDA allocator.
     build:
       context: ./docker/parse
     restart: unless-stopped
@@ -221,11 +221,11 @@ services:
       start_period: 60s
 
   page-embed:
-    # Qwen3-VL-Embedding-2B for fraud near-duplicate pages. Not a
-    # llama-swap model: the pinned checkpoint is safetensors (no GGUF), so it is served like
-    # `parse`, by transformers in a child process the worker stops through POST /unload. It is
-    # the worker's own GPU stage (`page-similarity`, ADR-0013), so it never shares the card with
-    # Extractor A; the allocator cap below is an unmeasured estimate until the probe runs.
+    # Qwen3-VL-Embedding-2B for fraud near-duplicate pages. Not a llama-swap model: the pinned
+    # checkpoint is safetensors (no GGUF), so it is served like `parse`, by transformers in a
+    # child process the worker stops through POST /unload. It is the worker's own GPU stage
+    # (`page-similarity`, ADR-0013), so it never shares the card with Extractor A; the allocator
+    # cap below is an unmeasured estimate until the probe runs.
     build:
       context: ./docker/page-embed
     restart: unless-stopped
@@ -250,12 +250,12 @@ services:
       start_period: 30s
 
   gateway:
-    # Static nginx reverse proxy (docs/adr/0001 amendment): the only
-    # container on both `app` and `edge`, so it is the only way a host tool or browser
-    # reaches llama-swap/Phoenix/MLflow/the API (Postgres and the Temporal UI only through the
-    # opt-in `devports` service below). Runs no application code -- config is a
-    # read-only bind mount, never baked in or templated. Add a proxied port here, never a
-    # new host-published port on another service.
+    # Static nginx reverse proxy (docs/adr/0001 amendment): the only container on both `app`
+    # and `edge`, so it is the only way a host tool or browser reaches
+    # llama-swap/Phoenix/MLflow/the API (Postgres and the Temporal UI only through the opt-in
+    # `devports` service below). Runs no application code -- config is a read-only bind mount,
+    # never baked in or templated. Add a proxied port here, never a new host-published port on
+    # another service.
     image: nginx:1.27-alpine
     restart: unless-stopped
     volumes:
@@ -285,11 +285,11 @@ services:
       retries: 20
       start_period: 5s
 
-  # apx application services, one image: the REST/SSE API and the invoice
-  # worker (Temporal activities + inbox watcher). Both stay on `app`, so every model, OCR and
-  # database call is in-network; the host reaches the API only through `gateway`. `data/` is
-  # shared so an upload stored by the API is the same file the worker reads. `migrate` is the
-  # one-shot schema upgrade both wait for.
+  # apx application services, one image: the REST/SSE API and the invoice worker (Temporal
+  # activities + inbox watcher). Both stay on `app`, so every model, OCR and database call is
+  # in-network; the host reaches the API only through `gateway`. `data/` is shared so an
+  # upload stored by the API is the same file the worker reads. `migrate` is the one-shot
+  # schema upgrade both wait for.
   migrate:
     build: &apx-build
       context: ..
@@ -398,10 +398,10 @@ services:
 
   toolbox:
     # Linux Python 3.12 + uv + CUDA torch/transformers environment for `make smoke`, evals
-    # and training (docs/adr/0006 addendum): the Windows host blocks
-    # native DLLs from these wheels under Smart App Control, so this work runs in Docker
-    # instead. Opt-in only (`--profile dev`); never started by `make up`. Repo mounted
-    # read-write for `reports/`; `models/` mounted read-only, same as llama-swap.
+    # and training (docs/adr/0006 addendum): the Windows host blocks native DLLs from
+    # these wheels under Smart App Control, so this work runs in Docker instead. Opt-in
+    # only (`--profile dev`); never started by `make up`. Repo mounted read-write for
+    # `reports/`; `models/` mounted read-only, same as llama-swap.
     profiles: [dev]
     build:
       context: ./docker/toolbox
@@ -476,11 +476,11 @@ services:
       dockerfile: infra/docker/exporter/Dockerfile
 
   devports:
-    # Opt-in host access for dev tools only: Postgres on 127.0.0.1:5432 (a
-    # raw TCP passthrough) and a read-only Temporal Web UI on 127.0.0.1:8233 (GET only, write
-    # actions hidden). Never started by `make up`; enable with `COMPOSE_PROFILES=devports make up`
-    # (needed by host-run DB tools such as `make eval-attacks`). Same static-nginx design as
-    # `gateway`, with its own read-only config (infra/docker/gateway/nginx.devports.conf).
+    # Opt-in host access for dev tools only: Postgres on 127.0.0.1:5432 (a raw TCP passthrough)
+    # and a read-only Temporal Web UI on 127.0.0.1:8233 (GET only, write actions hidden). Never
+    # started by `make up`; enable with `COMPOSE_PROFILES=devports make up` (needed by host-run DB
+    # tools such as `make eval-attacks`). Same static-nginx design as `gateway`, with its own
+    # read-only config (infra/docker/gateway/nginx.devports.conf).
     profiles: [devports]
     image: nginx:1.27-alpine
     restart: unless-stopped

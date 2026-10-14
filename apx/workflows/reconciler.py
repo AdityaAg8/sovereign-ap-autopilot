@@ -1,12 +1,12 @@
-"""Server-side reconciler for lost review signals (KNOWN_ISSUES): the API
-records a decision and then signals the invoice's workflow, so a signal lost to a Temporal outage
-leaves the database decided (APPROVED with a digest-matched approval, or BLOCKED by a REJECT
-decision) while the workflow waits in review forever. Run periodically in the worker process, it
-finds those invoices and re-sends the decision. Idempotent (the workflow ignores a signal once it
-holds a decision, and `confirm_review` still backs every signal against the database), audited
-(`review.signal_resent`), and bounded per pass and per invoice. An approval that went stale (payee
-or invoice moved since) is re-sent too, so `confirm_review` ends the invoice FAILED with its typed
-reason instead of leaving it APPROVED forever."""
+"""Server-side reconciler for lost review signals (KNOWN_ISSUES): the API records a decision and
+then signals the invoice's workflow, so a signal lost to a Temporal outage leaves the database
+decided (APPROVED with a digest-matched approval, or BLOCKED by a REJECT decision) while the
+workflow waits in review forever. Run periodically in the worker process, it finds those invoices
+and re-sends the decision. Idempotent (the workflow ignores a signal once it holds a decision, and
+`confirm_review` still backs every signal against the database), audited (`review.signal_resent`),
+and bounded per pass and per invoice. An approval that went stale (payee or invoice moved since)
+is re-sent too, so `confirm_review` ends the invoice FAILED with its typed reason instead of
+leaving it APPROVED forever."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 """Seeded, deterministic synthetic UAE ERP: vendors (EN/AR names, TRNs, AE IBANs), purchase
 orders, goods receipts (including partial deliveries), users/roles and approval limits, exported
-to JSON. Feeds the invoice renderer (+) and the fraud/policy modules it models.
-`faker`/`jinja2` are not installed in this environment (see module note below), so name,
-address and item data are drawn from small curated EN/AR tables instead."""
+to JSON. Feeds the invoice renderer (+) and the fraud/policy modules it models. `faker`/`jinja2`
+are not installed in this environment (see module note below), so name, address and item data
+are drawn from small curated EN/AR tables instead."""
 
 from __future__ import annotations
 

@@ -170,8 +170,8 @@ async def test_a_pinned_snapshot_answers_hits_and_never_parses_or_writes(tmp_pat
 async def test_a_pinned_miss_stops_the_harness_instead_of_becoming_a_failure_row(
     tmp_path: Path,
 ) -> None:
-    """The harness worker records only `DocumentParseFailedError` as a failure
-    row; a pinned miss is a `ParseCacheMissError`, so it escapes `_run_one` and stops the run."""
+    """The harness worker records only `DocumentParseFailedError` as a failure row; a pinned miss
+    is a `ParseCacheMissError`, so it escapes `_run_one` and stops the run."""
     data_dir = tmp_path / "uae"
     data_dir.mkdir()
     _write_doc(data_dir, has_scan=False)

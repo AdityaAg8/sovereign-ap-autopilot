@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Preflight environment check for Sovereign AP Autopilot.
-# Runs every host/tooling check independently (never exits early), writes a
-# PASS/WARN/FAIL table to reports/env.md, and files a deduplicated BLOCKED.md
-# entry for each FAIL so a human can unblock the environment without stopping other work.
+# Preflight environment check for Sovereign AP Autopilot. Runs every host/tooling check
+# independently (never exits early), writes a PASS/WARN/FAIL table to reports/env.md, and
+# files a deduplicated BLOCKED.md entry for each FAIL so a human can unblock the
+# environment without stopping other work.
 set +e
 set +u
 
@@ -239,7 +239,7 @@ else
   record "Free disk space" "WARN" "could not determine free disk space"
 fi
 
-# --- 12. RAM (report only; note >=32 GB needed for) -------------------------
+# --- 12. RAM (report only; the optional overnight teacher needs >=32 GB) ----
 ram_kb=""
 if have free; then
   ram_kb="$(free -k 2>/dev/null | awk '/^Mem:/{print $2}')"

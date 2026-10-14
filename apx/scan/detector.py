@@ -1,7 +1,7 @@
 """Concrete hidden-content detector: opens a PDF once with pdfplumber and once with pypdfium2
 and runs every scan technique (visibility, control characters, active content) per page and
-per document. Never returns [] on failure -- raises `ScanError` instead,
-so a scan that could not run is never mistaken for a clean document (SEC-02)."""
+per document. Never returns [] on failure -- raises `ScanError` instead, so a scan that could
+not run is never mistaken for a clean document (SEC-02)."""
 
 from __future__ import annotations
 

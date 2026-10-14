@@ -1,7 +1,7 @@
-"""Performance test for the hidden-content scan: a 3-page invoice
-with realistic line-item volume must scan in under 1 second (a working budget, not a gate).
-Wall-clock best-of-3 (rendering is multi-threaded, so CPU time overstates it); opt-in via the `perf`
-marker: timing is only meaningful on an idle target host, run by the milestone verify step."""
+"""Performance test for the hidden-content scan: a 3-page invoice with realistic line-item volume
+must scan in under 1 second (a working budget, not a gate). Wall-clock best-of-3 (rendering is
+multi-threaded, so CPU time overstates it); opt-in via the `perf` marker: timing is only meaningful
+on an idle target host, run by the milestone verify step."""
 
 from __future__ import annotations
 

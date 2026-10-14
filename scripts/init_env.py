@@ -1,7 +1,7 @@
 """Creates `.env` from `.env.example` on first run and fills every shared secret the stack needs
 (`API_JWT_SECRET`, `POSTGRES_PASSWORD`, `AGENT_RO_PASSWORD`) that is missing or empty, so `make up`
-needs no manual setup and no install runs on a committed default.
-An existing value is never changed and no value is ever printed; only key names are reported."""
+needs no manual setup and no install runs on a committed default. An existing value is never
+changed and no value is ever printed; only key names are reported."""
 
 from __future__ import annotations
 

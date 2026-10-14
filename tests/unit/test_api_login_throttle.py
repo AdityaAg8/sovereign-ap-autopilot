@@ -1,7 +1,7 @@
-"""Login hardening: the per-email bucket and the coarse per-IP bucket throttle
-failed attempts with a 429 and `Retry-After`, refill over time and keep memory bounded, over-long
-usernames are refused with 422, and an unknown email still costs one full argon2 verify.
-The database is replaced by a stub session; the limiter and the route are the real ones."""
+"""Login hardening: the per-email bucket and the coarse per-IP bucket throttle failed attempts
+with a 429 and `Retry-After`, refill over time and keep memory bounded, over-long usernames are
+refused with 422, and an unknown email still costs one full argon2 verify. The database is
+replaced by a stub session; the limiter and the route are the real ones."""
 
 from __future__ import annotations
 

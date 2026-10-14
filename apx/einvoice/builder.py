@@ -1,11 +1,11 @@
-"""Builds PINT AE 1.0.4 UBL 2.1 Invoice/CreditNote XML from `InvoiceFields` plus the
-ERP-verified vendor payment IBAN (never the invoice's own claimed IBAN, per P1 "injection-proof
-payments"), for VAT categories S/Z/E/AE/O. Presence checks are
-deliberately shallow: a header/line field left `None` is simply omitted from the XML, so the
-runtime schematron validator (`apx.einvoice.schematron`) is the single source of truth for which
-omissions are fatal, and reports the violated rule ID. The money path is the exception: currency
-and line VAT rate are never defaulted (ADR-0012), so a missing/non-AED currency or a rate-bearing
-line without a rate raises `EInvoiceError`."""
+"""Builds PINT AE 1.0.4 UBL 2.1 Invoice/CreditNote XML from `InvoiceFields` plus the ERP-verified
+vendor payment IBAN (never the invoice's own claimed IBAN, per P1 "injection-proof payments"),
+for VAT categories S/Z/E/AE/O. Presence checks are deliberately shallow: a header/line field left
+`None` is simply omitted from the XML, so the runtime schematron validator
+(`apx.einvoice.schematron`) is the single source of truth for which omissions are fatal, and
+reports the violated rule ID. The money path is the exception: currency and line VAT rate are
+never defaulted (ADR-0012), so a missing/non-AED currency or a rate-bearing line without a rate
+raises `EInvoiceError`."""
 
 from __future__ import annotations
 

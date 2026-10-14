@@ -1,6 +1,6 @@
 """Loads every crafted bad invoice in `tests/fixtures/bad_invoices/` and asserts it is caught by
-exactly the one `ViolationCode` the fixture was built for, no more and no fewer
-(acceptance: "30 crafted bad invoices each caught by exactly the expected rule")."""
+exactly the one `ViolationCode` the fixture was built for, no more and no fewer (acceptance: "30
+crafted bad invoices each caught by exactly the expected rule")."""
 
 from __future__ import annotations
 

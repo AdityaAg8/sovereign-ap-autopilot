@@ -61,7 +61,7 @@ def blank_template(sha256: str, suffix: str) -> dict[str, Any]:
 
 
 def write_templates(incoming: Path, truth_dir: Path) -> list[Path]:
-    """Blank §7 templates, one per new document in `incoming`; existing ones are kept."""
+    """Blank ADR-0019 §7 templates, one per new document in `incoming`; existing ones are kept."""
     truth_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for path in sorted(incoming.iterdir()) if incoming.is_dir() else []:

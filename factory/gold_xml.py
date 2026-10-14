@@ -197,8 +197,8 @@ def truth_to_invoice_fields(
 
 def build_gold_xml(truth: Mapping[str, Any], vendor_by_trn: Mapping[str, VendorRecord]) -> bytes:
     """Builds PINT AE gold Invoice XML for one `truth.json` document. Deterministic: the same
-    `truth` and `vendor_by_trn` always build byte-identical XML
-    (`apx.einvoice.builder`'s own determinism, carried through this mapping unchanged)."""
+    `truth` and `vendor_by_trn` always build byte-identical XML (`apx.einvoice.builder`'s own
+    determinism, carried through this mapping unchanged)."""
     fields, verified_iban = truth_to_invoice_fields(truth, vendor_by_trn)
     return build_ubl_xml(
         fields,

@@ -104,14 +104,14 @@ def format_valid(kind: FieldKind, value: str | None) -> bool:
 
 
 def _is_valid_trn(trn: str) -> bool:
-    """UAE TRN: 15 digits. Local copy of the not-yet-implemented apx.validate rule, kept in
-    sync by test_features.py; consolidate once apx.validate.is_valid_trn lands."""
+    """UAE TRN: 15 digits. Duplicates `apx.validate.ids.is_valid_trn`; calling that function
+    instead would remove the copy."""
     return bool(re.fullmatch(r"\d{15}", trn))
 
 
 def _is_valid_iban(iban: str) -> bool:
-    """ISO 13616 IBAN with mod-97 checksum. Local copy of the not-yet-implemented
-    apx.validate.is_valid_iban rule; consolidate once that module lands."""
+    """ISO 13616 IBAN with mod-97 checksum. Duplicates `apx.validate.ids.is_valid_iban`; calling
+    that function instead would remove the copy."""
     if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", iban):
         return False
     rearranged = iban[4:] + iban[:4]

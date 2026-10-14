@@ -1,7 +1,7 @@
 """add `fraud_flags`: every `apx.fraud` flag raised on an invoice with its severity, score,
 evidence and plain-language explanation, so the review UI can show why an invoice was flagged.
-Shape kept in sync with `apx.db.models.FraudFlag` by
-`tests/unit/test_db_models.py` and the migration drift test.
+Shape kept in sync with `apx.db.models.FraudFlag` by `tests/unit/test_db_models.py` and the
+migration drift test.
 
 Revision ID: 0006_fraud_flags
 Revises: 0005_corrections_metadata

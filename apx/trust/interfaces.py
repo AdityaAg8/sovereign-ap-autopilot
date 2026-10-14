@@ -1,6 +1,6 @@
 """Interfaces for the trust gate: per-field features, isotonic calibration of P(correct) and the
-Learn-then-Test fixed-sequence threshold. Only this module reads the cal split
-(ADR-0004; exact feature, calibration and simulation definitions in ADR-0009)."""
+Learn-then-Test fixed-sequence threshold. Only this module reads the cal split (ADR-0004; exact
+feature, calibration and simulation definitions in ADR-0009)."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ FEATURE_NAMES: Final[tuple[str, ...]] = (
 
 
 class FieldFeatures(Frozen):
-    """§6.1 features for one field, defined exactly in ADR-0009 §4.
+    """Trust features for one field, defined exactly in ADR-0009 §4.
 
     `agreement` in [0, 1] (binary for non-TEXT kinds, normalised Levenshtein similarity for TEXT,
     1.0 when both values are null, 0.0 when exactly one is null or either output is invalid).

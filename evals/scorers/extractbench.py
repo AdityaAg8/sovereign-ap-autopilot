@@ -1,16 +1,15 @@
-"""ExtractBench value F1 + grounding F1 scorer
-("Value F1 + grounding F1 / ExtractBench short"). Value F1 checks whether an extracted field's value
-matches gold; grounding F1
-checks whether the page/bbox citation offered as evidence for that value actually covers the
-annotated evidence location. Delegates to the official `run-llama/ExtractBench` framework's own
+"""ExtractBench value F1 + grounding F1 scorer ("Value F1 + grounding F1 / ExtractBench short").
+Value F1 checks whether an extracted field's value matches gold; grounding F1 checks whether the
+page/bbox citation offered as evidence for that value actually covers the annotated evidence
+location. Delegates to the official `run-llama/ExtractBench` framework's own
 `compute_unified_evidence_metrics` scorer whenever its clone is present at `external_repo` --
 evals/adapters/extractbench_adapter.py runs that function inside the clone's own pinned `uv`
-environment (data/external/ExtractBench/pyproject.toml + uv.lock), since we don't add its
-dependency set to this project -- and reports `used_official_framework=True`. Only when the
-clone is absent do we fall back to scoring per the published metric definitions ourselves, on
-normalized exact match, clearly flagged with `used_official_framework=False` so callers and the
-scoreboard can see which path produced the numbers. A clone that IS present but fails to score
-raises rather than silently falling back; only its absence is an expected, flagged fallback."""
+environment (data/external/ExtractBench/pyproject.toml + uv.lock), since we don't add its dependency
+set to this project -- and reports `used_official_framework=True`. Only when the clone is absent do
+we fall back to scoring per the published metric definitions ourselves, on normalized exact match,
+clearly flagged with `used_official_framework=False` so callers and the scoreboard can see which
+path produced the numbers. A clone that IS present but fails to score raises rather than silently
+falling back; only its absence is an expected, flagged fallback."""
 
 from __future__ import annotations
 

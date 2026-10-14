@@ -1,7 +1,7 @@
-"""The production `InjectionClassifier` (ADR-0017): our fine-tuned
-ModernBERT-base sequence classifier, loaded from its local checkpoint only (Hugging Face offline,
-`local_files_only`) and run on CPU inside the worker. torch/transformers are imported lazily, so
-the rest of apx.scan imports without them; any load or inference failure raises `ScanError`."""
+"""The production `InjectionClassifier` (ADR-0017): our fine-tuned ModernBERT-base sequence
+classifier, loaded from its local checkpoint only (Hugging Face offline, `local_files_only`) and
+run on CPU inside the worker. torch/transformers are imported lazily, so the rest of apx.scan
+imports without them; any load or inference failure raises `ScanError`."""
 
 from __future__ import annotations
 

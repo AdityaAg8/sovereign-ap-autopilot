@@ -137,7 +137,8 @@ def git_sha(repo_root: Path = REPO_ROOT) -> str:
 
 
 def require_clean(set_: str, split: str, dirty: Callable[[], list[str]] = git_dirty) -> None:
-    """§4.1: a protected split refuses to run while extraction or scoring code is uncommitted."""
+    """ADR-0019 §4 rule 1: a protected split refuses to run while extraction or scoring code is
+    uncommitted."""
     if (set_, split) in DEV_SPLITS:
         return
     changed = dirty()
@@ -658,7 +659,8 @@ def _ci(metric: MetricValue) -> str:
 
 
 def first_line(report: RealEvalReport) -> str:
-    """§4.4: n, split, extractor and zero-shot/in-distribution, before anything else."""
+    """ADR-0019 §4 rule 4: n, split, extractor and zero-shot/in-distribution, before anything
+    else."""
     return (
         f"n = {report.n_docs}, {report.set} {report.split}, Extractor {report.extractor.upper()} "
         f"`{report.model_version}` ({report.identity.get('model')}), {report.distribution}"

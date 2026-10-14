@@ -3,10 +3,9 @@ turns an AUTO route into REVIEW when a reviewer sent the invoice to review befor
 `confirm_review` checks that a `review` signal is backed by the database before the workflow acts
 on it (an approval row whose digest matches the current invoice, or a recorded rejection). A raw
 Temporal signal with no such record never leads to payment: it is audited and the workflow keeps
-waiting. The corrections inside an approval signal must digest to
-the ones recorded with the approval, or it is unbacked too. A recorded approval that went
-stale (payee, invoice digest, or corrections edited since) fails the invoice instead
-(`StaleApprovalError`)."""
+waiting. The corrections inside an approval signal must digest to the ones recorded with the
+approval, or it is unbacked too. A recorded approval that went stale (payee, invoice digest, or
+corrections edited since) fails the invoice instead (`StaleApprovalError`)."""
 
 from __future__ import annotations
 
@@ -226,13 +225,13 @@ class ReviewGuardActivities:
 def corrections_refusal(
     recorded: str | None, rows: Sequence[FieldRow], signalled: ReviewCorrections | None
 ) -> str | StaleVerdict | None:
-    """KI-02, over data already read: `recorded` is the newest approval's
-    `corrections_digest`, `rows` the invoice's `fields` rows in id order, `signalled` the
-    corrections the `review` signal carries (which `apply_review` would apply next). None when
-    the signal carries exactly the approved corrections and the rows still derive them; a
-    `StaleVerdict` when the rows changed since the approval; else the reason the signal is
-    unbacked. An approval written before migration 0014 (`recorded` None) is checked against the
-    corrections the current rows derive, so a raw signal can never substitute its own."""
+    """KI-02, over data already read: `recorded` is the newest approval's `corrections_digest`,
+    `rows` the invoice's `fields` rows in id order, `signalled` the corrections the `review`
+    signal carries (which `apply_review` would apply next). None when the signal carries exactly
+    the approved corrections and the rows still derive them; a `StaleVerdict` when the rows
+    changed since the approval; else the reason the signal is unbacked. An approval written
+    before migration 0014 (`recorded` None) is checked against the corrections the current rows
+    derive, so a raw signal can never substitute its own."""
     try:
         current = corrections_digest(corrections_for_rows(rows))
     except MissingCorrectionsError as exc:

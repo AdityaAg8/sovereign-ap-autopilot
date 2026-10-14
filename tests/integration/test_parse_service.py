@@ -1,10 +1,10 @@
-"""Integration proof for the parse pipeline (I1): the pdfplumber
-born-digital fast path's boxes are scored at IoU>=0.5 against every labeled field in the UAE
-test split, gated at >=98% overall (reported for EN and AR separately too); the PaddleOCR-VL
-service is smoke-tested against a small sample of scanned pages for latency/VRAM, informational
-only. Writes reports/parse.md. Needs data/uae/test (factory output) for the gate
-and, for the service sample, a live `make up` stack with `parse` running; marked `integration`,
-so it never runs in CI or the default `pytest`/`make test` invocation."""
+"""Integration proof for the parse pipeline (I1): the pdfplumber born-digital fast path's boxes
+are scored at IoU>=0.5 against every labeled field in the UAE test split, gated at >=98%
+overall (reported for EN and AR separately too); the PaddleOCR-VL service is smoke-tested
+against a small sample of scanned pages for latency/VRAM, informational only. Writes
+reports/parse.md. Needs data/uae/test (factory output) for the gate and, for the service
+sample, a live `make up` stack with `parse` running; marked `integration`, so it never runs in
+CI or the default `pytest`/`make test` invocation."""
 
 from __future__ import annotations
 

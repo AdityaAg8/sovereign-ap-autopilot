@@ -1,12 +1,12 @@
-"""GPU-backed parse service: PaddleOCR-VL-1.6 text spotting for one scanned
-page image per POST /parse. The model lives in a child process that loads on the first page and
-is stopped by POST /unload, which returns all of its GPU memory (CUDA context included) so the
-worker's GPU stage scheduler can hand the card to the extract models (ADR-0013). A page whose
-decoding loops or runs out of budget is re-read as overlapping horizontal strips with a loop guard
-(ADR-0013 amendment 2); an unfinished strip is re-read as two half-bands and the merged zones are
-put in geometric reading order (amendment 4). Only the scan path calls this; born-digital PDFs are
-parsed host-side by apx.parse.digital (pdfplumber). Every route but /health needs the shared
-service token, browser requests are refused, and page images are pixel-capped before decoding.
+"""GPU-backed parse service: PaddleOCR-VL-1.6 text spotting for one scanned page image per POST
+/parse. The model lives in a child process that loads on the first page and is stopped by POST
+/unload, which returns all of its GPU memory (CUDA context included) so the worker's GPU stage
+scheduler can hand the card to the extract models (ADR-0013). A page whose decoding loops or runs
+out of budget is re-read as overlapping horizontal strips with a loop guard (ADR-0013 amendment
+2); an unfinished strip is re-read as two half-bands and the merged zones are put in geometric
+reading order (amendment 4). Only the scan path calls this; born-digital PDFs are parsed host-side
+by apx.parse.digital (pdfplumber). Every route but /health needs the shared service token, browser
+requests are refused, and page images are pixel-capped before decoding.
 
 """
 

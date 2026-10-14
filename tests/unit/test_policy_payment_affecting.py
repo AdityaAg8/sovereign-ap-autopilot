@@ -1,8 +1,6 @@
-"""Unit and property tests for `apx.policy.interfaces.is_payment_affecting`
-(part-1 review finding F4): every direct capability and every EXECUTE_PROPOSAL proposal kind must be
-classified
-exactly as ADR-0008's definition of I3's "payment-affecting change" requires
-(I3, ADR-0008)."""
+"""Unit and property tests for `apx.policy.interfaces.is_payment_affecting` (part-1 review finding
+F4): every direct capability and every EXECUTE_PROPOSAL proposal kind must be classified exactly as
+ADR-0008's definition of I3's "payment-affecting change" requires (I3, ADR-0008)."""
 
 from __future__ import annotations
 

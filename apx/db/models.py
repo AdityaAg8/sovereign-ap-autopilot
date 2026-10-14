@@ -460,8 +460,8 @@ class PgVector(UserDefinedType[list[float]]):
 
 class PageEmbedding(Base):
     """One page's Qwen3-VL-Embedding-2B vector, scoped to the invoice's resolved vendor, for
-    learned near-duplicate detection. Created by
-    `0010_page_embeddings`, which also enables the `vector` extension."""
+    learned near-duplicate detection. Created by `0010_page_embeddings`, which also enables
+    the `vector` extension."""
 
     __tablename__ = "page_embeddings"
     __table_args__ = (CheckConstraint("page >= 0", name="page_non_negative"),)
@@ -529,14 +529,14 @@ class Approval(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     invoice_digest: Mapped[str | None] = mapped_column(String(64))
     """`apx.policy.writer.approval_digest` of the invoice and vendor payee at approval time. The
-    workflow re-derives it before paying and holds when it does not match;
-    NULL only on rows written before migration 0012, which the workflow treats as unbacked."""
+    workflow re-derives it before paying and holds when it does not match; NULL only on rows
+    written before migration 0012, which the workflow treats as unbacked."""
     corrections_digest: Mapped[str | None] = mapped_column(String(64))
     """`apx.review.corrections.corrections_digest` of the review corrections the approver
     approved. The workflow acts on a `review` signal only when its corrections digest to this and
-    the invoice's current `fields` rows still do; NULL on rows written before
-    migration 0014 or by a caller that passed none, and the check then compares the signal with
-    the current rows."""
+    the invoice's current `fields` rows still do; NULL on rows written before migration 0014 or
+    by a caller that passed none, and the check then compares the signal with the current
+    rows."""
 
 
 class Proposal(Base):
@@ -591,8 +591,8 @@ class AuditAnchor(Base):
     `apx.audit.anchor.AuditAnchorRecord`). Its own independent hash chain (`prev_anchor_hash`
     / `anchor_hash`), combined with a copy kept outside this database, lets
     `apx.audit.anchor.verify_anchors` detect tail truncation and whole-chain rewrites that
-    `audit_log`'s internal hash chain alone cannot see (I4).
-    `db/migrations` attaches the same append-only trigger as `audit_log`."""
+    `audit_log`'s internal hash chain alone cannot see (I4). `db/migrations` attaches the
+    same append-only trigger as `audit_log`."""
 
     __tablename__ = "audit_anchor"
     __table_args__ = (
@@ -665,12 +665,12 @@ class IdempotencyRecord(Base):
 
 
 class Label(Base, CreatedAtMixin):
-    """A reviewer's field correction, one row per fix. `created_at`
-    (`CreatedAtMixin`) is the correction timestamp and `labeled_by` the reviewer; the
-    `previous_*` columns snapshot the field value being corrected (before/after value,
-    grounding box and the model/revision that produced it) so the row alone is a complete,
-    auditable record of the fix, independent of whether the original `fields` row is ever
-    superseded again later."""
+    """A reviewer's field correction, one row per fix. `created_at` (`CreatedAtMixin`) is
+    the correction timestamp and `labeled_by` the reviewer; the `previous_*` columns
+    snapshot the field value being corrected (before/after value, grounding box and the
+    model/revision that produced it) so the row alone is a complete, auditable record of
+    the fix, independent of whether the original `fields` row is ever superseded again
+    later."""
 
     __tablename__ = "labels"
 

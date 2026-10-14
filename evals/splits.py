@@ -61,9 +61,8 @@ class SplitsFile(BaseModel):
 
 
 def empty_splits(*, now: datetime | None = None) -> SplitsFile:
-    """A SplitsFile with every known set/split present but empty
-    (the starting point for `uae`, `docile` and `attacks`, which are populated by later
-    milestones)."""
+    """A SplitsFile with every known set/split present but empty (the starting point
+    for `uae`, `docile` and `attacks`, which are populated by later milestones)."""
     return SplitsFile(
         generated_at=now or datetime.now(UTC),
         sets={name: {split: [] for split in splits} for name, splits in SET_SPLIT_NAMES.items()},
@@ -173,11 +172,9 @@ def build_from_manifest(manifest: Manifest, existing: SplitsFile | None = None) 
 def register_documents(
     splits: SplitsFile, set_name: SetName, assignments: Mapping[str, str]
 ) -> SplitsFile:
-    """Adds `{sha256: split}` assignments into `set_name`
-    (e.g. once the UAE factory produces documents). A sha256 already present anywhere in the set, in
-    any split, is left
-    untouched: registering only adds new documents, it never reshuffles an existing one
-    (ADR-0005)."""
+    """Adds `{sha256: split}` assignments into `set_name` (e.g. once the UAE factory produces
+    documents). A sha256 already present anywhere in the set, in any split, is left untouched:
+    registering only adds new documents, it never reshuffles an existing one (ADR-0005)."""
     valid_splits = SET_SPLIT_NAMES[set_name]
     current: SplitGroups = copy.deepcopy(
         splits.sets.get(set_name, {split: [] for split in valid_splits})

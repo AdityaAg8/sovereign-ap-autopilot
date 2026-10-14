@@ -3,8 +3,8 @@ pipeline module's Protocol (or, for ASP send and archive, an idempotency-guarded
 client) through the injected `InvoiceActivityDeps` registry, then appends an audit event.
 Business logic for scanning, parsing, extraction, trust, validation, fraud, policy and
 e-invoicing lives on their own module branches; this file wires, never re-implements, them
-(I4). Where an activity writes state in its own transaction
-(`send_to_asp`, `archive`, `mark_failed`), the audit entry joins that transaction."""
+(I4). Where an activity writes state in its own transaction (`send_to_asp`, `archive`,
+`mark_failed`), the audit entry joins that transaction."""
 
 from __future__ import annotations
 

@@ -202,10 +202,10 @@ def test_field_model_revision_column_exists_and_is_nullable() -> None:
 
 
 def test_label_correction_columns_capture_the_before_snapshot() -> None:
-    """Every correction is a self-contained record of invoice, field,
-    before/after value, box, reviewer, timestamp and the model/revision that produced the
-    original -- `corrected_value`/`labeled_by`/`created_at` already covered the after value,
-    reviewer and timestamp; these four columns add the "before" half."""
+    """Every correction is a self-contained record of invoice, field, before/after value,
+    box, reviewer, timestamp and the model/revision that produced the original --
+    `corrected_value`/`labeled_by`/`created_at` already covered the after value, reviewer
+    and timestamp; these four columns add the "before" half."""
     labels = TABLES["labels"]
     for column_name in (
         "previous_value",

@@ -1,7 +1,7 @@
-"""Grounds extracted header values onto parse words (I1): finds the run of
-consecutive words (reading order, one page) whose normalised text equals the normalised value,
-prefers the run nearest a field label (EN/AR), and takes boxes from those words only. Model
-output never supplies a box; an unmatched value keeps empty `word_ids` and `boxes`."""
+"""Grounds extracted header values onto parse words (I1): finds the run of consecutive words
+(reading order, one page) whose normalised text equals the normalised value, prefers the run
+nearest a field label (EN/AR), and takes boxes from those words only. Model output never
+supplies a box; an unmatched value keeps empty `word_ids` and `boxes`."""
 
 from __future__ import annotations
 
