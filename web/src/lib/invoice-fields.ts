@@ -10,7 +10,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   buyer_name: "Buyer name",
   line_item_description: "Line item 1",
   subtotal: "Subtotal (AED)",
-  vat_amount: "VAT 5% (AED)",
+  vat_amount: "VAT (AED)",
   total: "Total (AED)",
   supplier_iban: "Supplier IBAN",
 };

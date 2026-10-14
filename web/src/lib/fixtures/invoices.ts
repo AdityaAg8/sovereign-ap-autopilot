@@ -1,6 +1,6 @@
 /** Generates a deterministic set of fixture invoices (summaries + full detail with grounded
  * fields, boxes and fraud flags) so the inbox, review queue and invoice-detail screens have
- * realistic, virtualization-scale data before apx/api (-) exists. Seeded PRNG keeps the
+ * realistic, virtualization-scale data without the backend. Seeded PRNG keeps the
  * output stable across dev, Playwright and Lighthouse runs. */
 import type {
   BBox,
@@ -11,7 +11,12 @@ import type {
   RouteDecision,
 } from "@/lib/api/types";
 import { FIELD_LABELS } from "@/lib/invoice-fields";
-import { fixtureDocumentIban, FIXTURE_VENDORS } from "@/lib/fixtures/vendors";
+import {
+  fixtureDocumentIban,
+  FIXTURE_VENDORS,
+  GENERATED_VENDORS,
+  SAMPLE_VENDOR,
+} from "@/lib/fixtures/vendors";
 import { intBetween, mulberry32, pick } from "@/lib/fixtures/random";
 
 const SEED = 20260101;
@@ -209,7 +214,7 @@ function generate(): readonly GeneratedInvoice[] {
   const out: GeneratedInvoice[] = [];
 
   for (let i = 0; i < COUNT; i++) {
-    const vendor = pick(rng, FIXTURE_VENDORS);
+    const vendor = pick(rng, GENERATED_VENDORS);
     let roll = rng() * totalWeight;
     const bucket = STATUS_WEIGHTS.find((s) => (roll -= s.weight) <= 0) ?? STATUS_WEIGHTS[0]!;
     const forceLowConfidence = bucket.status === "awaiting_review" && rng() > 0.4;
@@ -322,6 +327,118 @@ function disagreementInvoice(base: InvoiceDetail): InvoiceDetail {
   };
 }
 
+/** ID of the fixed invoice whose fields are the bundled sample PDF's own values. */
+export const SAMPLE_INVOICE_ID = "inv-sample-ras-al-khor";
+
+/** Field `name`, its raw and normalized value, confidence and source, and its box on the sample
+ * PDF as `[page, x, y, width, height]` (page-relative), taken from the data factory's labels for
+ * that document. */
+const SAMPLE_FIELDS: readonly [string, string, string, number, FieldValue["source"], number[]][] = [
+  [
+    "invoice_number",
+    "INV-2026-594708",
+    "INV-2026-594708",
+    0.98,
+    "extractor_a",
+    [0, 0.7404, 0.0758, 0.1931, 0.0223],
+  ],
+  ["issue_date", "30 Jun 2026", "2026-06-30", 0.78, "arbiter", [0, 0.8509, 0.1143, 0.0826, 0.0151]],
+  [
+    "supplier_name",
+    SAMPLE_VENDOR.nameEn,
+    SAMPLE_VENDOR.nameEn,
+    0.99,
+    "extractor_b",
+    [0, 0.1182, 0.0944, 0.483, 0.0258],
+  ],
+  [
+    "supplier_trn",
+    "189768469788003",
+    "189768469788003",
+    0.97,
+    "extractor_a",
+    [0, 0.1515, 0.1545, 0.1297, 0.0151],
+  ],
+  [
+    "buyer_name",
+    "Sovereign Foods Trading LLC",
+    "Sovereign Foods Trading LLC",
+    0.96,
+    "extractor_b",
+    [0, 0.1182, 0.2748, 0.2496, 0.0169],
+  ],
+  [
+    "line_item_description",
+    "Ready-mix concrete, grade C30, per m3",
+    "Ready-mix concrete, grade C30, per m3",
+    0.95,
+    "extractor_a",
+    [0, 0.1195, 0.4326, 0.2788, 0.0151],
+  ],
+  [
+    "subtotal",
+    "1,081,155.99",
+    "1081155.99",
+    0.97,
+    "extractor_a",
+    [1, 0.7887, 0.8224, 0.105, 0.0169],
+  ],
+  ["vat_amount", "0.00", "0.00", 0.96, "extractor_b", [1, 0.8587, 0.8491, 0.035, 0.0169]],
+  ["total", "1,081,155.99", "1081155.99", 0.98, "extractor_a", [1, 0.7523, 0.8758, 0.131, 0.0214]],
+  [
+    "supplier_iban",
+    "AE060108196727317784864",
+    "AE060108196727317784864",
+    0.94,
+    "extractor_b",
+    [1, 0.3854, 0.9375, 0.1885, 0.0134],
+  ],
+];
+
+/** A designated-zone (0% VAT) invoice whose fields and boxes match the bundled sample PDF, so
+ * the review screen shows a coherent document. One low-confidence date sends it to review.
+ * Received early in the year so other e2e specs' "first row" stays a generated invoice. */
+function sampleInvoice(): InvoiceDetail {
+  const fields: FieldValue[] = SAMPLE_FIELDS.map(
+    ([name, raw, normalized, confidence, source, b]) => {
+      const [page, x, y, w, h] = b as [number, number, number, number, number];
+      return {
+        name,
+        raw,
+        normalized,
+        wordIds: [`${name}-w0`],
+        boxes: [{ page, x0: x, y0: y, x1: x + w, y1: y + h }],
+        confidence,
+        accepted: confidence >= 0.85,
+        source,
+      };
+    },
+  );
+  const meanConfidence = fields.reduce((sum, f) => sum + (f.confidence ?? 0), 0) / fields.length;
+  return {
+    summary: {
+      id: SAMPLE_INVOICE_ID,
+      invoiceNumber: "INV-2026-594708",
+      status: "awaiting_review",
+      route: "review",
+      vendorId: SAMPLE_VENDOR.id,
+      vendorName: SAMPLE_VENDOR.nameEn,
+      total: "1081155.99",
+      currency: "AED",
+      confidence: Number(meanConfidence.toFixed(3)),
+      flagCount: 0,
+      receivedAt: "2026-01-01T07:00:00.000Z",
+    },
+    fields,
+    flags: [],
+    reasons: ["The issue date fell below the auto-accept confidence threshold."],
+    proposals: [],
+    pageCount: 2,
+    language: "en",
+    documentUrl: "/fixtures/sample-invoice.pdf",
+  };
+}
+
 /** The ~420 generated fixture invoices plus the ADR-0012 disagreement case, built on first call
  * and memoized. Generation is deferred (not run at module load) because every route imports this
  * module via the auth provider, and running it eagerly cost ~140ms of main-thread time before
@@ -330,7 +447,7 @@ function disagreementInvoice(base: InvoiceDetail): InvoiceDetail {
 export function fixtureInvoices(): readonly InvoiceDetail[] {
   if (generated === null) {
     const details = generate().map((g) => g.detail);
-    generated = [...details, disagreementInvoice(details[0]!)];
+    generated = [...details, disagreementInvoice(details[0]!), sampleInvoice()];
   }
   return generated;
 }

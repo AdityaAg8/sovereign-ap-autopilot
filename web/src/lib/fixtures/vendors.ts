@@ -21,6 +21,7 @@ const RAW_IBAN_BY_VENDOR_ID: Record<string, string> = {
   "v-al-fardan": "AE120331234567890555666",
   "v-desert-rose": "AE380331234567890777888",
   "v-al-maha-tech": "AE500331234567890999000",
+  "v-ras-al-khor": "AE060108196727317784864",
 };
 
 /** The full illustrative IBAN a fixture invoice's own `supplier_iban` field should show, as
@@ -29,7 +30,8 @@ export function fixtureDocumentIban(vendorId: string): string {
   return RAW_IBAN_BY_VENDOR_ID[vendorId] ?? "";
 }
 
-export const FIXTURE_VENDORS: readonly Vendor[] = [
+/** Vendors the generated fixture invoices draw from. */
+export const GENERATED_VENDORS: readonly Vendor[] = [
   {
     id: "v-emirates-steel",
     nameEn: "Emirates Steel Trading LLC",
@@ -157,6 +159,32 @@ export const FIXTURE_VENDORS: readonly Vendor[] = [
     isNew: false,
   },
 ];
+
+/** The supplier printed on the bundled sample PDF (web/public/fixtures/sample-invoice.pdf, a
+ * synthetic invoice from the data factory), so the sample invoice's fields match its document. */
+export const SAMPLE_VENDOR: Vendor = {
+  id: "v-ras-al-khor",
+  nameEn: "Ras Al Khor General Contracting LLC",
+  nameAr: "رأس الخور للمقاولات العامة ذ.م.م",
+  trn: "189768469788003",
+  verified: true,
+  bankDetails: [
+    {
+      id: "bd-7",
+      ibanMasked: maskIban(RAW_IBAN_BY_VENDOR_ID["v-ras-al-khor"]!),
+      bankName: "Abu Dhabi Commercial Bank",
+      verified: true,
+      verifiedAt: "2025-11-04T09:00:00.000Z",
+      isCurrent: true,
+      changedAt: "2025-11-04T09:00:00.000Z",
+    },
+  ],
+  invoiceCount: 1,
+  totalAed: "1081155.99",
+  isNew: false,
+};
+
+export const FIXTURE_VENDORS: readonly Vendor[] = [...GENERATED_VENDORS, SAMPLE_VENDOR];
 
 export function findVendor(id: string): Vendor | undefined {
   return FIXTURE_VENDORS.find((v) => v.id === id);
