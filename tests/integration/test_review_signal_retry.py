@@ -1,8 +1,8 @@
-"""A review decision whose Temporal signal fails (503) must
-stay recoverable by re-sending the same decision, as `apx.api.signals.WorkflowSignalError`
-promises. The pass-1 fix made reject write a terminal BLOCKED status before signalling, so a retried
-reject now answers 409 and the waiting workflow is never told. Runs against a throwaway Postgres
-like `test_review_state_machine.py`, on its own container name and port."""
+"""A review decision whose Temporal signal fails (503) must stay recoverable by re-sending the
+same decision, as `apx.api.signals.WorkflowSignalError` promises. Reject writes a terminal
+BLOCKED status before signalling, so without care a retried reject would answer 409 and the
+waiting workflow would never be told. Runs against a throwaway Postgres like
+`test_review_state_machine.py`, on its own container name and port."""
 
 from __future__ import annotations
 

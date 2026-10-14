@@ -34,7 +34,7 @@ All 1,498 stale scan documents appear in the new set, matched by `doc_seed`, so 
 ## Consumers
 
 The following consumers never read a scan PNG. All of them read `<sha>.pdf`, so the restored scans reach none of them yet:
-- `evals/extraction_a.py` (A's M3.3)
+- `evals/extraction_a.py` (Extractor A's before/after run)
 - `ml/extractor_b/data.py` (B's training)
 - `scripts/e2e_pipeline.py`: its "scanned" pick filters on `has_scan` and now selects real scan documents, but it still sends the PDF.
 - the parse gate

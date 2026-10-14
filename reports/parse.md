@@ -1,4 +1,4 @@
-# Parse service report (PRD §10 M3.1)
+# Parse service report
 
 Generated: 2026-09-25T12:07:22.072324+00:00
 

@@ -325,7 +325,7 @@ train-b-reeval: gpu-free
 
 train-b: gpu-free
 	@echo "==> Extractor B training, resuming the newest run (detached; log: logs/extractor_b_train.log)"
-	@echo "    record it under PROGRESS.md 'Running jobs'; pause with 'make train-b-pause'"
+	@echo "    pause with 'make train-b-pause'"
 	mkdir -p logs models/extractor_b data/ml
 	nohup bash -c "$(TRAINER_RUN) python -m ml.extractor_b.train --resume auto" \
 		> logs/extractor_b_train.log 2>&1 &

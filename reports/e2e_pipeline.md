@@ -1,4 +1,4 @@
-# End-to-end pipeline run (M5.6)
+# End-to-end pipeline run
 
 20 documents dropped into the inbox of the running stack; review-routed invoices approved through the API by a seeded approver.
 

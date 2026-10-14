@@ -1,4 +1,4 @@
-# Gold PINT AE XML (M2.5)
+# Gold PINT AE XML
 
 ERP snapshot: seed `2026`. Documents validated: **5000**. Schematron pass rate: **5000/5000 (100.00%)**.
 
@@ -22,7 +22,7 @@ ERP snapshot: seed `2026`. Documents validated: **5000**. Schematron pass rate: 
 
 ## Credit notes
 
-0 of 5000 documents are credit notes. The M2 factory (`factory/build.py`, `factory/layouts.py`'s `TaxCase`) generates invoices only -- every gold document here is a PINT AE `Invoice` (`DocumentTypeCode.INVOICE`, type code "380").
+0 of 5000 documents are credit notes. The factory (`factory/build.py`, `factory/layouts.py`'s `TaxCase`) generates invoices only -- every gold document here is a PINT AE `Invoice` (`DocumentTypeCode.INVOICE`, type code "380").
 
 ## Failures by rule ID
 

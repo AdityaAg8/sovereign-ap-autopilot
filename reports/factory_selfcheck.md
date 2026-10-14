@@ -1,6 +1,6 @@
-# Factory label self-check (M2.4)
+# Factory label self-check
 
-pdfplumber text at each DOM-labeled box vs. the label's ground-truth value, on every digital PDF in the M2.3 UAE invoice dataset.
+pdfplumber text at each DOM-labeled box vs. the label's ground-truth value, on every digital PDF in the UAE invoice dataset.
 
 **Overall exact match: 628408/629210 (99.87%) -- PASS** (threshold 99.5%)
 

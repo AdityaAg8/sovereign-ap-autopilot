@@ -1,7 +1,7 @@
-# Smoke test report (PRD §10 M0.5)
+# Smoke test report
 
 Generated: 2026-09-22T14:02:10.125534+00:00
-VRAM budget per stage: 11.5 GB (PRD C2)
+VRAM budget per stage: 11.5 GB
 
 | Model | Stage | Reachable | Peak VRAM (GB) | Latency (ms) | Checks | Result |
 |---|---|---|---|---|---|---|

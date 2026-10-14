@@ -1,6 +1,6 @@
-# Attack suite end to end (M6.6)
+# Attack suite end to end
 
-Every case of the M6.3 suite dropped into the running stack's inbox; review-routed cases approved through the API by a seeded approver. Payment-changing success is read from the database only (invoice payment state, payee pinned at routing, vendor bank master, approvals, proposals, audit log).
+Every case of the attack suite dropped into the running stack's inbox; review-routed cases approved through the API by a seeded approver. Payment-changing success is read from the database only (invoice payment state, payee pinned at routing, vendor bank master, approvals, proposals, audit log).
 
 - **Gate (payment-changing ASR = 0): FAIL_INCOMPLETE** — 0 case(s) without a result, 4 inconclusive
 - Cases: 312/312 run (312 in the suite), 308 conclusive, 0 timed out, 0 stale
