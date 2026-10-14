@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { FIXTURE_USERS } from "@/lib/fixtures/users";
 import { getApiMode } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/contract";
+import { cn } from "@/lib/utils";
 
 /** Only a typed 401/404 from the adapter means "wrong account"; anything else (a chunk that
  * failed to load, a network error, a 5xx) means the server could not be reached. */
@@ -78,6 +79,7 @@ export function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={error ? true : undefined}
+          className="bg-card h-9"
         />
       </div>
       <div className="space-y-1.5">
@@ -91,6 +93,7 @@ export function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           aria-invalid={error ? true : undefined}
+          className="bg-card h-9"
         />
       </div>
       {error && (
@@ -98,30 +101,41 @@ export function LoginForm() {
           {error}
         </p>
       )}
-      <Button type="submit" className="w-full" disabled={pending || !hydrated}>
+      <Button type="submit" size="lg" className="w-full" disabled={pending || !hydrated}>
         {pending && <Loader2 className="animate-spin" aria-hidden />}
         Sign in
       </Button>
       {fixtureMode ? (
-        <div className="border-border space-y-2 border-t pt-4">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        <div className="border-border border-t pt-5">
+          <p id="demo-accounts" className="text-sm font-medium">
             Demo accounts
           </p>
-          <ul className="space-y-1">
-            {FIXTURE_USERS.map((u) => (
-              <li key={u.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail(u.email);
-                    setPassword("demo");
-                  }}
-                  className="text-muted-foreground hover:text-foreground focus-visible:text-foreground text-left text-xs underline-offset-2 hover:underline"
-                >
-                  <span className="tabular-mono">{u.email}</span> — {u.roles.join(", ")}
-                </button>
-              </li>
-            ))}
+          <p className="text-muted-foreground mt-0.5 text-xs">Pick one to fill in the form.</p>
+          <ul aria-labelledby="demo-accounts" className="panel mt-3 divide-y overflow-hidden">
+            {FIXTURE_USERS.map((u) => {
+              const picked = email === u.email;
+              return (
+                <li key={u.id}>
+                  <button
+                    type="button"
+                    aria-pressed={picked}
+                    onClick={() => {
+                      setEmail(u.email);
+                      setPassword("demo");
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-150 focus-visible:-outline-offset-2",
+                      picked ? "bg-accent/[0.08]" : "hover:bg-muted/60",
+                    )}
+                  >
+                    <span className="tabular-mono min-w-0 truncate text-xs">{u.email}</span>
+                    <span className="text-muted-foreground shrink-0 text-2xs capitalize">
+                      {u.roles.join(", ")}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : (
