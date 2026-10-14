@@ -58,7 +58,7 @@ def test_tokens_refill_over_time() -> None:
 
 
 def test_the_account_bucket_is_per_email_across_ips_and_case_insensitive() -> None:
-    # REVIEW N-04: behind the gateway every client has the same IP, so the account bucket is
+    # Behind the gateway every client has the same IP, so the account bucket is
     # keyed on the normalised email alone; another address does not buy fresh attempts.
     limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock())
     assert limiter.acquire("ip1", "a@x.test") == 0.0
@@ -127,7 +127,7 @@ def test_memory_is_bounded_by_max_keys() -> None:
 
 
 def test_a_refused_attempt_creates_no_account_bucket() -> None:
-    """P3-03: a request the IP bucket refuses costs the server nothing (no argon2), so it must
+    """A request the IP bucket refuses costs the server nothing (no argon2), so it must
     not add account keys either; otherwise a cheap spray churns the account map."""
     limiter = LoginRateLimiter(burst=1, refill_per_minute=1, clock=_Clock(), ip_factor=1)
     assert limiter.acquire("gw", "first@x.test") == 0.0
@@ -137,7 +137,7 @@ def test_a_refused_attempt_creates_no_account_bucket() -> None:
 
 
 def test_a_username_spray_cannot_flush_a_drained_account_bucket() -> None:
-    """P3-03: the attacker drains the target, then sends attempts at many other usernames to
+    """The attacker drains the target, then sends attempts at many other usernames to
     push its bucket out of the capped map. It must stay drained rather than come back full."""
     clock = _Clock()
     limiter = LoginRateLimiter(
@@ -160,7 +160,7 @@ def test_keys_are_fixed_size_digests_whatever_the_username() -> None:
 
 
 def test_memory_stays_bounded_under_a_spray_of_maximal_usernames() -> None:
-    # REVIEW N-04 measured ~1 MB per bucket with 1 MB usernames. Now each bucket holds a
+    # An earlier version measured ~1 MB per bucket with 1 MB usernames. Now each bucket holds a
     # 32-byte digest: 2,000 buckets from 320-char emails stay far under 1 MB in total.
     # A large IP factor admits every attempt from "gw": only admitted attempts create account
     # buckets, and this test is about the cap on those.
@@ -327,7 +327,7 @@ def test_successful_logins_do_not_drain_the_account_bucket(client: TestClient) -
 
 
 def test_a_new_bucket_is_never_the_one_evicted_to_make_room() -> None:
-    # REVIEW.md P4-05: with fewer keys than the eviction window, the bucket just created was the
+    # With fewer keys than the eviction window, the bucket just created was the
     # fullest in the window, so it was dropped and the caller debited an orphan (no throttle).
     from apx.api.ratelimit import _BucketMap
 

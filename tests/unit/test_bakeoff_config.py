@@ -1,7 +1,7 @@
-"""Static checks of the M3.4 bake-off serving config (infra/llama-swap.yaml and models.lock):
+"""Static checks of the Extractor A bake-off serving config (infra/llama-swap.yaml and models.lock):
 every challenger is an offline alias in one exclusive, swapping `bakeoff` group, serves a GGUF
 pinned in models.lock, the served extractor-a/-b entries are untouched, and the bake-off UAE
-subset is the same one the M7.1 P2 latency gate times."""
+subset is the same one the Extractor B P2 latency gate times."""
 
 from __future__ import annotations
 

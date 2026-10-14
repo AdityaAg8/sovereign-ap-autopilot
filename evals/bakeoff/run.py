@@ -1,4 +1,4 @@
-"""M3.4 bake-off runner: parses every bake-off document not yet in the shared parse
+"""Extractor A bake-off runner: parses every bake-off document not yet in the shared parse
 cache (`make parse-cache` already holds the UAE subset), then runs each probed, in-budget arm
 strictly sequentially over the fixed 200-document UAE subset (a scanned document as its
 image-only scan PDF, as the runtime receives it) and ExtractBench short, appending

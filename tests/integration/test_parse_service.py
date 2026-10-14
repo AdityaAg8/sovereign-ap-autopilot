@@ -1,8 +1,8 @@
-"""Integration proof for M3.1's parse pipeline (I1): the pdfplumber
+"""Integration proof for the parse pipeline (I1): the pdfplumber
 born-digital fast path's boxes are scored at IoU>=0.5 against every labeled field in the UAE
 test split, gated at >=98% overall (reported for EN and AR separately too); the PaddleOCR-VL
 service is smoke-tested against a small sample of scanned pages for latency/VRAM, informational
-only per the PRD. Writes reports/parse.md. Needs data/uae/test (factory output) for the gate
+only. Writes reports/parse.md. Needs data/uae/test (factory output) for the gate
 and, for the service sample, a live `make up` stack with `parse` running; marked `integration`,
 so it never runs in CI or the default `pytest`/`make test` invocation."""
 
@@ -43,7 +43,7 @@ class FieldScore:
     language: str  # "ar" | "en"
     iou: float
     multi_page: bool
-    """Whether the source document has more than one page -- tracked to surface the M2 label
+    """Whether the source document has more than one page -- tracked to surface the factory label
     pagination gap (see `_write_report`'s "Known gap" section) separately from single-page
     accuracy, since it is not something apx.parse can fix."""
 
@@ -152,7 +152,7 @@ def _run_digital_gate() -> tuple[list[FieldScore], int, list[float]]:
             }
             labels_doc = json.loads(labels_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            # data/uae/test is M2 factory output regenerated out-of-band; a document
+            # data/uae/test is factory output regenerated out-of-band; a document
             # can be deleted or rewritten between the is_file() check above and the read on a
             # shared checkout, so a transient race here is skipped rather than failing the gate.
             continue
@@ -181,7 +181,7 @@ def _sample_scan_pages(limit: int) -> list[Path]:
 
 
 def _run_scan_sample() -> dict[str, float | int] | None:
-    """Best-effort, never fails the test: PRD §10 M3.1 reports scans as informational only.
+    """Best-effort, never fails the test: the parse gate reports scans as informational only.
     Returns None if the live stack or the sample images aren't available."""
     if not TEST_DATA_DIR.is_dir() or shutil.which("docker") is None:
         return None

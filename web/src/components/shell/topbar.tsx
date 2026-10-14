@@ -1,5 +1,5 @@
-/** Shell header: page title, ⌘K launcher, theme toggle and the signed-in user menu (PRD §10
- * M5.4). Rendered once by the authenticated layout; pages only supply a title and page actions. */
+/** Shell header: page title, ⌘K launcher, theme toggle and the signed-in user menu.
+ * Rendered once by the authenticated layout; pages only supply a title and page actions. */
 
 "use client";
 

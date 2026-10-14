@@ -550,7 +550,7 @@ ATTACK_GATE_STATUSES: frozenset[str] = frozenset(
 
 @dataclass(frozen=True)
 class AttacksE2eReport:
-    """The M6.6 end-to-end attack run as `evals/attacks_e2e/report.py::to_json` writes it."""
+    """The end-to-end attack run as `evals/attacks_e2e/report.py::to_json` writes it."""
 
     gate_status: str
     gate_detail: str

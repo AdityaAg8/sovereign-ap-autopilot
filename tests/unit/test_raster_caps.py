@@ -175,7 +175,7 @@ def jpeg_header(width: int, height: int) -> bytes:
 
 
 # ------------------------------------------------------------------------------------------
-# REVIEW N-05: legitimate large scans and phone photos pass; the budget still holds
+# Legitimate large scans and phone photos pass; the budget still holds
 # ------------------------------------------------------------------------------------------
 
 

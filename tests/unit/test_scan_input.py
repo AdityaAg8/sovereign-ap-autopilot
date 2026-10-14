@@ -344,7 +344,7 @@ def test_e2e_drops_scanned_picks_as_their_scan(
 
 
 def test_the_bakeoff_parses_each_uae_document_as_its_runtime_input(tmp_path: Path) -> None:
-    """M3.4 compares extractors on what the runtime receives: a scanned document goes to the
+    """The bake-off compares extractors on what the runtime receives: a scanned document goes to the
     parse cache as its scan PDF under the sha256 of those bytes, a digital one as its PDF."""
     digital_dir, scan_dir, cache_dir = tmp_path / "d", tmp_path / "s", tmp_path / "cache"
     for data_dir, has_scan in ((digital_dir, False), (scan_dir, True)):

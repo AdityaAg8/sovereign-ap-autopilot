@@ -22,7 +22,7 @@ def test_every_apx_module_imports_with_header() -> None:
     assert len(names) >= 32
     for name in names:
         module = importlib.import_module(name)
-        assert module.__doc__, f"{name} is missing its PRD §8 header docstring"
+        assert module.__doc__, f"{name} is missing its header docstring"
 
 
 def test_structured_request_has_no_tools_field() -> None:

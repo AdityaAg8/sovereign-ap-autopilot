@@ -1,4 +1,4 @@
-"""CLI for the M9.5 chat evals (`python -m evals.chat`, `make eval-chat`): runs the scripted chat
+"""CLI for the chat evals (`python -m evals.chat`, `make eval-chat`): runs the scripted chat
 tasks and the AgentDojo banking attack suite for the stock and the uncensored agent model on a
 configurable OpenAI-compatible endpoint, then writes `reports/chat_evals.md` and `.json`.
 `--dry-run` swaps the endpoint for the in-process scripted fake and makes no network calls."""
@@ -72,7 +72,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _print_progress(label: str, done: int, total: int) -> None:
-    """One flushed line per finished chat task; tools/ops-dashboard parses `[<model>] chat i/n`."""
+    """One flushed line per finished chat task (`[<model>] chat i/n`), so the log shows progress."""
     print(f"[{label}] chat {done}/{total}", flush=True)
 
 

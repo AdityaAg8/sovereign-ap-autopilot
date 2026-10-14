@@ -1,4 +1,4 @@
-"""Integration tests for M8.1's pgvector page index against a real, migrated Postgres
+"""Integration tests for the fraud rules' pgvector page index against a real, migrated Postgres
 (pgvector/pgvector:pg16-trixie, the Compose image): `0010_page_embeddings` up/down, vendor-scoped
 cosine top-k and idempotent upserts through `PgPageVectorStore`, typed refusals of malformed
 vectors, and a near-duplicate page flagged end to end through `RuleFraudEngine`."""

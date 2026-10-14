@@ -1,5 +1,5 @@
-/** Central registry pages use to publish their keyboard shortcuts so the `?` help overlay (PRD
- * §10 M5.4) always reflects what's actually bound on screen, instead of a hand-maintained list
+/** Central registry pages use to publish their keyboard shortcuts so the `?` help overlay
+ * always reflects what's actually bound on screen, instead of a hand-maintained list
  * that drifts from the code. */
 
 "use client";

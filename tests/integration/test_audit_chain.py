@@ -196,7 +196,7 @@ def test_trigger_still_blocks_an_ordinary_update(audit_schema: str) -> None:
 
 
 async def _run_streamed_verify_across_pages() -> None:
-    # REVIEW L-05: the verifier streams the chain in keyset pages; a page size that does not
+    # The verifier streams the chain in keyset pages; a page size that does not
     # divide the chain length, and a tampered row inside a later page, must give exactly the
     # results of one in-memory walk.
     audit_log = PgAuditLog()

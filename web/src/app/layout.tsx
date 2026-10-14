@@ -3,8 +3,8 @@
  * paired Arabic face (IBM Plex Sans Arabic) is *not* loaded here: it only ever renders inside
  * the vendor screens' bilingual names (the only `lang="ar"` text in this app), so it is loaded
  * by `(app)/vendors/layout.tsx` instead — every other route, including /login and /inbox, never
- * downloads a font family it never displays (Lighthouse performance budget, .claude/rules/design
- * .md). */
+ * downloads a font family it never displays (Lighthouse performance
+ * budget). */
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { ThemeProvider } from "next-themes";

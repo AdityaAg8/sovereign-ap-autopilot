@@ -21,7 +21,7 @@ from apx.learning.interfaces import ActiveLearningCandidate
 LOW_CONFIDENCE_WEIGHT = 0.5
 DISAGREEMENT_WEIGHT = 0.3
 CORRECTED_OFTEN_WEIGHT = 0.2
-"""Fixed, documented weights for the active-learning score (sum to 1.0): PRD §10 M10.1 asks
+"""Fixed, documented weights for the active-learning score (sum to 1.0): the spec asks
 for a "documented, deterministic rule", not a learned one."""
 
 LOW_CONFIDENCE_THRESHOLD = 0.7

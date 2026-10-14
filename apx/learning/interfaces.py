@@ -1,4 +1,4 @@
-"""Typed value objects for the M10.1 corrections store, active-learning candidate selection
+"""Typed value objects for the corrections store, active-learning candidate selection
 and retraining export: what a reviewer's fix looked like, what makes an (invoice, field) pair
 worth reviewing next, and one row of the manifest handed to `ml/` training code
 (I5)."""

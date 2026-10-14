@@ -1,6 +1,6 @@
 """Deterministic scripted fake of the local OpenAI-compatible endpoint (llama-swap
 `/v1/chat/completions`), served through an in-process `httpx` mock transport. It stands in for
-the model only, for dry runs and unit tests of the M9.5 harness: a keyword policy for the ops-chat
+the model only, for dry runs and unit tests of the chat harness: a keyword policy for the ops-chat
 tools and a read-then-answer policy for AgentDojo. It never sees the golden calls."""
 
 from __future__ import annotations

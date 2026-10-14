@@ -64,7 +64,7 @@ def test_every_required_table_exists() -> None:
 
 
 def test_no_float_columns_outside_the_allow_list() -> None:
-    """PRD §6.3/§8: money is always `Numeric`, never `float`. Any new `float`-typed column
+    """Money is always `Numeric`, never `float`. Any new `float`-typed column
     must be added to `ALLOWED_FLOAT_COLUMNS` deliberately, not by accident."""
     offenders = [
         (table.name, column.name)
@@ -195,14 +195,14 @@ def test_users_and_roles_are_linked_by_a_join_table_not_a_free_text_column() -> 
 
 
 def test_field_model_revision_column_exists_and_is_nullable() -> None:
-    """PRD §10 M10.1: a correction records the model/revision that produced the original
+    """A correction records the model/revision that produced the original
     value, so `fields` must carry it (nullable -- most rows predate this or are human)."""
     column = TABLES["fields"].c["model_revision"]
     assert column.nullable is True
 
 
 def test_label_correction_columns_capture_the_before_snapshot() -> None:
-    """PRD §10 M10.1: every correction is a self-contained record of invoice, field,
+    """Every correction is a self-contained record of invoice, field,
     before/after value, box, reviewer, timestamp and the model/revision that produced the
     original -- `corrected_value`/`labeled_by`/`created_at` already covered the after value,
     reviewer and timestamp; these four columns add the "before" half."""

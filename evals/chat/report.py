@@ -1,4 +1,4 @@
-"""Renders the M9.5 chat-eval results as `reports/chat_evals.md` (the scripted-task numbers and the
+"""Renders the chat-eval results as `reports/chat_evals.md` (the scripted-task numbers and the
 stock-vs-uncensored table) plus a JSON twin for machines. A dry run on the fake endpoint is
 stamped "DRY RUN (fake model)" in the title and every table, so it can never pass for real
 numbers."""

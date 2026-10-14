@@ -2,8 +2,8 @@
 both compare a predicted (doc_id, field_name) -> value mapping against gold on
 normalized exact match. Kept as one pure, typed function so both scorers report identically
 comparable numbers for the scoreboard. For a UAE header field (`apx.common.compare.
-FIELD_KIND_BY_NAME`), normalization delegates to the same comparator as the M7 trust gate
-(ADR-0009 §4.1, F4), so the F1 promotion gate and the trust labels agree on what "correct" means;
+FIELD_KIND_BY_NAME`), normalization delegates to the same comparator as the trust gate
+(ADR-0009 §4.1), so the F1 promotion gate and the trust labels agree on what "correct" means;
 other fields (FATURA, ExtractBench) keep the plain NFKC + whitespace-collapse rule unchanged."""
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class FieldF1Result:
 def normalize_value(value: str, field: str | None = None) -> str:
     """Normalizes a field value for exact-match comparison. When `field` is a UAE header field
     (a `FieldName` value, e.g. "supplier_trn" or "iban"), delegates to the same per-kind
-    comparator the M7 trust gate uses (`apx.common.compare.normalize_for_compare`), so Extractor
+    comparator the trust gate uses (`apx.common.compare.normalize_for_compare`), so Extractor
     B's F1 promotion gate and the trust labels can never disagree on what counts as a match
     (ADR-0009 §4.1, F4). `normalize_for_compare`'s None (blank input) becomes "", matching this
     function's plain-string contract. Otherwise (FATURA, ExtractBench, or no field given): NFKC

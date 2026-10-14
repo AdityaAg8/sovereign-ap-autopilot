@@ -32,7 +32,7 @@ repos:
         pass_filenames: false
 
       - id: check_headers
-        name: check PRD §8 file headers
+        name: check file headers
         entry: uv run python scripts/check_headers.py --all
         language: system
         pass_filenames: false

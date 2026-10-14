@@ -1,4 +1,4 @@
-/** M5.4a: the overlays and popup controls that now load on demand (command palette, shortcut
+/** The overlays and popup controls that now load on demand (command palette, shortcut
  * help, assistant panel, inbox filter pickers, account menu) still work keyboard-first on a
  * fresh page load, before and after their chunks arrive, and swapping them in shifts nothing
  * (CLS 0). Runs against the production build via playwright.config.ts's webServer. */

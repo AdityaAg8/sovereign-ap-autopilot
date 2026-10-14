@@ -24,7 +24,7 @@ with write access to both the database and that path can still forge both.
 By design, `PgAuditFullVerifier.verify()` only advances the anchor to the chain's current
 head *after* a clean chain-and-anchor verify, never before: this keeps "the anchor" and "a
 verified-clean state" the same statement, and bounds an undetected tail truncation to at most
-one verify interval (nightly, 's "verifier job walks the chain nightly").
+one verify interval (nightly: "verifier job walks the chain nightly").
 
 `PgAuditFullVerifier.verify()` also carries the exit-code contract `python -m apx.audit
 verify` promises (1 broken, 2 could-not-run). Every failure here that is not

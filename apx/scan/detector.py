@@ -1,5 +1,5 @@
 """Concrete hidden-content detector: opens a PDF once with pdfplumber and once with pypdfium2
-and runs every M6.2 technique (visibility, control characters, active content) per page and
+and runs every scan technique (visibility, control characters, active content) per page and
 per document. Never returns [] on failure -- raises `ScanError` instead,
 so a scan that could not run is never mistaken for a clean document (SEC-02)."""
 
@@ -26,7 +26,7 @@ class PdfHiddenContentDetector:
         self._dpi = dpi
 
     def detect(self, pdf_bytes: bytes) -> list[ScanFlag]:
-        """Run every M6.2 technique. Raises `ScanError` if the PDF cannot be parsed or
+        """Run every scan technique. Raises `ScanError` if the PDF cannot be parsed or
         rendered; a failed scan is never reported as an empty (clean) flag list."""
         try:
             return self._detect(pdf_bytes)

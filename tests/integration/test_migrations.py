@@ -161,7 +161,7 @@ def test_alembic_upgrade_then_downgrade_base_is_clean(env_database_url: str) -> 
 
 
 def test_audit_log_rejects_update_and_delete(env_database_url: str) -> None:
-    """I4/§6.4: the audit chain is append-only; `db/migrations` attaches a trigger that must
+    """I4: the audit chain is append-only; `db/migrations` attaches a trigger that must
     reject UPDATE and DELETE at the database level, not just in application code."""
     cfg = _alembic_config()
     command.upgrade(cfg, "head")
@@ -199,7 +199,7 @@ async def _assert_audit_log_is_append_only() -> None:
 
 
 def test_audit_anchor_rejects_update_and_delete(env_database_url: str) -> None:
-    """I4/§6.4: `audit_anchor` (head anchoring) is append-only, same as `audit_log`; the
+    """I4: `audit_anchor` (head anchoring) is append-only, same as `audit_log`; the
     `0002_audit_anchor` trigger must reject UPDATE and DELETE at the database level."""
     cfg = _alembic_config()
     command.upgrade(cfg, "head")
@@ -391,7 +391,7 @@ async def _document_failure_shape(dsn: str) -> tuple[set[str], str | None]:
 
 
 def test_document_failure_migration_up_and_down(env_database_url: str) -> None:
-    """M5.6: 0011 adds `ingested_documents.failed_at`/`failure` (set together, by CHECK) for a
+    """0011 adds `ingested_documents.failed_at`/`failure` (set together, by CHECK) for a
     workflow that failed before its invoice row existed; the downgrade removes all three."""
     cfg = _alembic_config()
     command.upgrade(cfg, "0011_document_failure")

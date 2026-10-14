@@ -1,5 +1,5 @@
 /** Playwright config for the review UI's e2e smoke suite: runs against a production build served
- * by `next start`, driving the fixture API adapter (PRD §10 M5.4 acceptance: login → inbox →
+ * by `next start`, driving the fixture API adapter (acceptance path: login → inbox →
  * open invoice → keyboard approve). Swapping to the real backend later only needs
  * NEXT_PUBLIC_API_MODE=http on the server this points at — the spec files don't change. */
 import { defineConfig, devices } from "@playwright/test";

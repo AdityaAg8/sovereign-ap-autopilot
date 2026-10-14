@@ -1,4 +1,4 @@
-"""Inference wrapper for the M6.4 injection guard and its sequence-classification baselines:
+"""Inference wrapper for the injection guard and its sequence-classification baselines:
 loads a local checkpoint (never the network), returns P(injection) per text, and has a CLI that
 scores the guard dataset splits to JSONL for evals/guard.py. Needs torch + transformers
 (toolbox container)."""

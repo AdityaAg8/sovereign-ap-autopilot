@@ -251,7 +251,7 @@ def _ok_payload() -> dict[str, object]:
 async def test_every_call_carries_the_configured_service_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """REVIEW N-06: the parse service refuses /parse and /unload without its bearer token."""
+    """The parse service refuses /parse and /unload without its bearer token."""
     seen: list[tuple[str, str | None]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:

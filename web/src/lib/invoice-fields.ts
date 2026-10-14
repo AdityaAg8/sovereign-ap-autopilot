@@ -1,5 +1,5 @@
-/** Human-readable labels for extracted field names (apx.extract.schema.InvoiceFields, PRD §10
- * M3.2). Shared by the fixture generator and the field-list UI so both draw from one source
+/** Human-readable labels for extracted field names (apx.extract.schema.InvoiceFields).
+ * Shared by the fixture generator and the field-list UI so both draw from one source
  * instead of duplicating the field vocabulary. */
 
 export const FIELD_LABELS: Readonly<Record<string, string>> = {

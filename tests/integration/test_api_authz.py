@@ -1,11 +1,11 @@
-"""Integration tests for the M5.3/M5.4 API's authorisation matrix against a real, throwaway
+"""Integration tests for the API's authorisation matrix against a real, throwaway
 Postgres container (P1-P5): P3 gates an above-limit approval on the
 approver role, P2 bars the bank-detail changer from approving that vendor for 30 days, an
 admin-only user cannot approve payments, field edits need the reviewer role, a proposal
 executes only for its kind's required role, approvals need AWAITING_REVIEW, are idempotent
 and signal the invoice's workflow (all via PolicyGuard -> SqlPaymentStateWriter), and every
 decision/edit appends to the audit chain
-(I4). A SQL-injection payload in the list filter is also proven inert end to end. The M5.4
+(I4). A SQL-injection payload in the list filter is also proven inert end to end. The
 vendor endpoints (masked bank details, the G-3 verified flag, recent invoices) and the
 document-serving route (authz matrix across every role plus path-traversal attempts,
 docs/security.md B1) are covered here too, reusing the same throwaway Postgres container. Marked
@@ -587,7 +587,7 @@ def test_proposal_accept_requires_its_kinds_capability(api_schema: str) -> None:
 
 
 async def _approval_preconditions_scenario() -> None:
-    """F2/F3 of the M5 review: approvals go through `SqlPaymentStateWriter`, so only an
+    """Approvals go through `SqlPaymentStateWriter`, so only an
     AWAITING_REVIEW invoice can be approved, a repeated approval is an idempotent no-op (one
     approval row), and every approval -- direct or via an approve_payment proposal -- signals
     the invoice's workflow. A change_bank proposal lands through the same writer."""
@@ -924,7 +924,7 @@ def test_invoice_detail_returns_stored_fraud_flags_with_explanations(api_schema:
 
 
 async def _failed_before_invoice_scenario() -> None:
-    """M5.6: a workflow that failed before `build_invoice` persisted its row. The real
+    """A workflow that failed before `build_invoice` persisted its row. The real
     `mark_failed` records it on `ingested_documents` and audits it; the detail endpoint then
     answers FAILED with the error, while a document still in flight stays a 404."""
     from typing import Any, cast
@@ -1004,7 +1004,7 @@ def test_a_document_failed_before_its_invoice_row_reads_as_failed(api_schema: st
 
 
 async def _ops_dashboard_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
-    """M10.3 acceptance: every dashboard number equals an independent check -- the hand-derived
+    """Every dashboard number equals an independent check -- the hand-derived
     value for this seed, and a recomputation in Python from raw rows (not the dashboard SQL)."""
     from apx.common.types import Stage
     from apx.db.enums import DecisionAction, FieldSource

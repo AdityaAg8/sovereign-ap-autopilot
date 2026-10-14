@@ -183,7 +183,7 @@ HOST_PARSE = PARSE_BASE_URL=$(or $(PARSE_BASE_URL),http://127.0.0.1:8010) PARSE_
 # recorded and the queue goes on, so a failed gate does not leave the GPU idle until a human polls.
 # Sub-items joined by '|' run concurrently (ADR-0018): only jobs whose outputs cannot depend on
 # timing and whose VRAM fits together (B ~4.4 GB + OCR parse ~4.3 GB; never A beside the parse).
-# Default QUEUE is the ADR-0018 reduced plan, sequential (§5: concurrent OCR + B dropped OCR
+# Default QUEUE is the ADR-0018 reduced plan, sequential (ADR-0018 §5: concurrent OCR + B dropped OCR
 # decode from ~60 to 21 tok/s, so no '|' group by default): test and cal parses; A on test and
 # on cal; the champion-only trust gate on A ('+': a verdict, CPU); B on test; the attack suite.
 # Run `make archive-stale-rows` first (rows from another parser build refuse a resume). The fresh
@@ -258,7 +258,7 @@ gpu-queue:
 	@echo "==> GPU queue holding data/ml/gpu.lock: $(QUEUE) (logs/<item>.log; done markers logs/gpu_queue/)"
 	IFS=, read -r -a items <<< "$(QUEUE)"; bash scripts/gpu_queue.sh "$${items[@]}"
 
-## --- ADR-0012 §7: M3.3 before/after on the same documents ---------------------------
+## --- ADR-0012 §7: Extractor A before/after on the same documents----------------------
 M33_DATA_DIR ?= data/uae/test
 M33_BEFORE ?= logs/extraction_a.jsonl
 M33_AFTER ?= logs/extraction_a.adr0012.jsonl
@@ -275,7 +275,7 @@ extraction-a-compare:
 	@echo "==> paired before/after comparison -> reports/extraction_a_schema_delta.md (CPU)"
 	uv run python -m evals.extraction_a_compare --before $(M33_BEFORE) --after $(M33_AFTER)
 
-## --- M3.4 Extractor A bake-off (ADR-0016) ---------------------------------------------
+## --- Extractor A bake-off (ADR-0016) ---------------------------------------------------
 # Host-side, needs `make up` (llama-swap + parse) and an otherwise idle GPU: every arm runs alone
 # on the card and its whole-card VRAM is part of the result. Probe first; `bakeoff` resumes.
 # Overridable: `make bakeoff BAKEOFF_ARMS=a,q38-9b-distill` (default: every arm).
@@ -287,11 +287,11 @@ BAKEOFF_ARMS ?=
 BAKEOFF_REUSE_A ?= $(M33_AFTER)
 
 bakeoff-probe:
-	@echo "==> M3.4 5-page VRAM probe per arm -> reports/bakeoff_probe.json (GPU; needs make up)"
+	@echo "==> Bake-off 5-page VRAM probe per arm -> reports/bakeoff_probe.json (GPU; needs make up)"
 	$(HOST_PARSE) uv run python -m evals.bakeoff.probe --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS))
 
 bakeoff:
-	@echo "==> M3.4 bake-off: 200 UAE + ExtractBench short per in-budget arm (GPU, resumable rows: logs/bakeoff/)"
+	@echo "==> Bake-off: 200 UAE + ExtractBench short per in-budget arm (GPU, resumable rows: logs/bakeoff/)"
 	$(HOST_PARSE) uv run python -m evals.bakeoff.run --data-dir $(BAKEOFF_DATA_DIR) $(if $(BAKEOFF_ARMS),--arms $(BAKEOFF_ARMS)) $(if $(BAKEOFF_REUSE_A),--reuse-a-rows $(BAKEOFF_REUSE_A))
 	$(MAKE) bakeoff-report
 
@@ -372,7 +372,7 @@ smoke-b:
 	@echo "==> llama-server smoke of the exported challenger on 5 UAE dev docs (needs make up)"
 	uv run python -m ml.extractor_b.smoke --base-url http://127.0.0.1:8080
 
-# M7.1 promotion (ADR-0009 §1.8, docs/training.md "Promotion"): host-side, needs `make up`.
+# Extractor B promotion (ADR-0009 §1.8, docs/training.md "Promotion"): host-side, needs `make up`.
 # eval-b and gates-b drive the GPU through llama-swap; run them only when no other GPU job runs.
 # Overridable: `make gates-b A_ROWS=logs/extraction_a.adr0012.jsonl B_ROWS=logs/extractor_b_test.jsonl`.
 register-b:
@@ -397,7 +397,7 @@ report-b:
 	@echo "==> Extractor B training report -> reports/extractor_b.md (CPU; MLflow via the gateway if up)"
 	uv run python -m ml.extractor_b.report
 
-# M7.4/M7.5 trust calibration (ADR-0009 §5-§6). The cal rows are GPU runs of the extraction
+# Trust calibration (ADR-0009 §5-§6). The cal rows are GPU runs of the extraction
 # harness over the 750 UAE cal documents (resumable, identity-checked rows under logs/, never
 # committed); `calibrate` is CPU only. CAL_B_MODEL may name the challenger alias instead.
 CAL_A_ROWS ?= logs/cal_a.jsonl
@@ -448,7 +448,7 @@ eval-quick:
 	uv run python -m evals.scoreboard
 	uv run python scripts/sync_readme.py
 
-# M9.5 chat evals. Endpoint and aliases are config: CHAT_EVAL_BASE_URL (default
+# Chat evals. Endpoint and aliases are config: CHAT_EVAL_BASE_URL (default
 # http://127.0.0.1:8080, llama-swap via the gateway), CHAT_EVAL_STOCK_ALIAS (ops-chat),
 # CHAT_EVAL_REDTEAM_ALIAS (redteam-uncensored). Needs the GPU; run alone.
 eval-chat:
@@ -459,7 +459,7 @@ eval-chat-dry:
 	@echo "==> eval-chat-dry: same harness on the in-process scripted fake (no network, no GPU)"
 	uv run python -m evals.chat --dry-run
 
-## --- M6.4 injection guard (ml/guard, reports/guard.md) --------------------------------
+## --- Injection guard (ml/guard, reports/guard.md) -------------------------------------
 GUARD_TOOLBOX = cd infra && $(COMPOSE) --profile dev run --rm --no-deps toolbox
 
 guard-data:
@@ -491,7 +491,7 @@ seed:
 ATTACKS_ARGS ?=
 
 eval-attacks:
-	@echo "==> M6.6: the 312-case attack suite through the running stack (make up + make seed first)"
+	@echo "==> The 312-case attack suite through the running stack (make up + make seed first)"
 	@echo "    review-routed cases approved via the API; payment state read from Postgres"
 	@echo "    ~4.2 h for 312 cases + 24 clean baseline (16 in flight); resumable -> reports/attacks_e2e.md"
 	@echo "    Postgres is read on 127.0.0.1:5432 through the devports service: started here for the run,"
@@ -561,7 +561,7 @@ verify-m4:
 	@echo "verify-m4 OK"
 
 verify-m5: fresh-clone
-	@echo "==> M5 gate: 20 documents end to end through the running stack (make up + make seed)"
+	@echo "==> End-to-end gate: 20 documents through the running stack (make up + make seed)"
 	uv run python scripts/e2e_pipeline.py
 
 verify-m6:

@@ -1,4 +1,4 @@
-"""Unit tests for M3.3 Extractor A: the llama-swap client (request shape, typed errors) over an
+"""Unit tests for Extractor A: the llama-swap client (request shape, typed errors) over an
 httpx MockTransport, the extraction schema and dispute rule, per-field logprob attribution with
 multi-byte tokens, invalid-output reporting, prompt budgeting and word grounding (I1). No GPU,
 no network."""

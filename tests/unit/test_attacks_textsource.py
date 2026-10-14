@@ -1,7 +1,7 @@
 """Unit tests for `attacks.textsource`: `TemplateTextSource` determinism and coverage of every
 category/goal/language combination the manifest builder can request, plus the standalone text
 utilities (`homoglyph_spoof`, `zero_width_obfuscate`, `bidi_wrap`) each attack category's hook
-or PDF mutation relies on (PRD §10 M6.3: "template-based variants now (EN + AR)")."""
+or PDF mutation relies on ("template-based variants now (EN + AR)")."""
 
 from __future__ import annotations
 

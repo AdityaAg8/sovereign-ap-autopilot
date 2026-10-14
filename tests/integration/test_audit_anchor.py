@@ -246,8 +246,8 @@ def test_truncating_the_tail_after_an_anchor_is_detected(
 
 # ------------------------------------------------------------------------------------------
 # 4. rewriting the chain's tail *and* the database's own anchor row to match is still caught,
-#    because the external anchor file was never touched (PRD §10 M10.4 acceptance: "rewriting
-#    head+anchor inconsistently")
+#    because the external anchor file was never touched (the "rewriting
+#    head+anchor inconsistently" case)
 # ------------------------------------------------------------------------------------------
 
 

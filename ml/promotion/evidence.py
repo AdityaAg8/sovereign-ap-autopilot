@@ -41,7 +41,7 @@ class ExtractorGateReport(BaseModel):
     uae_test_digest: Sha256Hex
     """sha256 over the sorted UAE test document sha256s."""
     latency_subset_digest: Sha256Hex
-    """sha256 identifying the 200-document M3.4 latency subset."""
+    """sha256 identifying the 200-document bake-off latency subset."""
     uae_f1_overall: Fraction
     uae_f1_en: Fraction
     uae_f1_ar: Fraction

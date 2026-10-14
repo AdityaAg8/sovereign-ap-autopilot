@@ -1,5 +1,5 @@
 """reports/bakeoff.md, its machine-readable twin reports/bakeoff.json (read by the scoreboard) and
-the ADR-0016 decision block from the M3.4 bake-off rows:
+the ADR-0016 decision block from the bake-off rows:
 per arm UAE field F1 (EN/AR/pooled), valid JSON, p50/p95 latency, ExtractBench short value F1,
 probe and eval-run VRAM, then the decision rule: Qwen3.5-9B stays unless a challenger beats
 it by ≥ 1.0 F1 point at ≤ 1.5x p50 latency within the C2 budget. PENDING until every row exists;
@@ -55,7 +55,7 @@ ADR_START: Final[str] = "<!-- BAKEOFF:DECISION:START -->"
 ADR_END: Final[str] = "<!-- BAKEOFF:DECISION:END -->"
 PROBE_PAGE_TEXT: Final[str] = "5-page UAE test invoices, each arm at its served concurrency"
 PUBLISHED_EXTRACTBENCH_F1: Final[float] = 92.31
-"""PRD §5: published Qwen3.5-9B one-shot value F1 on ExtractBench short, for context only."""
+"""Published Qwen3.5-9B one-shot value F1 on ExtractBench short, for context only."""
 MTP_FINDING: Final[str] = (
     "The pinned llama.cpp (llama-swap image v257-cuda-b11096, llama-server build 11096, commit "
     "c550d2f60) lists `--spec-type draft-mtp` in `llama-server --help` and ships the MTP graph "
@@ -151,7 +151,7 @@ def run_peak(sessions: Sequence[Mapping[str, Any]]) -> tuple[float | None, int]:
 
 
 def decide(baseline: ArmResult, result: ArmResult) -> Verdict:
-    """The PRD M3.4 rule for one arm against the baseline."""
+    """The bake-off rule for one arm against the baseline."""
     key = result.arm.key
     if result.arm.kind is ArmKind.BASELINE:
         return Verdict(key, Outcome.BASELINE, ())

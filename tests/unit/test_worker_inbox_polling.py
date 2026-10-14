@@ -1,6 +1,6 @@
 """Compose contract for the inbox watcher: `data/` is a host bind mount, and on Docker Desktop a
 file dropped on the host raises no inotify event inside the container, so the worker's watchfiles
-watcher must poll. Without it the M5.6 e2e run dropped 20 documents and none were ingested."""
+watcher must poll. Without it the end-to-end run dropped 20 documents and none were ingested."""
 
 from __future__ import annotations
 

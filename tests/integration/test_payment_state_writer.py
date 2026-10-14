@@ -1,5 +1,5 @@
 """Integration test for `apx.policy.writer.SqlPaymentStateWriter` against a real, throwaway
-Postgres container: approval, bank-detail change round-trip on the M5.1 schema, idempotent
+Postgres container: approval, bank-detail change round-trip on the Postgres schema, idempotent
 replay and a stale-grant rejection (I3, ADR-0008). Marked `integration`
 (needs Docker), like `tests/integration/test_migrations.py`."""
 

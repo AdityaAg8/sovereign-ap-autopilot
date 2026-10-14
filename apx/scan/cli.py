@@ -1,4 +1,4 @@
-"""CLI: scans a directory of PDFs with the M6.2 hidden-content detector and reports flag counts
+"""CLI: scans a directory of PDFs with the hidden-content detector and reports flag counts
 per technique, plus per-document timing. Used to check the factory's clean invoice corpus
 against the "zero flags on 750 clean invoices" gate and for ad hoc scanning; `--details` dumps
 every individual flag (file, page, bbox, text, and -- for invisible-fill -- the measured
@@ -104,9 +104,7 @@ def format_details(directory: Path, report: ScanDirectoryReport) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Scan a directory of PDFs for hidden content (M6.2)."
-    )
+    parser = argparse.ArgumentParser(description="Scan a directory of PDFs for hidden content.")
     parser.add_argument(
         "directory", type=Path, help="Directory to scan recursively for *.pdf files."
     )

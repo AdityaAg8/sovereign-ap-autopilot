@@ -11,7 +11,7 @@ request at a time. Parses come from the shared `evals.parse_cache`
 (`--no-parse-cache` parses inline), so a resume or a later eval never re-OCRs a scan.
 `--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
 llama-swap alias such as `extractor-b-challenger`), as the ADR-0009 §1.8 P1/P3 gates require.
-`--split cal` runs the same harness over the UAE cal split for the M7.4 trust calibration; every
+`--split cal` runs the same harness over the UAE cal split for the trust calibration; every
 row also records what the trust features need (mean/min logprob, final value, OCR support).
 A `has_scan` document is fed as its runtime scan form (evals.scan_input: the scan PNGs as an
 image-only PDF, parsed by the OCR service like any scanned upload); every row records its
@@ -78,7 +78,7 @@ BOX_IOU_MATCH = 0.5
 DEFAULT_MODEL: dict[ExtractorId, str] = {ExtractorId.A: "extractor-a", ExtractorId.B: "extractor-b"}
 ROW_SCHEMA = 4
 """Row format version. 2 added, per field, `mean_logprob`, `final` (the grounded value string the
-trust features read) and `ocr_support` (ADR-0009 §4.3, §4.5), so the M7.4 cal job can rebuild
+trust features read) and `ocr_support` (ADR-0009 §4.3, §4.5), so the trust cal job can rebuild
 the exact runtime features from rows. 3: `ocr_support` matches the printed words against the raw
 value (not the grounder's normalised form), so schema-2 values are stale. 4: `has_scan`
 documents are fed as their scan (earlier rows read the born-digital PDF for them) and rows carry

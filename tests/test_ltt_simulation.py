@@ -1,4 +1,4 @@
-"""M7.5 gate (ADR-0009 §7 as amended): the 500-split known-ground-truth simulation of the
+"""Trust-gate proof (ADR-0009 §7 as amended): the 500-split known-ground-truth simulation of the
 whole calibrate + Learn-then-Test chain. Pass iff coverage >= (1 - delta) - 0.02 = 0.93, plus two
 non-degeneracy checks derived from the oracle ceiling: lambda_hat found in >= 450/500 splits and a
 median reference accept rate >= 0.75 x the oracle ceiling computed in code. Seeded, deterministic.

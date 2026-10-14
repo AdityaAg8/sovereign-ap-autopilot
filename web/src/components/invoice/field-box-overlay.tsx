@@ -1,5 +1,5 @@
 /** Draws grounded field boxes over the document pane from normalized bboxes (0..1, origin
- * top-left — apx.common.types.BBox, PRD §6.2 I1). The active field's box gets the accent
+ * top-left — apx.common.types.BBox, I1). The active field's box gets the accent
  * highlight in lockstep with its row in the field list (web/DESIGN.md's "synchronized grounding"
  * signature); every other box stays a quiet hairline so the active one reads instantly. Works
  * against any pane that reports its own pixel size, so pdf.js can replace the placeholder pane

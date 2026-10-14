@@ -21,7 +21,7 @@ branch_labels: str | tuple[str, ...] | None = None
 depends_on: str | tuple[str, ...] | None = None
 
 # The role is created without a password, so it cannot log in until migration
-# 0013_agent_ro_password sets one from the AGENT_RO_PASSWORD env var (REVIEW L-01: no credential
+# 0013_agent_ro_password sets one from the AGENT_RO_PASSWORD env var (no credential
 # in source).
 _CREATE_ROLE_SQL = """
 DO $$

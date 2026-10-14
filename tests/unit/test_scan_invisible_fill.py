@@ -1,6 +1,6 @@
 """Unit test for the invisible-fill technique (A01): text whose declared colour
 matches the rendered page background is flagged INVISIBLE_TEXT, and ordinary black-on-white
-text is not. Also carries the M6.2 clean-factory-corpus regression fixtures: real,
+text is not. Also carries the clean-factory-corpus regression fixtures: real,
 high-contrast text on a coloured band/tinted box, and muted-grey secondary text, must never be
 flagged just because the *page's* background differs from the colour actually rendered behind
 the glyph -- these are built locally with reportlab rather than in `tests/fixtures/scan` because

@@ -30,9 +30,9 @@
     <div class="half ar" dir="rtl" lang="ar">
       <div class="doc-title ar">فاتورة ضريبية</div>
       <div class="supplier-name">{{ s.field('supplier_name', supplier_name_ar) }}</div>
-      {# M2.4/M3.1 label self-check fix: `supplier_trn` has no language variant -- this is the
+      {# Label self-check fix: `supplier_trn` has no language variant -- this is the
          same value the English half above already tags. See `field_ltr_shadow`'s docstring in
-         _shared.html.j2 (PRD §10 M2.4/M3.1). #}
+         _shared.html.j2. #}
       <div class="supplier-sub">الرقم الضريبي {{ s.field_ltr_shadow(supplier_trn) }}</div>
       <table class="meta">
         <tr><th>تاريخ الإصدار</th><td>{{ s.field_ltr('issue_date', issue_date_iso) }}</td></tr>

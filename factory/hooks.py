@@ -1,7 +1,7 @@
-"""factory/hooks.py: no-op mutation-hook registries that the M8 fraud-typology and M6 attack
-suites will register into, so those milestones can inject a fraudulent or adversarial variant of
+"""factory/hooks.py: no-op mutation-hook registries that the fraud-typology and attack
+suites will register into, so those suites can inject a fraudulent or adversarial variant of
 one invoice's render context or HTML without changing `factory.build`'s generation loop again.
-Nothing is registered here: the M2.3 5,000-invoice run applies zero hooks by name, so it always
+Nothing is registered here: the 5,000-invoice baseline run applies zero hooks by name, so it always
 produces the clean baseline dataset."""
 
 from __future__ import annotations
@@ -74,9 +74,9 @@ class HookRegistry:
 
 
 FRAUD_TYPOLOGY_HOOKS = HookRegistry(kind="fraud typology")
-"""M8 fraud-typology hooks: unverified-IBAN redirects, over-billing, duplicate
-invoices and similar. Empty until M8 registers into it."""
+"""Fraud-typology hooks: unverified-IBAN redirects, over-billing, duplicate
+invoices and similar. Empty until the fraud suite registers into it."""
 
 ATTACK_HOOKS = HookRegistry(kind="attack")
-"""M6 attack-suite hooks: hidden text, zero-width characters, bidi overrides,
-homoglyph vendor names, fake approval stamps and similar. Empty until M6 registers into it."""
+"""Attack-suite hooks: hidden text, zero-width characters, bidi overrides,
+homoglyph vendor names, fake approval stamps and similar. Empty until `attacks` registers."""

@@ -1,4 +1,4 @@
-"""M7.5 gate (ADR-0009 §7): a known-ground-truth simulation of the whole calibrate + Learn-then-Test
+"""Trust gate (ADR-0009 §7): known-ground-truth simulation of the whole calibrate + Learn-then-Test
 chain over 500 cal/test splits, proving the coverage guarantee holds under the exchangeable
 generator that this ADR freezes (I6). The generator is deliberately independent of
 apx.trust.features: it draws feature vectors straight from the fixed model in ADR-0009 §7 so that

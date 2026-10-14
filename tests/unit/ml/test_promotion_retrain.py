@@ -1,4 +1,4 @@
-"""Unit tests for the M10.2 retrain orchestration (`ml.promotion.retrain`, ADR-0015 §5) with
+"""Unit tests for the retrain orchestration (`ml.promotion.retrain`, ADR-0015 §5) with
 in-memory fakes for export, training, shadow eval, registry, calibrator, models.lock and audit:
 a degraded challenger is auto-rejected with no side effects, a promotion runs its side effects
 in order, failures are audited, and `make retrain` stops with exit 2 until adapters exist."""

@@ -1,4 +1,4 @@
-"""Unit tests for the M9.5 chat-eval harness with a scripted fake of the model endpoint (never a
+"""Unit tests for the chat-eval harness with a scripted fake of the model endpoint (never a
 fake of the scorers): the chat runner drives the real tool loop, dispatcher and toolbox over the
 fixture world; the AgentDojo adapter converts messages and runs the pinned banking suite; the
 CLI dry run writes a report stamped "DRY RUN (fake model)"."""
@@ -216,7 +216,7 @@ def test_cli_dry_run_writes_a_stamped_report(
     assert "| stock |" in text and "| uncensored |" in text
     data = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
     assert data["dry_run"] is True and len(data["models"]) == 2
-    # Progress lines the ops dashboard (tools/ops-dashboard) parses while the eval runs.
+    # Progress lines a log watcher can follow while the eval runs.
     printed = capsys.readouterr().out.splitlines()
     assert [ln for ln in printed if ln.startswith("[stock] chat ")][-1] == "[stock] chat 6/6"
     assert "[uncensored] agentdojo banking: started" in printed

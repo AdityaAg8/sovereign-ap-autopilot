@@ -1,6 +1,6 @@
 """Calibration of the trust gate (ADR-0009 §5): the label-independent FIT/LTT split of the cal
 split, the logistic-scorer + out-of-fold-isotonic `Calibrator` with its logistic fallback, and the
-equal-mass reliability diagram used for M7.4's ECE report. Only apx.trust reads the cal split."""
+equal-mass reliability diagram used for the ECE report. Only apx.trust reads the cal split."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from apx.trust.interfaces import (
 
 def partition_mask(keys: Sequence[str], fit_fraction: float, salt: str) -> list[bool]:
     """u = int(sha256(salt + key)[:16], 16) / 2**64, FIT iff u < fit_fraction (ADR-0009 §5). The
-    low-level primitive shared by `partition_cal` and the M7.5 simulation, which partitions
+    low-level primitive shared by `partition_cal` and the trust-gate simulation, which partitions
     millions of synthetic rows without materialising `CalRecord` objects for each one."""
     out = []
     for key in keys:
@@ -172,7 +172,7 @@ class IsotonicCalibrator:
 
     def fit_encoded(self, x: np.ndarray, y: np.ndarray, groups: np.ndarray) -> None:
         """Fit directly from an already-encoded (n, 28) matrix, label vector and group-id array.
-        The fast path used by `fit` above and, for performance, by the M7.5 simulation."""
+        The fast path used by `fit` above and, for performance, by the trust-gate simulation."""
         if x.shape[0] == 0:
             raise TrustGateError("cannot fit calibrator on empty input")
         if np.unique(y).size < 2:
@@ -220,7 +220,7 @@ class IsotonicCalibrator:
 
     def predict_encoded(self, x: np.ndarray) -> np.ndarray:
         """Predict directly from an already-encoded (n, 28) matrix. The fast path used by
-        `predict` above and directly by the M7.5 simulation."""
+        `predict` above and directly by the trust-gate simulation."""
         scaler, logreg, method = self._scaler_or_raise(), self._logreg_or_raise(), self.method
         x_scaled = scaler.transform(x)
         if method is CalibrationMethod.ISOTONIC and self._isotonic is not None:

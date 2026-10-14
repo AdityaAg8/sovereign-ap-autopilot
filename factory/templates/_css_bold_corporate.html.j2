@@ -1,7 +1,7 @@
 {# "Bold Corporate" family CSS shared by en_/ar_/bilingual_bold_corporate. A full-width charcoal
    header band in reverse type, a gold accent used only for the tax-case badge and totals (so the
    one strong color carries real meaning), and heavy Kufi Arabic headings. Logical properties
-   keep one stylesheet correct in both directions (PRD §10 M2.2). #}
+   keep one stylesheet correct in both directions. #}
 <style>
 :root {
   --dark: #1A1A1A;
@@ -14,11 +14,11 @@
 }
 body { font-family: "Noto Sans", "Noto Kufi Arabic", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; }
 [lang="ar"], .ar { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 700; }
-{# M2.4 label self-check fix: must equal the printable content width (A4 210mm minus the two
+{# Label self-check fix: must equal the printable content width (A4 210mm minus the two
    14mm `@page` margins `factory/render.py` prints with) so this layout's on-screen box -- what
    `factory.render`'s `getClientRects()` measures for every `data-field` label -- lines up with
    where Chromium's print engine actually places it in the PDF; 190mm made every label on this
-   layout land ~4mm left of and ~2mm above its true PDF position (PRD §10 M2.4). #}
+   layout land ~4mm left of and ~2mm above its true PDF position. #}
 .sheet { max-width: 182mm; margin: 0 auto; }
 .band {
   background: var(--dark);

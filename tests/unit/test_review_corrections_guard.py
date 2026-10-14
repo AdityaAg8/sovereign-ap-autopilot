@@ -1,4 +1,4 @@
-"""REVIEW.md N-03 / KNOWN_ISSUES KI-02: the corrections inside a `review` signal are acted on only
+"""KNOWN_ISSUES KI-02: the corrections inside a `review` signal are acted on only
 when they digest to the ones recorded with the approval and the invoice's `fields` rows still
 derive them. `corrections_refusal` is the decision `confirm_review` makes over the rows it read;
 these tests drive it with real `Field` rows, and check that the digest survives Temporal's

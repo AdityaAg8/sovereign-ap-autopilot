@@ -255,7 +255,7 @@ def test_merge_latest_outcomes_prefers_the_more_recent_run() -> None:
 
 def test_merge_latest_outcomes_keeps_a_set_from_an_older_run_if_a_newer_run_omits_it() -> None:
     fatura_outcome = SetOutcome(set_name="fatura", status="scored", split="test", n=1, metrics={})
-    uae_outcome = SetOutcome(set_name="uae", status="deferred", reason="M2")
+    uae_outcome = SetOutcome(set_name="uae", status="deferred", reason="factory")
     report_a = _report("a", "2026-09-20T00:00:00+00:00", fatura_outcome, predictor="m")
     report_b = _report("b", "2026-09-21T00:00:00+00:00", uae_outcome, predictor="m")
 

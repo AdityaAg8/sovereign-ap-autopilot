@@ -1,5 +1,5 @@
 """Smoke test that the apx package and all its subpackages import and expose a version,
-so pytest has a real green test on the bare M0.2 skeleton."""
+so pytest has a real green test on the bare package skeleton."""
 
 import importlib
 
@@ -33,4 +33,4 @@ def test_apx_version_is_a_nonempty_string() -> None:
 def test_all_subpackages_import() -> None:
     for name in SUBPACKAGES:
         module = importlib.import_module(name)
-        assert module.__doc__, f"{name} is missing its PRD §8 header docstring"
+        assert module.__doc__, f"{name} is missing its header docstring"

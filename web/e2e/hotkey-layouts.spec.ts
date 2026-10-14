@@ -1,4 +1,4 @@
-/** Keyboard-layout regression spec for the review UI's hotkeys (PRD §10 M5.4 keyboard-first flows,
+/** Keyboard-layout regression spec for the review UI's hotkeys (keyboard-first flows,
  * EN/AR product): on an Arabic layout letter shortcuts match by physical key, AltGr-typed symbols
  * match plain symbol combos, and Ctrl never turns a letter shortcut into a plain one. */
 import { test, expect, type Page } from "@playwright/test";

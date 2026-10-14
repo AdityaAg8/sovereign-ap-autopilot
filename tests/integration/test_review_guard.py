@@ -1,11 +1,11 @@
-"""M11.2 against a throwaway Postgres: every review
+"""Review guard against a throwaway Postgres: every review
 transition through the API (reject only while awaiting review, send-to-review only before routing,
 both 409 otherwise), the workflow's `review_hold` and `confirm_review` activities over the real
 rows (a signal with no digest-matched approval is never backed), proposal acceptance that either
-acts or is refused, and the role an approval is recorded under. M11.3: a stale recorded approval
+acts or is refused, and the role an approval is recorded under. A stale recorded approval
 raises `StaleApprovalError`, a retried hold never reopens an approval, a repeated
 reject re-sends its signal, and decisions, edits and accepted proposals commit with their
-audit entry. M11.4: an approval signal's corrections must match the ones recorded with the
+audit entry. An approval signal's corrections must match the ones recorded with the
 approval, and an edit after the approval makes it stale. Reuses `test_api_authz.py`'s
 helpers on its own container name and port."""
 
@@ -208,7 +208,7 @@ async def _transitions_scenario() -> None:
         assert await _status(review) is DbInvoiceStatus.BLOCKED
         assert await _decisions(review) == [DecisionAction.REJECT]
         assert signaller.sent == [(review, False)]
-        # H-01: the rejection is terminal: a reopen and an approval refuse. N-02: repeating the
+        # The rejection is terminal: a reopen and an approval refuse. Repeating the
         # reject records nothing new and only re-sends its signal.
         assert await decide(review, "reject") == 204
         assert signaller.sent == [(review, False), (review, False)]
@@ -255,7 +255,7 @@ async def _confirm_scenario() -> None:
     # Backed decisions go through.
     assert await guard.confirm_review(approved, True) is True
     assert await guard.confirm_review(rejected, False) is True
-    # C-03: a raw approval signal with no approval row, or a raw reject with no recorded
+    # A raw approval signal with no approval row, or a raw reject with no recorded
     # rejection, is not backed; the invoice stays awaiting review and the attempt is audited.
     assert await guard.confirm_review(unapproved, True) is False
     assert await guard.confirm_review(unapproved, False) is False
@@ -264,7 +264,7 @@ async def _confirm_scenario() -> None:
     # A rejected invoice is never confirmed as approved.
     assert await guard.confirm_review(rejected, True) is False
 
-    # The approval row's digest must still match. N-13: a recorded approval whose invoice moved
+    # The approval row's digest must still match. A recorded approval whose invoice moved
     # is not merely unbacked (nobody could re-approve it): it raises, audited with its reason.
     async with get_session() as session:
         await session.execute(
@@ -292,7 +292,7 @@ def test_confirm_review_needs_a_digest_matched_approval_or_a_recorded_rejection(
 
 
 async def _corrections_scenario() -> None:
-    """N-03 (KI-02): an approval records the digest of the corrections it signals; the guard
+    """KI-02: an approval records the digest of the corrections it signals; the guard
     backs a signal only with exactly those corrections, and an edit of the corrections after
     the approval makes it stale. An accepted approve_payment proposal records its digest too."""
     approved = _invoice_id("rg-corr-approved")
@@ -394,7 +394,7 @@ def test_confirm_review_checks_the_signal_corrections_against_the_approval(
 
 
 async def _reconciler_scenario() -> None:
-    """N-01/N-02 follow-up: the reconciler's store finds an APPROVED invoice and a rejected
+    """The reconciler's store finds an APPROVED invoice and a rejected
     BLOCKED one whose decision is older than the grace period, rebuilds the signal the API would
     send (a backed one: `confirm_review` accepts it), skips undecided or fresh decisions, and
     counts its audited re-sends."""
@@ -452,7 +452,7 @@ async def _reconciler_scenario() -> None:
     counts = await store.resend_counts([approved, rejected], window=timedelta(days=7))
     assert counts == {approved: 2}
 
-    # P3-01: an approval gone stale (its digest no longer matches) is still re-sent, marked
+    # An approval gone stale (its digest no longer matches) is still re-sent, marked
     # stale, so `confirm_review` fails the invoice instead of leaving it APPROVED forever.
     async with get_session() as session:
         await session.execute(
@@ -503,7 +503,7 @@ async def _hold_scenario() -> None:
     # A hold never softens BLOCK.
     assert await guard.review_hold(held, Route.BLOCK) is Route.BLOCK
 
-    # N-09: a retried hold (its first attempt committed) after the reviewer approved never
+    # A retried hold (its first attempt committed) after the reviewer approved never
     # reopens the approval, and the hold is audited once.
     transport = ASGITransport(app=_app(_RecordingSignaller()))
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -546,7 +546,7 @@ async def _role_scenario() -> None:
     async with get_session() as session:
         rows = await session.execute(select(Approval.invoice_id, Approval.role_at_approval))
         roles = {invoice_id: role for invoice_id, role in rows.all()}
-    # L-04: above the limit only the approver role grants the approval, so that is recorded.
+    # Above the limit only the approver role grants the approval, so that is recorded.
     assert roles == {above: Role.APPROVER, within: Role.REVIEWER}
     await db_session.get_engine().dispose()
 
@@ -598,7 +598,7 @@ async def _proposal_scenario() -> None:
                 )
             )
         ).all()
-    # M-06: refused proposals stay pending; the accepted edit really happened, audited.
+    # Refused proposals stay pending; the accepted edit really happened, audited.
     assert statuses == {
         "p-route": ProposalStatus.PENDING,
         "p-info": ProposalStatus.PENDING,
@@ -636,7 +636,7 @@ async def _audit_rollback_scenario() -> None:
     with pytest.raises(AuditChainError):
         await service.decide(InvoiceId(invoice_id), DecisionRequest(action="approve"), reviewer)
 
-    # M-02: the approval and its `payment_state:approve` entry commit together or not at all.
+    # The approval and its `payment_state:approve` entry commit together or not at all.
     async with get_session() as session:
         approvals = (
             await session.scalars(select(Approval.id).where(Approval.invoice_id == invoice_id))
@@ -671,7 +671,7 @@ async def _decision_audit_rollback_scenario() -> None:
     reviewer = User(id=UserId("rev"), display_name="rev", roles=frozenset({Role.REVIEWER}))
     invoice_id = InvoiceId(rejected)
 
-    # N-07: each change and its audit entry commit together or not at all.
+    # Each change and its audit entry commit together or not at all.
     with pytest.raises(AuditChainError):
         await service.decide(invoice_id, DecisionRequest(action="reject"), reviewer)
     assert await _status(rejected) is DbInvoiceStatus.AWAITING_REVIEW

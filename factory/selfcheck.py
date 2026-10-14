@@ -1,4 +1,4 @@
-"""factory/selfcheck.py: the M2.4 label self-check CLI. For every digital PDF the M2.3 factory
+"""factory/selfcheck.py: the label self-check CLI. For every digital PDF the invoice factory
 produced, extracts the pdfplumber text within each DOM-derived labeled box (unioning wrapped
 lines back into logical reading order, reversing right-to-left/Arabic runs and normalizing digit
 scripts on both sides) and compares it exactly to the label's ground-truth value, reporting an

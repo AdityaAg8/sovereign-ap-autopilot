@@ -175,7 +175,7 @@ def test_canonical_xml_is_stable_across_rebuilds() -> None:
     assert canonical_xml_diff(first, second) == []
 
 
-# ADR-0012 / CLAUDE.md "no silent fallbacks": currency and line VAT rate are never defaulted.
+# ADR-0012, "no silent fallbacks": currency and line VAT rate are never defaulted.
 
 
 def _build_invoice(fields: InvoiceFields) -> bytes:

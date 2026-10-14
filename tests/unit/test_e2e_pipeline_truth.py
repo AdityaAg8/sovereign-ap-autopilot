@@ -1,4 +1,4 @@
-"""`scripts/e2e_pipeline.py`'s extracted-vs-truth check. Two scanned M5.6 invoices were reported
+"""`scripts/e2e_pipeline.py`'s extracted-vs-truth check. Two scanned e2e invoices were reported
 "ok" yet failed PINT AE after approval: one had an OCR'd seller emirate ("Ras Al Khalaimah",
 ibr-143-ae), one had 26 of its 39 lines (ibr-147-ae). The check now compares the seller address
 and the line count too. The driver corrects a misread seller address through the fields API before

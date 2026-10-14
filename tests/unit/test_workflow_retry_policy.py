@@ -76,7 +76,7 @@ def test_no_rendering_activity_retries_an_oversized_raster() -> None:
 
 
 def test_a_stale_recorded_approval_fails_at_once() -> None:
-    """N-13: the approval digest no longer matching is deterministic for the same rows."""
+    """The approval digest no longer matching is deterministic for the same rows."""
     assert "StaleApprovalError" in NON_RETRYABLE_ERRORS["confirm_review"]
 
 

@@ -1,6 +1,6 @@
 """Unit tests for evals/scorers/field_f1.py, the shared normalized-exact-match field F1 core,
-on hand-computed cases, plus the ADR-0009 §4.1 (F4) equivalence property: for a
-UAE header field, this module's comparator and the M7 trust gate's must agree on every match."""
+on hand-computed cases, plus the ADR-0009 §4.1 equivalence property: for a
+UAE header field, this module's comparator and the trust gate's must agree on every match."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def test_field_f1_normalizes_before_matching() -> None:
 
 
 # --------------------------------------------------------------------------------------------
-# ADR-0009 §4.1 (F4): UAE header fields share one comparator with the M7 trust gate
+# ADR-0009 §4.1: UAE header fields share one comparator with the trust gate
 # --------------------------------------------------------------------------------------------
 
 

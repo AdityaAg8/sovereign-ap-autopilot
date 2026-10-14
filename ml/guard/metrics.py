@@ -1,4 +1,4 @@
-"""Stdlib-only metrics and threshold selection for the M6.4 injection guard: confusion counts,
+"""Stdlib-only metrics and threshold selection for the injection guard: confusion counts,
 precision/recall/F1/FPR at a threshold, and the cal-split threshold rules (review: max F1, ties
 to the higher threshold; block: the lowest score with zero cal false positives). Shared by the
 fine-tune script (in the toolbox container), evals/guard.py and ml/guard/thresholds.py."""

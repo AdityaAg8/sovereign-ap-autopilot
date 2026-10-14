@@ -1,7 +1,7 @@
 """Pydantic model and (de)serialization for data/manifest.json: the per-dataset record of
 whether an eval/training set is present or deferred, with a sha256 per downloaded file.
-`load_manifest()`/`save_manifest()` are the contract M1.2's
-evals/splits.json generation and M1.3's scorers build on top of."""
+`load_manifest()`/`save_manifest()` are the contract the
+evals/splits.json generation and the scorers build on top of."""
 
 from __future__ import annotations
 

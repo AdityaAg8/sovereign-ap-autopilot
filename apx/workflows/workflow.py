@@ -20,7 +20,7 @@ from temporalio.exceptions import ActivityError, FailureError
 with workflow.unsafe.imports_passed_through():
     # Every one of these is a Pydantic model with no I/O of its own; `execute_activity`'s
     # `result_type` needs the real class at runtime; a bare string name (with no result_type)
-    # only gets Temporal a dict back, not the model (verified against the SDK: PRD §8 --
+    # only gets Temporal a dict back, not the model (verified against the SDK:
     # dependency behaviour is checked against docs/real runs, not assumed).
     from apx.asp_mock.interfaces import ArchiveRecord, AspReceipt
     from apx.common.invoice import Invoice
@@ -133,8 +133,8 @@ def _failure_text(exc: BaseException) -> str:
 
 
 _ACTIVITY_TIMEOUT = timedelta(minutes=5)
-"""Generous enough for an LLM-backed extract/arbiter call; tightened per-activity once M3/M7
-land real latency numbers."""
+"""Generous enough for an LLM-backed extract/arbiter call; tightened per-activity once the
+extractors land real latency numbers."""
 _GPU_ACTIVITY_TIMEOUT = timedelta(minutes=30)
 """Start-to-close for parse and extract, which wait inside the activity for their GPU stage
 (`apx.workflows.gpu_stage`, ADR-0013): a batch of the other stage (up to ~5 min of Extractor A
@@ -147,7 +147,7 @@ _REVIEW_NOTE_RETRY = RetryPolicy(maximum_attempts=2)
 REVIEW_CORRECTIONS_PATCH = "adr12-review-corrections"
 """`workflow.patched` id: histories recorded before ADR-0012 replay without apply_review."""
 REVIEW_NOTE_PATCH = "m9-review-note"
-"""`workflow.patched` id: histories recorded before M9.3 replay without the review-note step."""
+"""`workflow.patched` id: histories from before this patch replay without the review-note step."""
 FAILED_STATUS_PATCH = "p0-failed-status"
 """`workflow.patched` id: histories recorded before Phase 0 replay a failure without the
 `mark_failed` activity that writes FAILED to `invoices.status`."""
@@ -155,13 +155,13 @@ PAYEE_PIN_PATCH = "adr14-payee-pin"
 """`workflow.patched` id: histories recorded before ADR-0014 §7 replay `build_einvoice` with the
 invoice alone; new executions also pass the payee pinned at routing (`RoutingDecision.payee`)."""
 REVIEW_GUARD_PATCH = "m11-review-guard"
-"""`workflow.patched` id: histories recorded before M11.2 replay without `review_hold` after
+"""`workflow.patched` id: histories recorded before this patch replay without `review_hold` after
 routing and without `confirm_review` after the review signal."""
 REVIEW_BUFFER_PATCH = "m11-review-signal-buffer"
-"""`workflow.patched` id: histories recorded before M11.3 replay a `review` signal that arrived
+"""`workflow.patched` id: histories recorded before this patch replay a `review` signal that arrived
 before the review wait as dropped; new executions buffer it for the wait."""
 REVIEW_SIGNAL_CORRECTIONS_PATCH = "m11-review-signal-corrections"
-"""`workflow.patched` id: histories recorded before M11.4 replay `confirm_review` with the invoice
+"""`workflow.patched` id: histories from before this patch replay `confirm_review` with the invoice
 id and the decision only; new executions also pass the signal's corrections and ask the activity
 to check them against the approval's recorded corrections digest (KI-02)."""
 _BEFORE_REVIEW_WAIT: Final = frozenset(
@@ -317,7 +317,7 @@ class InvoiceWorkflow:
         )
         route = routing.route
         if workflow.patched(REVIEW_GUARD_PATCH):
-            # H-02: a reviewer's pre-route "send to review" turns AUTO into REVIEW.
+            # A reviewer's pre-route "send to review" turns AUTO into REVIEW.
             route = await workflow.execute_activity(
                 "review_hold",
                 args=[inp.invoice_id, route],
@@ -400,14 +400,14 @@ class InvoiceWorkflow:
         self._status = InvoiceStatus.ARCHIVED
 
     async def _await_backed_review(self, invoice_id: InvoiceId) -> ReviewDecision:
-        """Waits for a `review` signal the database backs. C-03: the signal alone is not
+        """Waits for a `review` signal the database backs. The signal alone is not
         authority (anyone who can reach Temporal can send one), so before the workflow builds or
         sends anything, `confirm_review` must find the approval row with a digest matching the
         current invoice (or the recorded rejection). An unbacked signal is audited there and
         dropped, and the invoice stays awaiting review for a real decision. An approval the API
         did record but whose digest or payee has since moved raises `StaleApprovalError`
         (non-retryable), so the run ends FAILED with that reason instead of waiting forever for
-        a decision nobody can send again. N-03: the signal's corrections, which
+        a decision nobody can send again. The signal's corrections, which
         `apply_review` applies next, must digest to those recorded with the approval, and an edit
         of the invoice's corrections since the approval makes it stale."""
         guarded = workflow.patched(REVIEW_GUARD_PATCH)
@@ -447,7 +447,7 @@ class InvoiceWorkflow:
             self._review = decision
         elif self._status in _BEFORE_REVIEW_WAIT and workflow.patched(REVIEW_BUFFER_PATCH):
             # Patched only on this branch: histories where the signal met the wait replay with
-            # no marker, and pre-M11.3 histories replay an early signal as dropped.
+            # no marker, and pre-buffer histories replay an early signal as dropped.
             self._review = decision
 
     @workflow.query

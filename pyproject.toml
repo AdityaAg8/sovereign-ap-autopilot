@@ -90,7 +90,7 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["apx", "factory", "evals", "db", "attacks", "ml", "tools"]
+files = ["apx", "factory", "evals", "db", "attacks", "ml"]
 exclude = ["^web/"]
 
 [[tool.mypy.overrides]]
@@ -124,7 +124,7 @@ markers = [
     "gpu: needs a GPU and local models; excluded from CI (run with `make test-gpu`)",
     "integration: needs a live `make up` Docker Compose stack; excluded from CI (run locally)",
     "artifacts: needs pinned PINT AE/SchXslt bundles fetched by `python -m evals.pint_ae.fetch`",
-    "external: needs local data that CI never has: an external dataset/framework clone under data/external or the generated factory split under data/uae (PRD C5)",
+    "external: needs local data that CI never has: an external dataset/framework clone under data/external or the generated factory split under data/uae",
     "perf: wall-clock performance budgets; run on an idle target host (`pytest -m perf`), not in CI",
     "trainer: needs the Extractor B trainer image (torch/transformers/TRL); CPU only (`make test-trainer`)",
 ]
@@ -136,7 +136,7 @@ branch = true
 source = ["apx"]
 
 [tool.coverage.report]
-fail_under = 85  # PRD §11 branch-coverage bar (REVIEW M-04); full suite measured 86%
+fail_under = 85  # branch-coverage bar; full suite measured 86%
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

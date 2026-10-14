@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--runtime-only",
         action="store_true",
-        help="Skip offline-only models (PRD §4 offline table)",
+        help="Skip offline-only models (stage: offline in infra/models.yaml)",
     )
     parser.add_argument(
         "--intent",

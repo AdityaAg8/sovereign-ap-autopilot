@@ -332,7 +332,7 @@ def field_features(
 ) -> FieldFeatures:
     """ADR-0009 §4 features of one header field from the A/B/arbiter outputs, the final value
     string and its OCR support. The one definition shared by `ExtractionFeatureBuilder` (runtime,
-    from `ExtractionResult` + `ParsedDocument`) and the M7.4 cal/test job (from eval rows that
+    from `ExtractionResult` + `ParsedDocument`) and the trust cal/test job (from eval rows that
     recorded the final value and its OCR support), so the two can never compute a feature
     differently.
 

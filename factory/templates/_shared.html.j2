@@ -1,6 +1,6 @@
-{# Shared Jinja2 macros for every M2.2 invoice layout: the print-safe <head> boilerplate (fonts,
+{# Shared Jinja2 macros for every invoice layout: the print-safe <head> boilerplate (fonts,
    page size, resets) and the two `data-field` wrappers every layout uses to tag canonical
-   extraction-schema values, so M2.3 can find them by DOM box (PRD §10 M2.2). #}
+   extraction-schema values, so the factory can find them by DOM box. #}
 
 {% macro head_common() -%}
 <meta charset="utf-8">
@@ -15,7 +15,7 @@ table { border-collapse: collapse; width: 100%; }
 img { max-width: 100%; }
 .ap-page { break-inside: avoid; }
 .ap-row { break-inside: avoid; }
-/* M2.4 label self-check fix: `factory/render.py`'s `_PAGINATE_JS` treats every `<header>`,
+/* Label self-check fix: `factory/render.py`'s `_PAGINATE_JS` treats every `<header>`,
    `<section>` and `<footer>` landmark that straddles a page boundary as one atomic block to push
    whole onto the next page -- correct only if Chromium's real print engine treats it the same
    way. A landmark with no break-avoidance of its own is free to print split across the boundary
@@ -25,12 +25,12 @@ img { max-width: 100%; }
    PDF, having let it split instead, never has (labels landing on a page index the document
    doesn't have, breaking any exact-position check outright). Applying the same break-avoidance
    these landmarks are being *treated* as having makes Chromium's real behavior match the
-   simulation instead of the other way around (PRD §10 M2.4).
+   simulation instead of the other way around.
 */
 header, section, footer { break-inside: avoid; }
-/* M2.4 label self-check fix: a bare <thead> defaults to `display: table-header-group`, which
+/* Label self-check fix: a bare <thead> defaults to `display: table-header-group`, which
    Chromium's print engine repeats at the top of every printed page a table spans -- confirmed
-   empirically: reverting this one rule (while keeping every other M2.4 pagination fix) collapsed
+   empirically: reverting this one rule (while keeping every other pagination fix) collapsed
    a 3-page bilingual layout's match rate from 100% to 35%, and restoring it brought it straight
    back. That repeated copy consumes real vertical space on page 2+ that `factory/render.py`'s
    `_PAGINATE_JS` (an on-screen DOM simulation that only ever sees the thead once, since nothing
@@ -38,10 +38,10 @@ header, section, footer { break-inside: avoid; }
    the first page break by the repeated header's height, compounding page over page. Forcing plain
    `table-row-group` makes the header render once, in normal document flow, matching what the
    on-screen simulation actually measures -- trading the header repeating on later printed pages
-   for correct label coordinates there (PRD §10 M2.4).
+   for correct label coordinates there.
 */
 thead { display: table-row-group; }
-/* M2.4 label self-check fix: every footer template ends its payment sentence with
+/* Label self-check fix: every footer template ends its payment sentence with
    "...IBAN {{ field_ltr('iban', iban) }}." -- the closing "." directly abuts the IBAN's own span
    with no space (correct prose; a space before a full stop would look wrong), so in the rendered
    PDF the period's glyph can land under 1pt from the IBAN's last digit. That is well inside
@@ -50,11 +50,10 @@ thead { display: table-row-group; }
    edge -- occasionally can't tell the period apart from the IBAN it follows, on some layouts but
    not others depending on exact font metrics. A small, visually negligible end margin gives every
    layout a reliable, print-real gap here instead of leaving it to whatever the font happened to
-   kern, without changing where the text visibly sits relative to the rest of the sentence (PRD
-   §10 M2.4).
+   kern, without changing where the text visibly sits relative to the rest of the sentence.
 */
 [data-field="iban"] { margin-inline-end: 2pt; }
-/* M2.4 label self-check / M3.1 IoU-gate fix: a `[data-field]` span's `getClientRects()` box is
+/* Label self-check / parse IoU-gate fix: a `[data-field]` span's `getClientRects()` box is
    the CSS *line box* it generates, whose height comes from `line-height` (here inherited as
    18px at this table's 12px font -- 1.5x), not the glyph ink of the one short word/number it
    wraps. For a normal multi-word sentence this slack is proportionally small, but for a short,
@@ -67,10 +66,10 @@ thead { display: table-row-group; }
    ink, but far closer -- for every field, not just currency, and every span here is a single
    inline run inside a table cell whose own `vertical-align: middle` centering (unaffected by
    this) already governs the visible row height, so this has no visible effect on the rendered
-   PDF (PRD §10 M2.4).
+   PDF.
 */
 [data-field] { line-height: 1; }
-/* M2.4 label self-check fix: the bundled Noto Naskh/Kufi Arabic fonts' "ccmp" (glyph
+/* Label self-check fix: the bundled Noto Naskh/Kufi Arabic fonts' "ccmp" (glyph
    composition/decomposition) OpenType feature makes Chromium's print-to-PDF path emit a broken
    ToUnicode CMap for some shaped Arabic glyphs -- NUL filler characters plus, for at least
    isolated Teh Marbuta, an outright wrong codepoint. Re-measured once the bundled fonts really
@@ -80,7 +79,7 @@ thead { display: table-row-group; }
    whose dots or hamza seat come from composition (e.g. the hamza on yeh) render slightly off.
    Required joining ("init"/"medi"/"fina") stays enabled, so letter shapes stay connected. Scoped to `:lang(ar)`, which the
    `lang="ar"` attribute on either the document root or one bilingual sub-block inherits down
-   to, so English/Latin text (a different font) is untouched (PRD §10 M2.4).
+   to, so English/Latin text (a different font) is untouched.
 */
 :lang(ar) { font-feature-settings: "ccmp" 0; }
 </style>
@@ -104,9 +103,9 @@ thead { display: table-row-group; }
    actual translation) that a bilingual layout re-displays in its second language block purely for
    that block's own readability, not a second physical occurrence of the field. Wrapping it in a
    second `data-field="name"` span produced two ground-truth boxes for one extraction-schema
-   field, which is what M3.1's IoU gate caught (13 `currency` labels with a low IoU because a
-   downstream consumer picked whichever of the two boxes did not match the one `apx.parse` found
-   -- PRD §10 M2.4/M3.1). This keeps the same `line-height: 1` box-tightening `[data-field]`
+   field, which is what the parse IoU gate caught (13 `currency` labels with a low IoU because a
+   downstream consumer picked whichever of the two boxes did not match the one `apx.parse` found).
+   This keeps the same `line-height: 1` box-tightening `[data-field]`
    spans get (so the echo lines up with its row exactly as before) without adding a second label
    for the same field; only a field whose text genuinely differs by language (a name, an address,
    a description) still gets tagged in both blocks. #}

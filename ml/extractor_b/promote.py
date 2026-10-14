@@ -386,7 +386,7 @@ class JsonModelsLockWriter:
 
 
 class FileCalibratorInvalidator:
-    """`CalibratorInvalidator`: writes the durable stale marker the M7.4/M7.5 cal job clears
+    """`CalibratorInvalidator`: writes the durable stale marker the trust cal job clears
     after refitting on the new champion (ADR-0009 §5, ADR-0015 §5 step 2)."""
 
     def __init__(
@@ -540,7 +540,9 @@ def promote(
     applied: list[str] = []
     stage = STAGE_INVALIDATE
     try:
-        invalidator.invalidate(challenger, f"extractor_b champion {before} -> {challenger} (M7.1)")
+        invalidator.invalidate(
+            challenger, f"extractor_b champion {before} -> {challenger} (Extractor B promotion)"
+        )
         applied.append(stage)
         stage = STAGE_MODELS_LOCK
         lock_writer.record(
@@ -558,7 +560,7 @@ def promote(
             model_path=container_path(export_dir / Q4_NAME, models_root),
             mmproj_path=container_path(export_dir / MMPROJ_NAME, models_root),
             description=(
-                f"PRD §4 extraction stage: {REGISTERED_MODEL} v{challenger} (run "
+                f"Extraction stage: {REGISTERED_MODEL} v{challenger} (run "
                 f"{manifest.run_id}, Q4_K_M sha256 {manifest.artifact(Q4_NAME).sha256}), "
                 "promoted by ml.extractor_b.promote after P1-P5 passed "
                 "(reports/extractor_b_gates.md)."
@@ -1000,7 +1002,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"promoted {REGISTERED_MODEL} v{result.champion_after} "
                 f"(was {result.champion_before or 'unset'}): {', '.join(result.applied)}. "
                 "Next: `cd infra && docker compose restart llama-swap`, then rerun the "
-                "M7.4/M7.5 cal job (the calibrator is invalidated)."
+                "trust cal job (the calibrator is invalidated)."
             )
         return 0
     except PromotionError as exc:

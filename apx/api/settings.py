@@ -34,7 +34,7 @@ class ApiSettings(BaseSettings):
 
     access_token_minutes: int = Field(default=15, gt=0)
     """`API_ACCESS_TOKEN_MINUTES`: access token lifetime in minutes. Kept short so a leaked
-    token self-expires quickly; there is no refresh token in M5.3."""
+    token self-expires quickly; there is no refresh token yet."""
 
     cors_origin: str = "http://localhost:3000"
     """`API_CORS_ORIGIN`: the single web origin allowed to call this API

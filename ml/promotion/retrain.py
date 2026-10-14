@@ -1,4 +1,4 @@
-"""M10.2 `make retrain` orchestration (ADR-0015 §5): corrections export, LoRA
+"""`make retrain` orchestration (ADR-0015 §5): corrections export, LoRA
 training, shadow eval of champion and challenger, the decision, then on PROMOTE the ordered side
 effects (audit, calibrator invalidation, models.lock entry, alias move, audit) through injected
 protocols. `main()` stops with exit 2 and `RetrainPrerequisiteError` until the adapters exist."""
@@ -100,7 +100,7 @@ class ModelAliasRegistry(Protocol):
 
 class CalibratorInvalidator(Protocol):
     """Marks the active calibrator and λ̂ stale; the trust gate accepts nothing until the
-    M7.4/M7.5 cal job refits on the new champion."""
+    trust cal job refits on the new champion."""
 
     def invalidate(self, new_champion: ModelVersion, reason: str) -> None: ...
 
@@ -191,7 +191,7 @@ async def run_retrain(
         stage = STAGE_INVALIDATE
         applied: list[str] = []
         try:
-            invalidator.invalidate(challenger, f"champion {champion} -> {challenger} (M10.2)")
+            invalidator.invalidate(challenger, f"champion {champion} -> {challenger} (retrain)")
             applied.append(stage)
             stage = STAGE_MODELS_LOCK
             lock_writer.record(

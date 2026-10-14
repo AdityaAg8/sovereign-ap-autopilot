@@ -5,7 +5,7 @@ captured from a real GPU run against models/PaddlePaddle/PaddleOCR-VL-1.6 on a U
 (see reports/parse.md), so a future checkpoint that changes the format fails this test loudly
 instead of silently mis-scoring boxes. Loaded by path like scripts/smoke.py's own tests: this
 module's heavy `torch`/`transformers` imports are local to the functions that need them, so it
-imports cleanly on a host with no GPU and no `torch` installed. Also covers the REVIEW N-06
+imports cleanly on a host with no GPU and no `torch` installed. Also covers the hardening
 guards: the service token, browser refusal and the pre-decode pixel cap."""
 
 from __future__ import annotations
@@ -190,7 +190,7 @@ def test_decoding_settings_match_adr_0013_amendment_1() -> None:
     assert parse_service_app.REPETITION_PENALTY == 1.05
 
 
-# ---- REVIEW N-06: service token, browser refusal, pixel cap ---------------------------------
+# ---- Service token, browser refusal, pixel cap --------------------------------------------
 
 
 def _post(headers: dict[str, str], data: bytes | None = None) -> tuple[int, str]:

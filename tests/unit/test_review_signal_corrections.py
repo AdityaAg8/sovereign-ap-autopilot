@@ -1,4 +1,4 @@
-"""M11.4 (KNOWN_ISSUES KI-02): `InvoiceWorkflow` hands the corrections carried by a
+"""KNOWN_ISSUES KI-02: `InvoiceWorkflow` hands the corrections carried by a
 `review` signal to `confirm_review` and asks it to check them, so the activity can refuse a signal
 whose corrections are not the ones recorded with the approval. The `workflow.patched` marker keeps
 histories recorded before the change replaying: a pre-change history, whose `confirm_review` got
@@ -52,7 +52,7 @@ CORRECTIONS = ReviewCorrections(
 
 @workflow.defn(name="InvoiceWorkflow")
 class _PreCorrectionsCheckWorkflow(InvoiceWorkflow):
-    """`InvoiceWorkflow` as deployed before M11.4: identical except that `confirm_review` gets
+    """`InvoiceWorkflow` before the corrections check: identical except that `confirm_review` gets
     only the invoice id and the decision. Used only to record a history the way a running
     pre-change execution recorded it."""
 
@@ -190,7 +190,7 @@ async def test_a_rejection_passes_no_corrections_to_check(
 async def test_a_pre_change_history_replays_deterministically(
     temporal_env: WorkflowEnvironment,
 ) -> None:
-    """A history recorded by the pre-M11.4 worker scheduled `confirm_review` with two arguments
+    """A history from a worker without the check scheduled `confirm_review` with two arguments
     and no marker. Today's workflow must replay it (the `workflow.patched` guard returns False
     for it) without the new arguments' marker being expected."""
     old_fake = _fake()

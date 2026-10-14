@@ -28,9 +28,9 @@ def fetch(data_root: Path) -> DatasetEntry:
             tag="dataset:agentdojo",
             title="AgentDojo banking suite needs `agentdojo` added to pyproject.toml",
             why=(
-                "PRD §5 lists AgentDojo banking via `pip install agentdojo`; the package is "
+                "The eval plan lists AgentDojo banking via `pip install agentdojo`; the package is "
                 "declared in pyproject.toml's dev group but is not importable in this "
-                "environment (run `uv sync --all-groups`), so the M9 agent security eval set "
+                "environment (run `uv sync --all-groups`), so the agent security eval set "
                 "cannot be loaded yet."
             ),
             command=FETCH_COMMAND,

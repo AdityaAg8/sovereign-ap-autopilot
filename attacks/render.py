@@ -1,6 +1,6 @@
 """attacks/render.py: renders one committed `AttackCase` into the exact UAE invoice PDF (plus,
-for the filename/email category, its sidecar email body) that M6.2's scanner and M6.6's
-end-to-end attack-success eval consume. PDFs are never committed -- this module
+for the filename/email category, its sidecar email body) that the hidden-content scanner and
+the end-to-end attack-success eval consume. PDFs are never committed -- this module
 is what `attacks/manifests/*.json` gets turned into, at test or run time, under
 `data/attacks/` (gitignored)."""
 
@@ -29,7 +29,7 @@ from factory.layouts import (
 from factory.render import RenderWorker
 from factory.render_html import render_template
 
-# One shared synthetic ERP snapshot for the whole suite (PRD §10 M6.3: cases reference it by
+# One shared synthetic ERP snapshot for the whole suite (cases reference it by
 # `vendor_index`, so every case renders against the same deterministic vendor/PO data
 # regardless of which category or seed it uses).
 SUITE_ERP_SEED = 6300
@@ -150,7 +150,7 @@ def render_all_to_disk(
 ) -> list[AttackRenderResult]:
     """Renders every case in `cases` with one shared `Erp` and one shared `RenderWorker`
 
-    (sequential -- 's acceptance is determinism, not throughput, and the suite is a few hundred
+    (sequential -- the suite's bar is determinism, not throughput, and it is a few hundred
     cases, not the 5,000-invoice dataset)."""
     erp = build_suite_erp()
     results: list[AttackRenderResult] = []
@@ -178,7 +178,7 @@ def register_splits(results: list[AttackRenderResult], *, splits_path: Path | No
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m attacks.render",
-        description="Render every committed M6.3 attack-suite manifest into PDFs (PRD §10 M6.3).",
+        description="Render every committed attack-suite manifest into PDFs.",
     )
     parser.add_argument(
         "--out-dir",

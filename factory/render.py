@@ -1,4 +1,4 @@
-"""factory/render.py: Playwright-Chromium rendering for the M2.3 UAE invoice factory. Turns one
+"""factory/render.py: Playwright-Chromium rendering for the UAE invoice factory. Turns one
 `factory.layouts`-rendered HTML document into a digital PDF plus `data-field` DOM-box labels in
 PDF-page coordinates: it paginates the DOM itself (real spacer elements reserve each page's
 margins and push any row or landmark that would straddle a page cut), measures the labels, then
@@ -24,8 +24,8 @@ MM_PER_INCH = 25.4
 CSS_PX_PER_INCH = 96.0
 
 # Chromium stamps a wall-clock `/CreationDate` and `/ModDate` into every exported PDF, which is
-# the only source of non-determinism in an otherwise pure function of the HTML/CSS layout (PRD
-# §10 M2.3: "deterministic from seed"). `_normalize_pdf_bytes` overwrites both with a fixed
+# the only source of non-determinism in an otherwise pure function of the HTML/CSS layout
+# ("deterministic from seed"). `_normalize_pdf_bytes` overwrites both with a fixed
 # placeholder of the exact same byte length, so it never shifts the PDF's xref byte offsets.
 _PDF_TIMESTAMP_RE = re.compile(rb"\(D:\d{14}[+-]\d{2}'\d{2}'\)")
 _FIXED_PDF_TIMESTAMP = b"(D:20260101000000+00'00')"
@@ -80,7 +80,7 @@ MARGIN_PX = _mm_to_css_px(MARGIN_MM)
 # Steps 2-3 use real DOM layout, not a hand-rolled approximation. `RenderWorker.render` then
 # prints this *same* spacer-adjusted DOM with a zero print margin, so Chromium's page cuts fall
 # at exact multiples of the page height, where the spacers guarantee no row or landmark sits:
-# nothing is left for its fragmentation to move. M2.4's pdfplumber self-check verifies it.
+# nothing is left for its fragmentation to move. The pdfplumber label self-check verifies it.
 _PAGINATE_JS = r"""
 ({ pageHeightPx, marginPx }) => {
   const sheet = document.querySelector(".sheet");
@@ -124,7 +124,7 @@ _PAGINATE_JS = r"""
     // not merely past the next whole multiple of `pageHeightPx` -- using the latter (as an
     // earlier version of this script did) under-detects by up to `marginPx`+`marginPx` per page,
     // silently leaving the last row or two of *every* page that overflows a page attributed to
-    // the page before the one it actually prints on (PRD §10 M2.4: this exact drift was caught by
+    // the page before the one it actually prints on (this exact drift was caught by
     // the pdfplumber self-check, not by eye -- Chromium still renders a plausible-looking PDF
     // either way, just not at the coordinates this script predicted).
     const contentEndOfThisPage = (pageOfTop + 1) * pageHeightPx - marginPx;
@@ -176,7 +176,7 @@ _PAGINATE_JS = r"""
     // A Range over the field's own rendered text (not `el.getClientRects()` on the element)
     // so the box always comes from the actual inline text run, never a block/cell ancestor's
     // box, however this field happens to be wrapped (plain text, or `ltr_isolate`'s nested
-    // `<bdi>`) -- PRD §10 M2.4 / M3.1's IoU gate against pdfplumber's own tight word boxes.
+    // `<bdi>`) -- the label self-check and parse IoU gate against pdfplumber's tight word boxes.
     const range = document.createRange();
     range.selectNodeContents(el);
     const rects = Array.from(range.getClientRects()).map((r) => ({

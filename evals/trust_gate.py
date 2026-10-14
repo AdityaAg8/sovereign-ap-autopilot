@@ -1,7 +1,7 @@
-"""M7.4/M7.5 cal job and gate (ADR-0009 §5-§8; ADR-0015): fits the trust
+"""Trust cal job and gate (ADR-0009 §5-§8; ADR-0015): fits the trust
 calibrator on UAE cal rows of A and B, picks λ̂ by Learn-then-Test for alpha in {0.5, 1, 2}% at
 delta = 5%, saves the versioned artifact under data/trust/, measures the error among
-auto-accepted fields on UAE test rows, and only when that M7.5 gate passes and the artifact was
+auto-accepted fields on UAE test rows, and only when that test gate passes and the artifact was
 fitted on the served champions activates it and clears the ADR-0015 invalidation. Writes
 reports/trust_gate.md + .json. `--extractors a` (ADR-0018 §5) fits and gates the champion A alone,
 with the same alpha, delta, λ grid and test gate, and never activates (the runtime serves B).
@@ -314,7 +314,7 @@ def activate_if_champion(
     gate_passed: bool,
     gate_detail: str,
 ) -> Activation:
-    """Activate the artifact and clear the ADR-0015 marker only when the M7.5 test gate passed
+    """Activate the artifact and clear the ADR-0015 marker only when the test gate passed
     AND it was fitted on the builds the champion aliases serve right now; otherwise leave the
     active calibrator (and a stale marker) alone and say why."""
     if artifact.champion_only:
@@ -392,7 +392,7 @@ def evaluate_test(
 
 
 def gate_verdict(test: TestEvaluation | None, test_error: str | None) -> tuple[bool, str]:
-    """M7.5: UAE test error among auto-accepted fields <= alpha at alpha = 1%."""
+    """Test gate: UAE test error among auto-accepted fields <= alpha at alpha = 1%."""
     if test is None:
         return False, f"MISSING: {test_error}"
     outcome = test.outcomes[GATE_ALPHA]
@@ -421,7 +421,7 @@ def calibrate(
     now: datetime,
     extractors: TrustExtractors = TrustExtractors.BOTH,
 ) -> CalibrateResult:
-    """The whole M7.4/M7.5 job. Raises TrustRowsError when the cal rows are incomplete; missing
+    """The whole cal/gate job. Raises TrustRowsError when the cal rows are incomplete; missing
     or foreign test rows are recorded as a failed gate, never answered by dropping documents.
     CHAMPION_ONLY never reads `cal_b`/`test_b`; BOTH requires them."""
     both = extractors is TrustExtractors.BOTH
@@ -828,7 +828,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result.test is None:
         return 2
     if extractors is TrustExtractors.CHAMPION_ONLY:
-        # Success is the M7.5 test gate for the serving champion A; activation is not expected.
+        # Success is the test gate for the serving champion A; activation is not expected.
         return 0 if result.gate_passed and result.activation.champion_a_served else 1
     return 0 if result.gate_passed and result.activation.activated else 1
 

@@ -1,4 +1,4 @@
-"""REVIEW.md N-01/N-02 hardening: `ReviewSignalReconciler` re-delivers a recorded review decision
+"""`ReviewSignalReconciler` re-delivers a recorded review decision
 whose signal never reached a workflow still waiting in review (a Temporal outage after the API
 committed, or a real signal dropped while an unbacked one was being checked). Fake stores and
 deliveries drive the pass logic; a time-skipping Temporal server runs the dropped-signal case
@@ -256,7 +256,7 @@ async def test_a_dropped_signal_is_redelivered_and_the_workflow_finishes(
 
 
 async def test_busy_workflows_never_crowd_a_lost_signal_out_of_the_batch() -> None:
-    """P3-01(b): candidates whose workflow is past its review wait (an approved invoice retrying
+    """Candidates whose workflow is past its review wait (an approved invoice retrying
     `send_to_asp`) are oldest-first but must not use up the batch: only WAITING ones count."""
     store = _Store(
         [Candidate(A, True), Candidate(B, True), Candidate(C, True)],
@@ -274,7 +274,7 @@ async def test_busy_workflows_never_crowd_a_lost_signal_out_of_the_batch() -> No
 
 
 async def test_passes_rotate_through_more_candidates_than_one_pass_describes() -> None:
-    """P3-01(b): describes per pass are capped, and the next pass starts where the last one
+    """Describes per pass are capped, and the next pass starts where the last one
     stopped, so busy workflows at the head of the list cannot hide a waiting one forever."""
     store = _Store(
         [Candidate(A, True), Candidate(B, True), Candidate(C, True)],
@@ -333,7 +333,7 @@ def test_a_matching_approval_is_resent_as_the_api_would_send_it() -> None:
 def test_a_stale_approval_is_still_resent_so_the_workflow_can_fail_it(
     recorded: str, current: str | PayeeRefusedError, reason: str
 ) -> None:
-    """P3-01(a), N-13: withholding the signal would leave the invoice APPROVED and its workflow
+    """Withholding the signal would leave the invoice APPROVED and its workflow
     waiting forever; sent, `confirm_review` raises `StaleApprovalError` and the run ends
     FAILED. The re-send is audited as stale."""
     resend = approval_resend(recorded, current, _rows())

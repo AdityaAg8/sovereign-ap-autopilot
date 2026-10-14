@@ -1,4 +1,4 @@
-/** REVIEW.md N-02: a decision the API recorded but could not signal to the workflow (503) stays
+/** A decision the API recorded but could not signal to the workflow (503) stays
  * resendable after a reload. The page remembers it per invoice in sessionStorage and offers
  * "Resend decision" while the invoice still sits where that decision left it. The 503 itself is
  * API-side (covered by tests/integration/test_review_signal_retry.py); here the remembered state is

@@ -1,4 +1,4 @@
-"""REVIEW.md P3-02: `DbInvoiceService.decide` with `execute_proposal` must refuse a proposal for a
+"""`DbInvoiceService.decide` with `execute_proposal` must refuse a proposal for a
 different invoice than the one in the path, before anything is authorised, recorded or
 signalled. The database session is a stub that serves the proposal row; the service is real."""
 

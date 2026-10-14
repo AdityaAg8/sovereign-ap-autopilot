@@ -1,4 +1,4 @@
-"""What the M6.6 attack run actually ran against: the image ids of the running
+"""What the end-to-end attack run actually ran against: the image ids of the running
 Compose containers on the money path (api, worker, parse, page-embed, llama-swap) and the SHA-256
 of every GGUF the pipeline's llama-swap aliases serve, so resumed rows are only reused against the
 same running code and models, not merely the same host checkout."""

@@ -6,7 +6,7 @@ invoice's workflow), a document-serving lookup and a polling-based SSE status st
 Review decisions follow the invoice state machine: reject only while awaiting review,
 send-to-review only before routing (a durable hold the workflow honours), else 409; a rejection
 whose signal failed is re-sent by repeating it. Also `DbVendorService`, the
-vendor list/detail read model for the M5.4 vendor view."""
+vendor list/detail read model for the web UI's vendor view."""
 
 from __future__ import annotations
 
@@ -534,7 +534,7 @@ class DbInvoiceService:
         # After authorization, before anything is recorded: an approval without every ADR-0012
         # value is a 422 and never reaches the payment state or the workflow.
         corrections = await self._review_corrections(invoice_id)
-        # N-03: the approval records exactly the corrections the signal below carries, and the
+        # The approval records exactly the corrections the signal below carries, and the
         # workflow's `confirm_review` acts on the signal only if the two digests agree.
         await self._writer.record_approval(
             invoice_id, grant, corrections_digest=corrections_digest(corrections)
@@ -609,7 +609,7 @@ class DbInvoiceService:
         elif request.action == "execute_proposal":
             if not request.proposal_id:
                 raise PolicyDeniedError("execute_proposal requires proposal_id")
-            # P3-02: the proposal must be for the invoice in the path, so the approval, its
+            # The proposal must be for the invoice in the path, so the approval, its
             # audit entry and the review signal all name the same invoice.
             proposed_for = await self._proposal_invoice(request.proposal_id)
             if proposed_for is not None and proposed_for != invoice_id:
@@ -639,20 +639,20 @@ class DbInvoiceService:
                     raise NotFoundError(f"invoice {invoice_id} not found")
                 resend = request.action == "reject" and await _rejection_to_resend(session, invoice)
                 if resend:
-                    # N-02: the rejection is already recorded (BLOCKED plus a REJECT decision)
+                    # The rejection is already recorded (BLOCKED plus a REJECT decision)
                     # but its signal may have failed (503). Repeating it records nothing new
                     # and re-sends the signal, the recovery `WorkflowSignalError` documents;
                     # the workflow ignores a duplicate once it holds the decision.
                     signal = False
                 elif request.action == "reject":
                     if invoice.status is not DbInvoiceStatus.AWAITING_REVIEW:
-                        # C-01: the workflow only hears a rejection while it waits for review,
+                        # The workflow only hears a rejection while it waits for review,
                         # so accepting one earlier would be lost and the invoice paid anyway.
                         raise InvoiceStateConflictError(
                             f"invoice {invoice_id} is {invoice.status.value}; only an invoice "
                             "awaiting review can be rejected"
                         )
-                    # H-01: the terminal status and the decision commit together, so a later
+                    # The terminal status and the decision commit together, so a later
                     # approval (the writer also refuses any invoice with a REJECT decision) or
                     # a reopen can never override the rejection.
                     invoice.status = DbInvoiceStatus.BLOCKED
@@ -667,7 +667,7 @@ class DbInvoiceService:
                     signal = False
                 else:
                     if invoice.status not in _PRE_ROUTE_STATUSES:
-                        # H-02: never reopens a routed, approved, paid or ended invoice.
+                        # Never reopens a routed, approved, paid or ended invoice.
                         raise InvoiceStateConflictError(
                             f"invoice {invoice_id} is {invoice.status.value}; only an invoice "
                             "not yet routed can be sent to review"
@@ -851,7 +851,7 @@ class DbInvoiceService:
         """Polls `invoices.status` every second and yields a `status` event on every change,
         stopping once the invoice reaches a terminal status. A real pub/sub (Postgres LISTEN/
         NOTIFY or a Temporal query) is a reasonable follow-up; polling is simple and correct
-        for M5.3's single-invoice status stream."""
+        for the single-invoice status stream."""
         if invoice_id is None:
             yield SseEvent(event="error", data={"message": "invoice_id is required"})
             return

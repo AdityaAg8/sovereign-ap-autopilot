@@ -1,5 +1,5 @@
 /** Vendor detail: bilingual identity, bank-detail history and recent invoices from this vendor
- * (PRD §10 M5.4 "vendor view"; PRD §10 M5.1 "bank_details (verified flag, history)"). */
+ * ("vendor view"; "bank_details (verified flag, history)"). */
 
 "use client";
 

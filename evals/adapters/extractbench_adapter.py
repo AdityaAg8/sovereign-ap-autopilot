@@ -22,7 +22,7 @@ _RUNNER_SCRIPT = Path(__file__).with_name("_extractbench_runner.py")
 class ExtractBenchFrameworkError(RuntimeError):
     """Raised when the official ExtractBench clone is present but scoring through it failed --
     a real bug, a broken `uv` environment, or a malformed case -- never silently swallowed into
-    the PRD-spec fallback. Only the clone's outright absence (`framework_available` is False) is
+    the fallback scorer. Only the clone's outright absence (`framework_available` is False) is
     an expected, flagged fallback condition; any other failure should surface loudly."""
 
 

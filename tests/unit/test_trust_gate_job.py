@@ -1,4 +1,4 @@
-"""Unit tests for the M7.4/M7.5 cal job (`evals.trust_gate`) on synthetic, recorded-style eval
+"""Unit tests for the trust cal job (`evals.trust_gate`) on synthetic, recorded-style eval
 rows: it fits and persists a calibrator, activates it and clears the ADR-0015 invalidation only
 for the served champions, scores UAE test with the persisted artifact, and reports a failed gate
 (never a smaller denominator) when test rows are missing or come from another build."""

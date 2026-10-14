@@ -1,4 +1,4 @@
-"""Unit tests for infra/docker/page-embed/app.py, the M8.1 page-embedding service, with a fake
+"""Unit tests for infra/docker/page-embed/app.py, the page-embedding service, with a fake
 engine (no GPU, no model): /embed returns exactly the wire shape `HttpPageEmbedder` accepts,
 refuses undecodable images (422) and reports a failed model (503), /unload and /health report
 the engine's state, and the last-token pooling index. Loaded by path like the parse service's

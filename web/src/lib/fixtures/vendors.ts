@@ -3,8 +3,8 @@
 import type { Vendor } from "@/lib/api/types";
 
 /** Masks an illustrative fixture IBAN the same way `apx.api.service._mask_iban` does, so the
- * fixture adapter's vendor view matches the http adapter's shape (never a full IBAN, PRD §10
- * M5.4) instead of quietly being more permissive than the real backend. */
+ * fixture adapter's vendor view matches the http adapter's shape (never a full IBAN)
+ * instead of quietly being more permissive than the real backend. */
 function maskIban(iban: string): string {
   return "*".repeat(Math.max(iban.length - 4, 0)) + iban.slice(-4);
 }

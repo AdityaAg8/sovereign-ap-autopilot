@@ -1,4 +1,4 @@
-"""Maps `factory.erp`-generated ERP-truth (`<sha>.truth.json`) files from the M2.3 UAE invoice
+"""Maps `factory.erp`-generated ERP-truth (`<sha>.truth.json`) files from the UAE invoice
 factory to `apx.extract.schema.InvoiceFields` plus each vendor's admin-verified payment IBAN
 (never the invoice's own claimed IBAN, P1), builds PINT AE gold XML through `apx.einvoice`,
 validates every file against the runtime schematron validator in parallel processes, and reports

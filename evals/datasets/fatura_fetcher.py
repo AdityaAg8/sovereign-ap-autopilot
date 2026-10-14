@@ -25,7 +25,7 @@ STRAT1_TRAIN_CSV = "invoices_dataset_final/strat1_train.csv"
 STRAT1_TEST_CSV = "invoices_dataset_final/strat1_test.csv"
 
 # Any image the official Strat#1 CSVs do not list falls back to this seeded, deterministic
-# split so every document still gets a stable assignment (PRD ADR-0005: splits are fixed by
+# split so every document still gets a stable assignment (ADR-0005: splits are fixed by
 # document identity and never reshuffled). ~1/7 test matches Strat#1's own ~14% test share.
 FALLBACK_SPLIT_SALT = "fatura-strat1-fallback-v1"
 FALLBACK_TEST_MODULUS = 7

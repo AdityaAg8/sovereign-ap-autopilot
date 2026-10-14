@@ -1,4 +1,4 @@
-"""Unit tests for the M3.4 bake-off futility rule (`evals.bakeoff.sequential`, ADR-0016 amendment
+"""Unit tests for the bake-off futility rule (`evals.bakeoff.sequential`, ADR-0016 amendment
 1): look sizes and O'Brien-Fleming bounds, each stopping criterion, determinism, per-document
 counts from real rows, and a simulated property that an arm whose true gain meets the win
 criteria is stopped no more often than the stated bound."""

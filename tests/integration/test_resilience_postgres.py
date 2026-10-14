@@ -1,4 +1,4 @@
-"""PRD §11.2 "DB restart": Postgres goes down while `send_to_asp` or `archive` is in flight (after
+"""Restart test (DB): Postgres goes down while `send_to_asp` or `archive` is in flight (after
 the external call, before its idempotency row is written) and comes back; the retried activity
 must still leave one ASP receipt, one archive record and one ARCHIVED transition. A third case
 restarts Postgres under the worker's pooled connections and checks the pool recovers."""

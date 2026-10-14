@@ -1,4 +1,4 @@
-"""factory/labels.py: the M2.3 label schema (field, value, page, normalized bounding box) plus
+"""factory/labels.py: the factory label schema (field, value, page, normalized bounding box) plus
 the pure geometry that turns raw DOM `getClientRects()` measurements collected by
 `factory.render` into per-page `Label` records, unioning the individual line boxes of a value
 that wraps across lines while keeping each line's own box. Contains no Playwright

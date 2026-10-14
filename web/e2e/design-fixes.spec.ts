@@ -1,4 +1,4 @@
-/** M5.4 design-fix regressions: the inbox's Received cell stays on one line and it shows the
+/** Review UI design-fix regressions: the inbox's Received cell stays on one line and it shows the
  * supplier's invoice number, every amount goes through one grouped formatter (also under an
  * Arabic browser locale), row focus rings are drawn inside the row, the dark-mode Approve button
  * meets WCAG AA contrast and differs from its disabled state, and audit events carry human labels

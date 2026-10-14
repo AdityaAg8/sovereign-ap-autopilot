@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Checks that every source file starts with the header comment (1-3 sentences
-saying what the file does and where it fits). Hardened for M0.6: per-language parsing,
+saying what the file does and where it fits). Hardened with per-language parsing,
 generated/lockfile/migration skip rules, and a `paths` / `--all` (git ls-files) CLI for
 pre-commit and CI (`scripts/verify_m0.sh`)."""
 
@@ -48,7 +48,7 @@ SKIP_DIR_PARTS = {
     ".pytest_cache",
     "htmlcov",
     ".turbo",
-    # Claude Code agents, rules and vendored skills (the cloud-session kit), not product code.
+    # Local editor tooling, not product code.
     ".claude",
 }
 
@@ -227,7 +227,7 @@ def git_ls_files(root: Path) -> list[Path]:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Checks source files for the PRD §8 file header comment."
+        description="Checks source files for the required file header comment."
     )
     parser.add_argument("paths", nargs="*", help="Specific files to check.")
     parser.add_argument(
@@ -255,7 +255,7 @@ def main(argv: list[str]) -> int:
         if error:
             errors.append(error)
     if errors:
-        sys.stderr.write("Missing PRD §8 file headers:\n")
+        sys.stderr.write("Missing file headers:\n")
         for error in errors:
             sys.stderr.write(f"  - {error}\n")
         return 1

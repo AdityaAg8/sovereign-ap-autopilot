@@ -43,7 +43,7 @@ class MutationKind(StrEnum):
 
 
 class AttackCategory(BaseModel):
-    """One row of the M6.3 catalogue: static facts about a category, independent of any one
+    """One row of the attack catalogue: static facts about a category, independent of any one
     case (docs/security.md §7)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -56,7 +56,7 @@ class AttackCategory(BaseModel):
     placement: str
 
 
-# Order matches docs/security.md §7's A01-A12 table exactly, so `attack_id` and PRD category
+# Order matches docs/security.md §7's A01-A12 table exactly, so `attack_id` and category
 # order line up for anyone cross-referencing the two documents.
 CATEGORIES: tuple[AttackCategory, ...] = (
     AttackCategory(

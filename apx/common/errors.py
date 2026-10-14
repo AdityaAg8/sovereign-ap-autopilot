@@ -194,4 +194,4 @@ class AuditUnavailableError(ApxError):
     """The audit chain or its anchors could not be read or written -- a database connectivity
     failure, a failed query, or a filesystem error on the external anchor file. Distinct from
     `AuditChainError`: this means verification never completed, not that it completed and
-    found tampering (I4, 's could-not-run/broken exit-code distinction)."""
+    found tampering (I4, the could-not-run/broken exit-code distinction)."""

@@ -100,7 +100,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups
 
-      - name: Check PRD §8 file headers
+      - name: Check file headers
         run: uv run python scripts/check_headers.py --all
 
   gitleaks:

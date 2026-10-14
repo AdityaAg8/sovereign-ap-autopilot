@@ -1,7 +1,7 @@
-"""UAE tax cases and the >=12 bilingual Jinja2 invoice layouts for the M2 synthetic document
+"""UAE tax cases and the >=12 bilingual Jinja2 invoice layouts for the synthetic document
 factory: builds a deterministic per-invoice render context from an `Erp` snapshot (vendor, PO,
 line items, VAT math) and renders it through `factory.render_html` into self-describing HTML
-(`data-field="<name>"` per `apx.extract.interfaces.FieldName` / `RawLineItem`), feeding the M2.3
+(`data-field="<name>"` per `apx.extract.interfaces.FieldName` / `RawLineItem`), feeding the
 Playwright-to-PDF and DOM-box-labelling stage."""
 
 from __future__ import annotations

@@ -347,7 +347,7 @@ class PgAgentToolbox:
             payee_refusal=row.get("payee_refusal"),
             # Always 0: there is no invoice line-item table yet, so there is nothing to count
             # (extraction stores only invoice-level `fields`, never per-line rows). Tracked as an
-            # M9.3 follow-up in ADR-0010: needs a line-items table plus a `v_agent_invoices`
+            # follow-up in ADR-0010: needs a line-items table plus a `v_agent_invoices`
             # column or join before this can be exact.
             line_count=0,
             fields=fields,
@@ -477,7 +477,7 @@ class PgAgentToolbox:
                 # here. ADR-0010 D6 promises a citable bank-change audit id; closing this gap
                 # needs a schema change (an `audit_id`/`change_id` column on
                 # `bank_details_history`, written alongside the audit event) -- tracked as an
-                # M9.3 follow-up in ADR-0010, not something `apx.agent`'s read-only SQL can fix.
+                # follow-up in ADR-0010, not something `apx.agent`'s read-only SQL can fix.
                 audit_id=None,
             )
             for r in change_rows[:VENDOR_MAX_BANK_CHANGES]

@@ -1,6 +1,6 @@
 """UAE test micro field F1 over the 14 header fields for rows written by `evals.extraction_a`
 (ADR-0009 §1.8 P1): gold from the factory `*.labels.json`, language from `*.truth.json`
-(`arabic_first`), scored by the M1.3 scorer `evals.scorers.uae.score_uae` (EN, AR and pooled).
+(`arabic_first`), scored by the UAE scorer `evals.scorers.uae.score_uae` (EN, AR and pooled).
 Extractor A and B rows go through the same function, so the P1 comparison is like for like."""
 
 from __future__ import annotations

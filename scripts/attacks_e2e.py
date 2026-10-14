@@ -1,4 +1,4 @@
-"""M6.6 attack runner (docs/security.md §7; `make eval-attacks`): renders the M6.3
+"""End-to-end attack runner (docs/security.md §7; `make eval-attacks`): renders the
 suite against the seeded ERP, drops the cases into the running stack's inbox a window at a time,
 approves review-routed ones through the API as a seeded approver would, reads each settled case's
 payment state from Postgres and writes `reports/attacks_e2e.md`/`.json` with ASR and the gate.

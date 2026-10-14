@@ -192,7 +192,7 @@ def _normalized(fields: Mapping[FieldName, FieldValue], name: FieldName) -> str 
 
 
 class DetectorScanner:
-    """`Scanner` over the rule-based hidden-content detector and the M6.4 injection
+    """`Scanner` over the rule-based hidden-content detector and the injection
     guard (ADR-0017). The injection score is the strongest flag of a kind only an attack
     produces: text a reader cannot see, active content, or a guard INJECTION flag, whose score
     is already on the P4 scale (`apx.scan.guard.policy_score`). `guard=None` runs the detector
@@ -291,7 +291,7 @@ class PageIndexes(Protocol):
 
 
 class RuleFraudEngine:
-    """`FraudEngine`: every M8.1 rule over one history snapshot, plus perceptual-hash
+    """`FraudEngine`: every fraud rule over one history snapshot, plus perceptual-hash
     near-duplicate pages against the same vendor's recent invoices when a `PageSource` is given,
     plus learned (Qwen3-VL-Embedding-2B) near-duplicate pages against the same vendor's stored
     pages when `page_index` is given; this invoice's pages are then stored for later ones.
@@ -451,7 +451,7 @@ def _fmt(amount: Decimal) -> str:
 
 
 class AgreementScore:
-    """Interim `Calibrator` of the explicit no-calibrator path: when the M7.5 artifact is missing,
+    """Interim `Calibrator` of the explicit no-calibrator path: when the trust artifact is missing,
     invalidated or fitted on other builds, `apx.trust.gate.ArtifactTrustGate` falls back to a gate
     on this score with λ̂ = None, which never auto-accepts (every invoice routes to REVIEW); the
     number, A/B agreement times OCR support, only orders fields for the reviewer."""

@@ -128,7 +128,7 @@ def scan_page_visibility(
         # Invisible fill (A01): the glyph *was* rendered in (approximately) its declared colour,
         # so judge visibility from what actually got rendered -- the background around the glyph
         # and the ink inside it -- rather than trusting the declared colour for both sides of the
-        # comparison (PRD M6.2 fix: declared colour vs. a background sample that can land back on
+        # comparison (fix: declared colour vs. a background sample that can land back on
         # the glyph's own ink gave false positives on ordinary coloured/gray text).
         background = _sample_background(rendered, px0, py0, px1, py1, img_w, img_h, ink)
         foreground = _measure_foreground(rendered, px0, py0, px1, py1, background)

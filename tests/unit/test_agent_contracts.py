@@ -1,5 +1,5 @@
 """Unit tests for apx.agent.contracts: role/origin scoping (authorize_tool), IBAN masking and
-the audit-actor id normalisation reviewer M9.1 flagged as F4 (ADR-0010 D1, D3, D4)."""
+the audit-actor id normalisation (ADR-0010 D1, D3, D4)."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def test_mask_iban_output_always_satisfies_masked_iban(raw: str) -> None:
 
 @given(st.text(max_size=3))
 def test_masked_iban_type_rejects_a_raw_iban_string(raw: str) -> None:
-    """ADR-0010 M9.2 gate: MaskedIban rejects raw IBANs."""
+    """ADR-0010 gate: MaskedIban rejects raw IBANs."""
     with pytest.raises(ValidationError):
         TypeAdapter(MaskedIban).validate_python(f"AE07{raw}0331234567890123456")
 

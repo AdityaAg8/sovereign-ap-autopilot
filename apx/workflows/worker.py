@@ -32,7 +32,7 @@ async def connect_client(target_host: str) -> Client:
     return await Client.connect(
         target_host,
         data_converter=pydantic_data_converter,
-        # One span per workflow run and per activity (scan, parse, extract, ...), M10.3.
+        # One span per workflow run and per activity (scan, parse, extract, ...).
         interceptors=[TracingInterceptor()],
     )
 

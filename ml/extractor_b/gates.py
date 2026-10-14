@@ -45,7 +45,7 @@ from ml.promotion.errors import PromotionError
 from ml.promotion.evidence import ExtractorGateReport, Fraction
 
 LATENCY_SUBSET_SIZE: Final[int] = BAKEOFF_SUBSET_SIZE
-"""ADR-0009 P2: the 200-document M3.4 subset, defined once in `evals.bakeoff.subset` (first 200
+"""ADR-0009 P2: the 200-document bake-off subset, defined once in `evals.bakeoff.subset` (first 200
 UAE test sha256s in sorted order, i.e. a hash-random sample); the digest is recorded with every
 run."""
 A_ALIAS: Final[str] = "extractor-a"

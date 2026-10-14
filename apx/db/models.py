@@ -197,7 +197,7 @@ class BankDetail(Base):
 class BankDetailHistory(Base):
     """Append-only history of every `bank_details` row change (insert/update/delete),
     populated by the `bank_details_history_sync` trigger (db/migrations). Satisfies the
-    M5.1 "history table" requirement for bank detail changes (P2)."""
+    "history table" requirement for bank detail changes (P2)."""
 
     __tablename__ = "bank_details_history"
 
@@ -614,7 +614,7 @@ class AuditAnchor(Base):
 
 
 class LlmCall(Base):
-    """Telemetry for one LLM call, keyed by `trace_id` (OTel span) for the M10 dashboard."""
+    """Telemetry for one LLM call, keyed by `trace_id` (OTel span) for the operations dashboard."""
 
     __tablename__ = "llm_calls"
 

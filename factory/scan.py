@@ -1,4 +1,4 @@
-"""factory/scan.py: the 30% "scanned copy" variant of the M2.3 factory. Runs a clean per-page PNG
+"""factory/scan.py: the 30% "scanned copy" variant of the invoice factory. Runs a clean per-page PNG
 screenshot from `factory.render` through a curated, dimension-preserving Augraphy pipeline
 (ink bleed, bleed-through, brightness and photocopy noise; no page-warping/geometric
 augmentations), reseeded per document for determinism, plus the trivial page-fraction remap of a

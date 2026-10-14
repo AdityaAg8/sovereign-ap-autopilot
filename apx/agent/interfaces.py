@@ -20,7 +20,7 @@ from apx.llm.interfaces import CompletionResult, ToolCall, ToolRequest, ToolSpec
 from apx.policy.interfaces import Proposal, RoutingDecision
 
 # --------------------------------------------------------------------------------------------
-# Existing M0 contracts (kept; ADR-0010 extends them additively)
+# Existing base contracts (kept; ADR-0010 extends them additively)
 # --------------------------------------------------------------------------------------------
 
 
@@ -72,7 +72,7 @@ ToolEffect = Literal["read", "propose"]
 
 ToolOrigin = Literal["agent", "chat", "mcp"]
 """Who is calling a tool. Same values as ADR-0008 `ProposalOrigin`; replace with a re-export of
-`apx.policy.interfaces.ProposalOrigin` once M6.5 is on main."""
+`apx.policy.interfaces.ProposalOrigin` once the policy engine is on main."""
 
 ToolProposalKind = Literal["approve_payment", "request_info"]
 """The only proposal kinds any tool creates; a subset of ADR-0008 AGENT_PROPOSAL_KINDS."""
@@ -201,7 +201,7 @@ class ToolRefusal(Frozen):
 
 
 class ToolTrace(Frozen):
-    """One executed tool call, kept on AgentReply for citation checks, audit and M9.5 evals."""
+    """One executed tool call, kept on AgentReply for citation checks, audit and chat evals."""
 
     call_id: str
     tool: ToolName | None
@@ -711,7 +711,7 @@ class SqlReader(Protocol):
 
 class ProposalSink(Protocol):
     """Structural restatement of ADR-0008 `apx.policy.interfaces.ProposalSink`, which reaches
-    main with M6.5. Replace with a re-export then; implementations satisfy both (P5)."""
+    main with the policy engine. Re-export it then; implementations satisfy both (P5)."""
 
     async def submit(self, proposal: Proposal) -> Proposal:
         """Persist a pending proposal and audit it. Raises PolicyDeniedError (rule P5) for a kind
@@ -815,7 +815,7 @@ class AgentPromptBuilder(Protocol):
 
 
 class AgentConfig(Frozen):
-    """Model and loop settings. M9.5 swaps `model` for the offline uncensored build; runtime
+    """Model and loop settings. Chat evals swap `model` for the offline uncensored build; runtime
     resolves ModelRole.AGENT only."""
 
     model: str

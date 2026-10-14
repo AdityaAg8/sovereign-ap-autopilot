@@ -1,4 +1,4 @@
-"""REVIEW.md P4-02: `document_text` must keep Extractor A's parse text inside its token budget
+"""`document_text` must keep Extractor A's parse text inside its token budget
 whatever the text's density. The cut is proportional in characters, but `estimate_tokens` counts
 a digit as a whole token and a letter as a third, so dense ends around a sparse middle overflow."""
 

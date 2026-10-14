@@ -277,6 +277,6 @@ def test_invoice_validator_matches_validate_invoice() -> None:
 
 
 def test_three_way_match_not_yet_implemented() -> None:
-    """M4.2 implements this; M4.1 only declares and reserves the interface."""
+    """`apx.validate.match` implements this; the field-level module only reserves the interface."""
     with pytest.raises(NotImplementedError):
         three_way_match(_invoice(), None, (), MatchTolerance())

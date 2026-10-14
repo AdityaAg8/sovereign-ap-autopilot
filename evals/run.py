@@ -271,7 +271,7 @@ def _gold_extractbench_examples(record: Mapping[str, Any]) -> list[ExtractBenchE
     Nested/repeated-structure values (lists, dicts) are serialized to a stable JSON string for
     exact-match comparison rather than compared field-by-field; getting real credit for a
     partially-correct nested structure is left to the extractor work that consumes this
-    scorer's output, not this M1.4 harness. Each example also carries the field's page/bbox from
+    scorer's output, not this harness. Each example also carries the field's page/bbox from
     `field_rules` evidence (see `_first_grounding`) so the official framework's bbox-based
     grounding metric has a real citation to grade against instead of always excluding the
     document for lack of evidence."""
@@ -400,9 +400,9 @@ _PINT_AE_SAMPLE_DIRS: dict[str, str] = {"invoice": "trn-invoice", "creditnote": 
 
 def _score_pint_ae_set(data_root: Path) -> SetOutcome:
     """Validates the pinned official PINT AE sample XMLs (invoice + credit note) against
-    schematron. There is no generated UAE invoice XML to validate until the M2 factory and M4
-    e-invoice compiler exist, so this measures the same "Schematron pass" §5 metric against the
-    only real PINT AE documents available at M1, and reports that scope explicitly rather than
+    schematron. There is no generated UAE invoice XML to validate until the invoice factory and
+    e-invoice compiler exist, so this measures the same "Schematron pass" metric against the
+    only real PINT AE documents available then, and reports that scope explicitly rather than
     implying it covers generated invoices."""
     pint_ae_root = data_root / "pint_ae"
     try:
