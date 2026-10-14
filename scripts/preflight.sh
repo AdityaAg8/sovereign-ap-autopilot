@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Preflight environment check for Sovereign AP Autopilot. Runs every host/tooling check
 # independently (never exits early), writes a PASS/WARN/FAIL table to reports/env.md, and
-# files a deduplicated BLOCKED.md entry for each FAIL so a human can unblock the
-# environment without stopping other work.
+# files a deduplicated SETUP_TODO.md entry for each FAIL so you can fix the environment
+# without stopping other work.
 set +e
 set +u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPORT_FILE="$REPO_ROOT/reports/env.md"
-BLOCKED_FILE="$REPO_ROOT/BLOCKED.md"
+SETUP_TODO_FILE="$REPO_ROOT/SETUP_TODO.md"
 MIN_DISK_GB=150
 MIN_RAM_GB_FOR_TEACHER=32
 
@@ -26,20 +26,20 @@ record() {
   RESULTS+=("$(sanitize "$check")|$status|$(sanitize "$detail")")
 }
 
-# Append a BLOCKED.md entry for a FAIL, skipping if the same check id is already logged.
-blocked() {
+# Append a SETUP_TODO.md entry for a FAIL, skipping if the same check id is already logged.
+setup_todo() {
   local id="$1" what="$2" why="$3" command="$4"
-  [ -f "$BLOCKED_FILE" ] || {
-    printf '# BLOCKED\n\nHuman-only gaps found by scripts/preflight.sh (and other tasks). Each entry: what, why, exact command.\n\n' >"$BLOCKED_FILE"
+  [ -f "$SETUP_TODO_FILE" ] || {
+    printf '# Setup to-do\n\n%s\n' "Manual setup steps the scripts couldn't do for you (missing tokens, gated datasets, host settings). Each entry: what, why, exact command." >"$SETUP_TODO_FILE"
   }
-  if grep -qF "[preflight:$id]" "$BLOCKED_FILE" 2>/dev/null; then
+  if grep -qF "[preflight:$id]" "$SETUP_TODO_FILE" 2>/dev/null; then
     return 0
   fi
   {
     printf '\n### [preflight:%s] %s\n' "$id" "$what"
     printf -- '- **Why:** %s\n' "$why"
     printf -- '- **Command:** `%s`\n' "$command"
-  } >>"$BLOCKED_FILE"
+  } >>"$SETUP_TODO_FILE"
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -54,7 +54,7 @@ if printf '%s' "$os_uname" | grep -qi "linux"; then
   fi
 elif printf '%s' "$os_uname" | grep -qiE "mingw|msys|cygwin"; then
   record "Host OS" "FAIL" "Native Windows via Git Bash ($os_uname); the stack requires WSL2 Ubuntu 24.04 or Linux"
-  blocked "host-os" "Host is native Windows, not WSL2/Linux" \
+  setup_todo "host-os" "Host is native Windows, not WSL2/Linux" \
     "Repo is on a native Windows drive (e.g. C:\\src\\sovereign-ap-autopilot) under Git Bash; the stack requires WSL2 Ubuntu 24.04 or Linux for Docker/CUDA/uv." \
     "wsl --install -d Ubuntu-24.04, then clone/move the repo into the Linux filesystem (e.g. ~/sovereign-ap-autopilot) and rerun scripts/preflight.sh from inside WSL"
 else
@@ -69,13 +69,13 @@ if have docker; then
     record "Docker daemon" "PASS" "docker info succeeded"
   else
     record "Docker daemon" "FAIL" "docker CLI present but daemon not reachable"
-    blocked "docker-daemon" "Docker daemon is not running or not reachable" \
+    setup_todo "docker-daemon" "Docker daemon is not running or not reachable" \
       "docker info failed; the Compose stack and containerized checks need a running daemon." \
       "Start Docker Desktop (or 'sudo systemctl start docker' on Linux/WSL2), then rerun scripts/preflight.sh"
   fi
 else
   record "Docker daemon" "FAIL" "docker CLI not found on PATH"
-  blocked "docker-cli" "Docker is not installed" \
+  setup_todo "docker-cli" "Docker is not installed" \
     "docker is required for the Compose stack, llama-swap and the GPU-in-Docker check." \
     "Install Docker Desktop (Windows/WSL2) or docker-ce (Linux), then rerun scripts/preflight.sh"
 fi
@@ -92,13 +92,13 @@ if [ "$docker_ok" -eq 1 ]; then
     record "GPU inside Docker" "PASS" "nvidia-smi ran in a CUDA container"
   else
     record "GPU inside Docker" "FAIL" "docker run --rm --gpus all nvidia/cuda:... nvidia-smi did not report a GPU"
-    blocked "gpu-in-docker" "GPU is not visible inside Docker containers" \
+    setup_todo "gpu-in-docker" "GPU is not visible inside Docker containers" \
       "The stack requires the RTX 4080 GPU to be usable by containers (llama-swap, CUDA training); the nvidia-smi container check failed." \
       "Install the NVIDIA Container Toolkit (nvidia-ctk runtime configure --runtime=docker) and, on WSL2, the NVIDIA CUDA driver for WSL, then rerun scripts/preflight.sh"
   fi
 else
   record "GPU inside Docker" "FAIL" "skipped: Docker daemon unavailable"
-  blocked "gpu-in-docker" "GPU inside Docker could not be checked" \
+  setup_todo "gpu-in-docker" "GPU inside Docker could not be checked" \
     "Docker daemon check failed above, so 'docker run --gpus all' could not be attempted." \
     "Fix Docker first (see [preflight:docker-daemon]/[preflight:docker-cli] above), then rerun scripts/preflight.sh"
 fi
@@ -109,13 +109,13 @@ if have nvidia-smi; then
     record "Host nvidia-smi" "PASS" "nvidia-smi runs on host"
   else
     record "Host nvidia-smi" "FAIL" "nvidia-smi present but returned an error"
-    blocked "host-nvidia-smi" "Host nvidia-smi fails to query the GPU" \
+    setup_todo "host-nvidia-smi" "Host nvidia-smi fails to query the GPU" \
       "nvidia-smi is on PATH but exits non-zero; driver may be missing/broken." \
       "Reinstall/update the NVIDIA driver (and WSL2 CUDA driver if applicable), then rerun scripts/preflight.sh"
   fi
 else
   record "Host nvidia-smi" "FAIL" "nvidia-smi not found on PATH"
-  blocked "host-nvidia-smi" "nvidia-smi is not installed on the host" \
+  setup_todo "host-nvidia-smi" "nvidia-smi is not installed on the host" \
     "The stack targets a single RTX 4080 Laptop GPU; host-level nvidia-smi is needed to confirm the driver is installed." \
     "Install the NVIDIA driver for your OS (on WSL2: install the driver on the Windows host only, not inside WSL), then rerun scripts/preflight.sh"
 fi
@@ -125,7 +125,7 @@ if have uv; then
   record "uv" "PASS" "$(uv --version 2>&1)"
 else
   record "uv" "FAIL" "uv not found on PATH"
-  blocked "uv" "uv (Python package/venv manager) is not installed" \
+  setup_todo "uv" "uv (Python package/venv manager) is not installed" \
     "The Python 3.12 project is managed with uv." \
     "curl -LsSf https://astral.sh/uv/install.sh | sh, then rerun scripts/preflight.sh"
 fi
@@ -135,7 +135,7 @@ if have pnpm; then
   record "pnpm" "PASS" "$(pnpm --version 2>&1)"
 else
   record "pnpm" "FAIL" "pnpm not found on PATH"
-  blocked "pnpm" "pnpm is not installed" \
+  setup_todo "pnpm" "pnpm is not installed" \
     "web/ is a Next.js 15 app managed with pnpm." \
     "corepack enable && corepack prepare pnpm@latest --activate, then rerun scripts/preflight.sh"
 fi
@@ -145,7 +145,7 @@ if have node; then
   record "node" "PASS" "$(node --version 2>&1)"
 else
   record "node" "FAIL" "node not found on PATH"
-  blocked "node" "Node.js is not installed" \
+  setup_todo "node" "Node.js is not installed" \
     "The Next.js 15 web app requires Node.js." \
     "Install Node.js 20 LTS (e.g. via nvm: nvm install 20), then rerun scripts/preflight.sh"
 fi
@@ -167,7 +167,7 @@ if [ "$py_ok" -eq 1 ]; then
   record "python3.12" "PASS" "$py_version"
 else
   record "python3.12" "FAIL" "python3.12 not found on PATH"
-  blocked "python312" "Python 3.12 is not installed" \
+  setup_todo "python312" "Python 3.12 is not installed" \
     "The apx/factory/evals stack is pinned to Python 3.12." \
     "Install Python 3.12 (e.g. uv python install 3.12), then rerun scripts/preflight.sh"
 fi
@@ -180,19 +180,19 @@ if have gh; then
       record "gh auth" "PASS" "authenticated with repo+workflow scopes"
     else
       record "gh auth" "FAIL" "authenticated but missing repo/workflow scope"
-      blocked "gh-auth-scopes" "gh CLI lacks repo/workflow scope" \
+      setup_todo "gh-auth-scopes" "gh CLI lacks repo/workflow scope" \
         "The push+PR flow needs 'repo' and 'workflow' scopes." \
         "gh auth refresh -h github.com -s repo,workflow, then rerun scripts/preflight.sh"
     fi
   else
     record "gh auth" "FAIL" "gh not authenticated"
-    blocked "gh-auth" "GitHub CLI is not authenticated" \
+    setup_todo "gh-auth" "GitHub CLI is not authenticated" \
       "gh is needed to create the repo, push and open PRs." \
       "gh auth login --scopes \"repo,workflow\", then rerun scripts/preflight.sh"
   fi
 else
   record "gh auth" "FAIL" "gh CLI not found on PATH"
-  blocked "gh-cli" "GitHub CLI (gh) is not installed" \
+  setup_todo "gh-cli" "GitHub CLI (gh) is not installed" \
     "gh is used for repo creation, push, PR and CI checks." \
     "Install GitHub CLI (https://cli.github.com), then gh auth login --scopes \"repo,workflow\""
 fi
@@ -204,7 +204,7 @@ if [ -n "$git_name" ] && [ -n "$git_email" ]; then
   record "git identity" "PASS" "user.name=$git_name user.email=$git_email"
 else
   record "git identity" "FAIL" "git user.name and/or user.email not configured"
-  blocked "git-identity" "git user.name/user.email is not set" \
+  setup_todo "git-identity" "git user.name/user.email is not set" \
     "Commits need a configured author identity." \
     "git config --global user.name \"Your Name\" && git config --global user.email \"you@example.com\", then rerun scripts/preflight.sh"
 fi
@@ -231,7 +231,7 @@ if [ -n "$disk_avail_gb" ]; then
     record "Free disk space" "PASS" "${disk_avail_gb} GB free (>= ${MIN_DISK_GB} GB)"
   else
     record "Free disk space" "FAIL" "${disk_avail_gb} GB free (< ${MIN_DISK_GB} GB required for models/data)"
-    blocked "free-disk" "Less than ${MIN_DISK_GB} GB free disk space" \
+    setup_todo "free-disk" "Less than ${MIN_DISK_GB} GB free disk space" \
       "The model set and factory-generated data need headroom; only ${disk_avail_gb} GB free." \
       "Free up disk space on the volume hosting $REPO_ROOT (target >= ${MIN_DISK_GB} GB free), then rerun scripts/preflight.sh"
   fi
@@ -270,7 +270,7 @@ fi
 ENV_FILE="$REPO_ROOT/.env"
 if [ ! -f "$ENV_FILE" ]; then
   record ".env keys" "FAIL" ".env not found"
-  blocked "env-file-missing" ".env file does not exist" \
+  setup_todo "env-file-missing" ".env file does not exist" \
     "HF_TOKEN is needed for scripts/resolve_models.py; DOCILE_TOKEN is needed for the DocILE fetcher." \
     "cp .env.example .env and add HF_TOKEN=... (required) and DOCILE_TOKEN=... (optional, DocILE degrades gracefully without it), then rerun scripts/preflight.sh"
 else
@@ -284,7 +284,7 @@ else
     record ".env keys" "WARN" "HF_TOKEN present; DOCILE_TOKEN missing (DocILE fetch degrades gracefully)"
   else
     record ".env keys" "FAIL" "HF_TOKEN key missing from .env"
-    blocked "env-hf-token" "HF_TOKEN key is missing from .env" \
+    setup_todo "env-hf-token" "HF_TOKEN key is missing from .env" \
       "scripts/resolve_models.py needs HF_TOKEN to resolve/download gated models." \
       "Add a line 'HF_TOKEN=<your token>' to $ENV_FILE, then rerun scripts/preflight.sh"
   fi

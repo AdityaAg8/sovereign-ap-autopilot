@@ -1,6 +1,6 @@
 """Checks whether the AgentDojo banking benchmark package is installed. `agentdojo` is a
 declared dev dependency (pyproject.toml's dev group), so this normally succeeds once `uv sync`
-has run; this fetcher only reports availability and defers with a BLOCKED.md entry on the rare
+has run; this fetcher only reports availability and defers with a SETUP_TODO.md entry on the rare
 environment where it is still missing, rather than installing anything.
 
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib.metadata
 from pathlib import Path
 
-from evals.datasets.common import append_blocked_entry
+from evals.datasets.common import append_setup_todo
 from evals.datasets.manifest import DatasetEntry, DatasetStatus
 
 DATASET_NAME = "agentdojo"
@@ -24,7 +24,7 @@ def fetch(data_root: Path) -> DatasetEntry:
     try:
         version = importlib.metadata.version("agentdojo")
     except importlib.metadata.PackageNotFoundError:
-        append_blocked_entry(
+        append_setup_todo(
             tag="dataset:agentdojo",
             title="AgentDojo banking suite needs `agentdojo` added to pyproject.toml",
             why=(
@@ -40,7 +40,7 @@ def fetch(data_root: Path) -> DatasetEntry:
             source=SOURCE_URL,
             version="unknown",
             license=LICENSE,
-            blocked="agentdojo not installed; see BLOCKED.md [dataset:agentdojo]",
+            blocked="agentdojo not installed; see SETUP_TODO.md [dataset:agentdojo]",
             files=[],
         )
     return DatasetEntry(

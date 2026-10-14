@@ -1,9 +1,9 @@
-"""`make demo` driver: drops five scenarios -- clean, bilingual, poisoned, a post-bank-change
-invoice and a resubmitted duplicate -- into the running stack's inbox, asserts each one's
-outcome against `GET /invoices/{id}` (approving the clean and bilingual ones through the API so
-they reach the archive) and shows progress in an aligned live table that honours NO_COLOR.
-Every scenario has its own deadline, so the run always ends with a typed verdict. Needs `make
-up` and `make seed` first; docs/demo.md is the walkthrough."""
+"""`make demo` driver: drops nine scenarios of five kinds -- clean, bilingual, poisoned, a
+post-bank-change invoice and a resubmitted duplicate -- into the running stack's inbox, asserts
+each one's outcome against `GET /invoices/{id}` (approving the clean and bilingual ones through
+the API so they reach the archive) and shows progress in an aligned live table that honours
+NO_COLOR. Every scenario has its own deadline, so the run always ends with a typed verdict. Needs
+`make up` and `make seed` first; docs/demo.md is the walkthrough."""
 
 from __future__ import annotations
 

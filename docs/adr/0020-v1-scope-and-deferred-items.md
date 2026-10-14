@@ -36,8 +36,10 @@ measured state on 2026-10-04:
    data (R1, R1b) with the same gates. A retrain triggered by live review corrections is not
    run for v1.0, because the deployed stack has no corrections volume yet.
 5. **v1.0.0 needs**, in addition to the release checklist: a clean security audit of the code
-   changed after the third audit pass, the R1b gate result recorded honestly (promoted only if every gate passes), and a
-   live `make e2e-pipeline` run on the rebuilt stack.
+   changed by the last round of fixes (the Extractor B loader rendered only the first 3 pages, the
+   prompt's document-text trim could exceed its token budget, and the login throttle could evict a
+   bucket it had just created), the R1b gate result recorded honestly (promoted only if every gate
+   passes), and a live `make e2e-pipeline` run on the rebuilt stack.
 
 ## Consequences
 

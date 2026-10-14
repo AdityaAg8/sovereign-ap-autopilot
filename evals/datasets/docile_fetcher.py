@@ -1,5 +1,5 @@
 """Fetches the DocILE annotated-trainval and test splits (never the 1M-doc unlabeled set)
-from the token-gated Rossum S3 bucket into data/docile/, deferring with a BLOCKED.md entry
+from the token-gated Rossum S3 bucket into data/docile/, deferring with a SETUP_TODO.md entry
 when DOCILE_TOKEN is absent instead of failing the run."""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 from evals.datasets.common import (
-    append_blocked_entry,
+    append_setup_todo,
     download_resumable,
     repo_relative_posix,
     sha256_file,
@@ -35,7 +35,7 @@ FETCH_COMMAND = f"{ENV_VAR}=<your-token> uv run python -m evals.datasets fetch -
 def fetch(data_root: Path) -> DatasetEntry:
     token = os.environ.get(ENV_VAR, "").strip()
     if not token:
-        append_blocked_entry(
+        append_setup_todo(
             tag="dataset:docile",
             title="DocILE annotated-trainval+test needs a DOCILE_TOKEN",
             why=(

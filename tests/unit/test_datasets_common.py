@@ -1,5 +1,5 @@
 """Unit tests for evals/datasets/common.py: sha256 hashing, resumable range-request downloads
-(against httpx.MockTransport, no real network) and BLOCKED.md entry appending."""
+(against httpx.MockTransport, no real network) and SETUP_TODO.md entry appending."""
 
 from __future__ import annotations
 
@@ -96,36 +96,49 @@ def test_download_resumable_restarts_when_server_ignores_range(tmp_path: Path) -
     assert dest.read_bytes() == full_body
 
 
-def test_append_blocked_entry_writes_expected_shape(
+def test_append_setup_todo_writes_expected_shape(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    blocked_md = tmp_path / "BLOCKED.md"
-    blocked_md.write_text("# BLOCKED\n", encoding="utf-8", newline="\n")
-    monkeypatch.setattr(common, "BLOCKED_MD", blocked_md)
+    setup_todo_md = tmp_path / "SETUP_TODO.md"
+    setup_todo_md.write_text(common.SETUP_TODO_HEADER, encoding="utf-8", newline="\n")
+    monkeypatch.setattr(common, "SETUP_TODO_MD", setup_todo_md)
 
-    common.append_blocked_entry(
+    common.append_setup_todo(
         tag="dataset:docile",
         title="Needs a token",
         why="DOCILE_TOKEN is not set.",
         command="DOCILE_TOKEN=... uv run python -m evals.datasets fetch --set docile",
     )
 
-    text = blocked_md.read_text(encoding="utf-8")
+    text = setup_todo_md.read_text(encoding="utf-8")
     assert "### [dataset:docile] Needs a token" in text
     assert "- **Why:** DOCILE_TOKEN is not set." in text
     assert "fetch --set docile" in text
 
 
-def test_append_blocked_entry_is_idempotent_per_tag(
+def test_append_setup_todo_is_idempotent_per_tag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    blocked_md = tmp_path / "BLOCKED.md"
-    blocked_md.write_text("# BLOCKED\n", encoding="utf-8", newline="\n")
-    monkeypatch.setattr(common, "BLOCKED_MD", blocked_md)
+    setup_todo_md = tmp_path / "SETUP_TODO.md"
+    setup_todo_md.write_text(common.SETUP_TODO_HEADER, encoding="utf-8", newline="\n")
+    monkeypatch.setattr(common, "SETUP_TODO_MD", setup_todo_md)
 
-    common.append_blocked_entry(tag="dataset:x", title="A", why="a", command="cmd-a")
-    common.append_blocked_entry(tag="dataset:x", title="B", why="b", command="cmd-b")
+    common.append_setup_todo(tag="dataset:x", title="A", why="a", command="cmd-a")
+    common.append_setup_todo(tag="dataset:x", title="B", why="b", command="cmd-b")
 
-    text = blocked_md.read_text(encoding="utf-8")
+    text = setup_todo_md.read_text(encoding="utf-8")
     assert text.count("[dataset:x]") == 1
     assert "cmd-b" not in text
+
+
+def test_append_setup_todo_starts_a_new_file_with_the_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    setup_todo_md = tmp_path / "SETUP_TODO.md"
+    monkeypatch.setattr(common, "SETUP_TODO_MD", setup_todo_md)
+
+    common.append_setup_todo(tag="dataset:x", title="A", why="a", command="cmd-a")
+
+    text = setup_todo_md.read_text(encoding="utf-8")
+    assert text.startswith("# Setup to-do\n\nManual setup steps the scripts couldn't do for you")
+    assert text.count("[dataset:x]") == 1

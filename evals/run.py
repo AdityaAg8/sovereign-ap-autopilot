@@ -360,7 +360,7 @@ def _score_docile_set(manifest: Manifest) -> SetOutcome:
     """DocILE scoring (`score_kile`/`score_lir`) needs `docile.dataset.Dataset`-loaded
     annotations and PCC sets, not the flat `{field: value}` shape every other set here uses, so
     wiring it in is left to when a DOCILE_TOKEN makes real annotated documents available
-    (BLOCKED.md `[dataset:docile]`) and an extractor exists to predict against them."""
+    (SETUP_TODO.md `[dataset:docile]`) and an extractor exists to predict against them."""
     entry = manifest.datasets.get("docile")
     if entry is None or entry.status != DatasetStatus.PRESENT:
         reason = (entry.blocked if entry and entry.blocked else None) or (

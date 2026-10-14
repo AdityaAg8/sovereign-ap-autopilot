@@ -1,4 +1,4 @@
-"""Reality set of the real-data track (ADR-0019 §7): blank labelling templates for the owner's
+"""Reality set of the real-data track (ADR-0019 §7): blank labelling templates for your own
 redacted UAE invoices, loading of verified truth files, and per-language, per-field correct/total
 counts that never carry a value, supplier name or file name into a report."""
 
@@ -20,7 +20,7 @@ from evals.real.models import RealTrackError
 Language = Literal["en", "ar", "bilingual"]
 REDACTED: Final = "__redacted__"
 UNFILLED: Final = ""
-"""A template value the owner has not typed yet (null means "not printed")."""
+"""A template value you have not typed yet (null means "not printed")."""
 DOCUMENT_SUFFIXES: Final[frozenset[str]] = frozenset(
     {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff"}
 )

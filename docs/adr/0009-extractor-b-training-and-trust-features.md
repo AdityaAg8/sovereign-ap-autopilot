@@ -154,9 +154,9 @@ the straight-through rate, never the validity of the guarantee. B's F1 on cal is
 
 ### 2. Teacher decision
 
-The host is eligible: 63 GB RAM ≥ 32 GB (`reports/env.md`). Eligibility alone is not a go. After
-B's round 1, `ml/teacher/decide.py` evaluates these criteria in order and stops at the first
-failure:
+The host is eligible: 63 GB RAM ≥ 32 GB (the preflight report, `scripts/preflight.sh`, written
+locally to reports/env.md). Eligibility alone is not a go. After B's round 1,
+`ml/teacher/decide.py` evaluates these criteria in order and stops at the first failure:
 
 - **T1 headroom:** F1_B,dev < F1_A,dev − 1.0 on UAE dev. Otherwise silver labels have nothing to
   add.

@@ -1,5 +1,5 @@
 """Unit tests for the evals/datasets fetchers (docile, fatura, extractbench, agentdojo):
-token/package presence branching, manifest construction and BLOCKED.md deferral.
+token/package presence branching, manifest construction and SETUP_TODO.md deferral.
 All network and subprocess calls are stubbed; no real downloads,
 no GPU."""
 
@@ -29,10 +29,10 @@ def _write_zip(path: Path, name: str = "doc.txt", content: bytes = b"hello") -> 
 
 @pytest.fixture
 def isolated_repo_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Points evals.datasets.common at a throwaway repo root and BLOCKED.md so fetcher tests
+    """Points evals.datasets.common at a throwaway repo root and SETUP_TODO.md so fetcher tests
     never touch the real repository."""
     monkeypatch.setattr(common, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(common, "BLOCKED_MD", tmp_path / "BLOCKED.md")
+    monkeypatch.setattr(common, "SETUP_TODO_MD", tmp_path / "SETUP_TODO.md")
     return tmp_path
 
 
@@ -54,9 +54,9 @@ def test_docile_fetch_defers_without_token(
     assert entry.status is DatasetStatus.DEFERRED
     assert entry.files == []
     assert entry.blocked is not None
-    blocked_text = (isolated_repo_root / "BLOCKED.md").read_text(encoding="utf-8")
-    assert "[dataset:docile]" in blocked_text
-    assert "DOCILE_TOKEN=" in blocked_text
+    todo_text = (isolated_repo_root / "SETUP_TODO.md").read_text(encoding="utf-8")
+    assert "[dataset:docile]" in todo_text
+    assert "DOCILE_TOKEN=" in todo_text
 
 
 def test_docile_fetch_downloads_both_splits_with_token(
@@ -81,7 +81,7 @@ def test_docile_fetch_downloads_both_splits_with_token(
     splits = {f.path: f.split for f in entry.files}
     assert splits["data/docile/test.zip"] == "test"
     assert splits["data/docile/annotated-trainval.zip"] is None
-    assert not (isolated_repo_root / "BLOCKED.md").exists()
+    assert not (isolated_repo_root / "SETUP_TODO.md").exists()
 
 
 # --- fatura ------------------------------------------------------------------------------
@@ -232,9 +232,9 @@ def test_agentdojo_fetch_defers_when_package_missing(
 
     assert entry.status is DatasetStatus.DEFERRED
     assert entry.files == []
-    blocked_text = (isolated_repo_root / "BLOCKED.md").read_text(encoding="utf-8")
-    assert "[dataset:agentdojo]" in blocked_text
-    assert "uv add agentdojo" in blocked_text
+    todo_text = (isolated_repo_root / "SETUP_TODO.md").read_text(encoding="utf-8")
+    assert "[dataset:agentdojo]" in todo_text
+    assert "uv add agentdojo" in todo_text
 
 
 def test_agentdojo_fetch_present_when_package_installed(
@@ -247,4 +247,4 @@ def test_agentdojo_fetch_present_when_package_installed(
     assert entry.status is DatasetStatus.PRESENT
     assert entry.version == "0.1.9"
     assert entry.blocked is None
-    assert not (isolated_repo_root / "BLOCKED.md").exists()
+    assert not (isolated_repo_root / "SETUP_TODO.md").exists()

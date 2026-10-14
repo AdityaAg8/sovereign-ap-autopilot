@@ -194,7 +194,8 @@ def fetch_cord(
     large = [s for s in requested if s in LARGE_SPLITS]
     if large and not allow_large:
         raise CordFetchError(
-            f"CORD split(s) {large} exceed 1 GB; pass --allow-large once the owner approved it"
+            f"CORD split(s) {large} exceed 1 GB; pass --allow-large once you have approved the "
+            "download"
         )
     fetch = download or _hf_download
     parquet_dir = data_root / DATASET_NAME / "parquet"

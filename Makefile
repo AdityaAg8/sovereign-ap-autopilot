@@ -240,7 +240,7 @@ real-reality-template:
 	uv run python -m evals.real reality-template
 
 real-reality:
-	@echo "==> Extractor A on the owner's labelled reality set (data/real_uae/)"
+	@echo "==> Extractor A on your labelled reality set (data/real_uae/)"
 	$(HOST_PARSE) uv run python -m evals.real run --set reality --extractor a
 
 real-report:
@@ -516,7 +516,7 @@ demo: up seed
 	@mkdir -p logs
 	cd $(WEB_DIR) && NEXT_PUBLIC_API_MODE=http pnpm build >../logs/web-build.log 2>&1
 	cd $(WEB_DIR) && (nohup pnpm start -p 3000 >../logs/web.log 2>&1 &)
-	@echo "==> five scenarios, each asserted against the API (docs/demo.md walks through them)"
+	@echo "==> nine scenarios, each asserted against the API (docs/demo.md walks through them)"
 	uv run python scripts/demo.py $(DEMO_ARGS)
 
 # Same jobs as .github/workflows/ci.yml on a clean clone of REF (default HEAD); for when Actions

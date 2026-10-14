@@ -1,5 +1,5 @@
 """Shared helpers for evals.datasets fetchers: sha256 hashing, resumable range-request
-downloads over httpx, and appending BLOCKED.md entries for human-only gaps so a missing
+downloads over httpx, and appending SETUP_TODO.md entries for manual setup steps so a missing
 token or package degrades the fetch run instead of failing it."""
 
 from __future__ import annotations
@@ -10,7 +10,11 @@ from pathlib import Path
 import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BLOCKED_MD = REPO_ROOT / "BLOCKED.md"
+SETUP_TODO_MD = REPO_ROOT / "SETUP_TODO.md"
+SETUP_TODO_HEADER = (
+    "# Setup to-do\n\nManual setup steps the scripts couldn't do for you (missing tokens, gated "
+    "datasets, host settings). Each entry: what, why, exact command.\n"
+)
 CHUNK_SIZE = 1 << 20  # 1 MiB
 
 
@@ -71,13 +75,14 @@ def download_resumable(
     return dest
 
 
-def append_blocked_entry(tag: str, title: str, why: str, command: str) -> None:
-    """Appends a BLOCKED.md entry unless one with this `[tag]` is already present,
+def append_setup_todo(tag: str, title: str, why: str, command: str) -> None:
+    """Appends a SETUP_TODO.md entry unless one with this `[tag]` is already present,
     so re-running a deferred fetch does not duplicate the entry."""
     marker = f"[{tag}]"
-    existing = BLOCKED_MD.read_text(encoding="utf-8") if BLOCKED_MD.exists() else "# BLOCKED\n"
+    exists = SETUP_TODO_MD.exists()
+    existing = SETUP_TODO_MD.read_text(encoding="utf-8") if exists else SETUP_TODO_HEADER
     if marker in existing:
         return
     entry = f"\n### {marker} {title}\n- **Why:** {why}\n- **Command:** `{command}`\n"
-    with BLOCKED_MD.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(entry)
+    with SETUP_TODO_MD.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(entry if exists else SETUP_TODO_HEADER + entry)

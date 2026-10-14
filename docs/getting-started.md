@@ -24,7 +24,8 @@ Check all of it in one go:
 bash scripts/preflight.sh
 ```
 
-It prints a PASS/WARN/FAIL table and writes it to `reports/env.md` (not committed). Fix any
+It prints a PASS/WARN/FAIL table and writes it to `reports/env.md` (not committed). Each FAIL
+also gets an entry in `SETUP_TODO.md` (not committed) with the exact command to fix it. Fix any
 FAIL before going on.
 
 ## 2. Install
