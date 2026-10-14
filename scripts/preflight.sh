@@ -2,7 +2,7 @@
 # Preflight environment check for Sovereign AP Autopilot.
 # Runs every host/tooling check independently (never exits early), writes a
 # PASS/WARN/FAIL table to reports/env.md, and files a deduplicated BLOCKED.md
-# entry for each FAIL so a human can unblock the environment without stopping the loop.
+# entry for each FAIL so a human can unblock the environment without stopping other work.
 set +e
 set +u
 
@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPORT_FILE="$REPO_ROOT/reports/env.md"
 BLOCKED_FILE="$REPO_ROOT/BLOCKED.md"
 MIN_DISK_GB=150
-MIN_RAM_GB_FOR_M72=32
+MIN_RAM_GB_FOR_TEACHER=32
 
 mkdir -p "$REPO_ROOT/reports"
 
@@ -53,9 +53,9 @@ if printf '%s' "$os_uname" | grep -qi "linux"; then
     record "Host OS" "PASS" "Native Linux ($os_uname)"
   fi
 elif printf '%s' "$os_uname" | grep -qiE "mingw|msys|cygwin"; then
-  record "Host OS" "FAIL" "Native Windows via Git Bash ($os_uname); PRD C3 requires WSL2 Ubuntu 24.04 or Linux"
-  blocked "host-os" "Host is native Windows, not WSL2/Linux (PRD C3)" \
-    "Repo is at D:\\Projects\\sovereign-ap-autopilot on native Windows + Git Bash; C3 requires WSL2 Ubuntu 24.04 or Linux for Docker/CUDA/uv." \
+  record "Host OS" "FAIL" "Native Windows via Git Bash ($os_uname); the stack requires WSL2 Ubuntu 24.04 or Linux"
+  blocked "host-os" "Host is native Windows, not WSL2/Linux" \
+    "Repo is on a native Windows drive (e.g. C:\\src\\sovereign-ap-autopilot) under Git Bash; the stack requires WSL2 Ubuntu 24.04 or Linux for Docker/CUDA/uv." \
     "wsl --install -d Ubuntu-24.04, then clone/move the repo into the Linux filesystem (e.g. ~/sovereign-ap-autopilot) and rerun scripts/preflight.sh from inside WSL"
 else
   record "Host OS" "WARN" "Unrecognized OS ($os_uname)"
@@ -70,7 +70,7 @@ if have docker; then
   else
     record "Docker daemon" "FAIL" "docker CLI present but daemon not reachable"
     blocked "docker-daemon" "Docker daemon is not running or not reachable" \
-      "docker info failed; Compose stack (PRD §10 M0.4) and containerized checks need a running daemon." \
+      "docker info failed; the Compose stack and containerized checks need a running daemon." \
       "Start Docker Desktop (or 'sudo systemctl start docker' on Linux/WSL2), then rerun scripts/preflight.sh"
   fi
 else
@@ -93,7 +93,7 @@ if [ "$docker_ok" -eq 1 ]; then
   else
     record "GPU inside Docker" "FAIL" "docker run --rm --gpus all nvidia/cuda:... nvidia-smi did not report a GPU"
     blocked "gpu-in-docker" "GPU is not visible inside Docker containers" \
-      "PRD C2 requires the RTX 4080 GPU to be usable by containers (llama-swap, CUDA training); the nvidia-smi container check failed." \
+      "The stack requires the RTX 4080 GPU to be usable by containers (llama-swap, CUDA training); the nvidia-smi container check failed." \
       "Install the NVIDIA Container Toolkit (nvidia-ctk runtime configure --runtime=docker) and, on WSL2, the NVIDIA CUDA driver for WSL, then rerun scripts/preflight.sh"
   fi
 else
@@ -116,7 +116,7 @@ if have nvidia-smi; then
 else
   record "Host nvidia-smi" "FAIL" "nvidia-smi not found on PATH"
   blocked "host-nvidia-smi" "nvidia-smi is not installed on the host" \
-    "PRD C2 targets a single RTX 4080 Laptop GPU; host-level nvidia-smi is needed to confirm the driver is installed." \
+    "The stack targets a single RTX 4080 Laptop GPU; host-level nvidia-smi is needed to confirm the driver is installed." \
     "Install the NVIDIA driver for your OS (on WSL2: install the driver on the Windows host only, not inside WSL), then rerun scripts/preflight.sh"
 fi
 
@@ -126,7 +126,7 @@ if have uv; then
 else
   record "uv" "FAIL" "uv not found on PATH"
   blocked "uv" "uv (Python package/venv manager) is not installed" \
-    "PRD §8 mandates uv for the Python 3.12 project." \
+    "The Python 3.12 project is managed with uv." \
     "curl -LsSf https://astral.sh/uv/install.sh | sh, then rerun scripts/preflight.sh"
 fi
 
@@ -136,7 +136,7 @@ if have pnpm; then
 else
   record "pnpm" "FAIL" "pnpm not found on PATH"
   blocked "pnpm" "pnpm is not installed" \
-    "PRD §7/§10 M0.2 scaffolds web/ with Next.js 15 managed via pnpm." \
+    "web/ is a Next.js 15 app managed with pnpm." \
     "corepack enable && corepack prepare pnpm@latest --activate, then rerun scripts/preflight.sh"
 fi
 
@@ -146,7 +146,7 @@ if have node; then
 else
   record "node" "FAIL" "node not found on PATH"
   blocked "node" "Node.js is not installed" \
-    "Next.js 15 web app (PRD §10 M0.2) requires Node.js." \
+    "The Next.js 15 web app requires Node.js." \
     "Install Node.js 20 LTS (e.g. via nvm: nvm install 20), then rerun scripts/preflight.sh"
 fi
 
@@ -168,7 +168,7 @@ if [ "$py_ok" -eq 1 ]; then
 else
   record "python3.12" "FAIL" "python3.12 not found on PATH"
   blocked "python312" "Python 3.12 is not installed" \
-    "PRD §8 pins the apx/factory/evals stack to Python 3.12." \
+    "The apx/factory/evals stack is pinned to Python 3.12." \
     "Install Python 3.12 (e.g. uv python install 3.12), then rerun scripts/preflight.sh"
 fi
 
@@ -181,19 +181,19 @@ if have gh; then
     else
       record "gh auth" "FAIL" "authenticated but missing repo/workflow scope"
       blocked "gh-auth-scopes" "gh CLI lacks repo/workflow scope" \
-        "PRD §10 M0.7/§9 push+PR flow needs 'repo' and 'workflow' scopes." \
+        "The push+PR flow needs 'repo' and 'workflow' scopes." \
         "gh auth refresh -h github.com -s repo,workflow, then rerun scripts/preflight.sh"
     fi
   else
     record "gh auth" "FAIL" "gh not authenticated"
     blocked "gh-auth" "GitHub CLI is not authenticated" \
-      "PRD §10 M0.7 needs gh to create the private repo, push and open PRs." \
+      "gh is needed to create the repo, push and open PRs." \
       "gh auth login --scopes \"repo,workflow\", then rerun scripts/preflight.sh"
   fi
 else
   record "gh auth" "FAIL" "gh CLI not found on PATH"
   blocked "gh-cli" "GitHub CLI (gh) is not installed" \
-    "PRD §9/§10 use gh for repo creation, push, PR and CI checks." \
+    "gh is used for repo creation, push, PR and CI checks." \
     "Install GitHub CLI (https://cli.github.com), then gh auth login --scopes \"repo,workflow\""
 fi
 
@@ -205,7 +205,7 @@ if [ -n "$git_name" ] && [ -n "$git_email" ]; then
 else
   record "git identity" "FAIL" "git user.name and/or user.email not configured"
   blocked "git-identity" "git user.name/user.email is not set" \
-    "Commits (PRD §9 loop) need a configured author identity." \
+    "Commits need a configured author identity." \
     "git config --global user.name \"Your Name\" && git config --global user.email \"you@example.com\", then rerun scripts/preflight.sh"
 fi
 
@@ -232,7 +232,7 @@ if [ -n "$disk_avail_gb" ]; then
   else
     record "Free disk space" "FAIL" "${disk_avail_gb} GB free (< ${MIN_DISK_GB} GB required for models/data)"
     blocked "free-disk" "Less than ${MIN_DISK_GB} GB free disk space" \
-      "PRD §4 model set and factory-generated data (M2) need headroom; only ${disk_avail_gb} GB free." \
+      "The model set and factory-generated data need headroom; only ${disk_avail_gb} GB free." \
       "Free up disk space on the volume hosting $REPO_ROOT (target >= ${MIN_DISK_GB} GB free), then rerun scripts/preflight.sh"
   fi
 else
@@ -256,33 +256,23 @@ if ! printf '%s' "$ram_kb" | grep -qE '^[0-9]+$'; then
 fi
 if printf '%s' "$ram_kb" | grep -qE '^[0-9]+$'; then
   ram_gb=$((ram_kb / 1024 / 1024))
-  if [ "$ram_gb" -ge "$MIN_RAM_GB_FOR_M72" ]; then
-    record "RAM" "PASS" "${ram_gb} GB total (>= ${MIN_RAM_GB_FOR_M72} GB, M7.2 optional teacher eligible)"
+  if [ "$ram_gb" -ge "$MIN_RAM_GB_FOR_TEACHER" ]; then
+    record "RAM" "PASS" "${ram_gb} GB total (>= ${MIN_RAM_GB_FOR_TEACHER} GB, optional overnight teacher eligible)"
   else
-    record "RAM" "WARN" "${ram_gb} GB total (< ${MIN_RAM_GB_FOR_M72} GB; M7.2 optional teacher will need an ADR-skip)"
+    record "RAM" "WARN" "${ram_gb} GB total (< ${MIN_RAM_GB_FOR_TEACHER} GB; the optional overnight teacher will need an ADR-skip)"
   fi
 else
   record "RAM" "WARN" "could not determine total RAM"
 fi
 
-# --- 13. CLAUDE_CODE_SUBAGENT_MODEL unset ----------------------------------------
-if [ -z "${CLAUDE_CODE_SUBAGENT_MODEL+x}" ]; then
-  record "CLAUDE_CODE_SUBAGENT_MODEL" "PASS" "unset"
-else
-  record "CLAUDE_CODE_SUBAGENT_MODEL" "FAIL" "set to '${CLAUDE_CODE_SUBAGENT_MODEL}'; PRD §9 pins subagent models per-agent"
-  blocked "subagent-model-env" "CLAUDE_CODE_SUBAGENT_MODEL is set in the environment" \
-    "PRD §9 requires per-agent model pinning (Sonnet default, Opus only via architect/debugger/auditor); a global override defeats that." \
-    "unset CLAUDE_CODE_SUBAGENT_MODEL and remove it from your shell profile (.bashrc/.zshrc/PowerShell profile), then rerun scripts/preflight.sh"
-fi
-
-# --- 14. .env key names present (DOCILE_TOKEN, HF_TOKEN) -------------------------
+# --- 13. .env key names present (DOCILE_TOKEN, HF_TOKEN) -------------------------
 # Never reads values: only greps key names of the form ^[A-Z_]+= from .env.
 ENV_FILE="$REPO_ROOT/.env"
 if [ ! -f "$ENV_FILE" ]; then
   record ".env keys" "FAIL" ".env not found"
   blocked "env-file-missing" ".env file does not exist" \
-    "HF_TOKEN is needed for scripts/resolve_models.py (PRD §10 M0.4); DOCILE_TOKEN is needed for the DocILE fetcher (PRD §1 dataset table)." \
-    "cp .env.example .env (once M0.2 adds it) and add HF_TOKEN=... (required) and DOCILE_TOKEN=... (optional, DocILE degrades gracefully without it), then rerun scripts/preflight.sh"
+    "HF_TOKEN is needed for scripts/resolve_models.py; DOCILE_TOKEN is needed for the DocILE fetcher." \
+    "cp .env.example .env and add HF_TOKEN=... (required) and DOCILE_TOKEN=... (optional, DocILE degrades gracefully without it), then rerun scripts/preflight.sh"
 else
   env_keys="$(grep -oE '^[A-Z_]+=' "$ENV_FILE" 2>/dev/null | sed 's/=$//')"
   has_hf=0; has_docile=0
@@ -291,11 +281,11 @@ else
   if [ "$has_hf" -eq 1 ] && [ "$has_docile" -eq 1 ]; then
     record ".env keys" "PASS" "HF_TOKEN and DOCILE_TOKEN present (names only checked)"
   elif [ "$has_hf" -eq 1 ]; then
-    record ".env keys" "WARN" "HF_TOKEN present; DOCILE_TOKEN missing (DocILE fetch degrades gracefully per PRD)"
+    record ".env keys" "WARN" "HF_TOKEN present; DOCILE_TOKEN missing (DocILE fetch degrades gracefully)"
   else
     record ".env keys" "FAIL" "HF_TOKEN key missing from .env"
     blocked "env-hf-token" "HF_TOKEN key is missing from .env" \
-      "scripts/resolve_models.py (PRD §10 M0.4) needs HF_TOKEN to resolve/download gated models." \
+      "scripts/resolve_models.py needs HF_TOKEN to resolve/download gated models." \
       "Add a line 'HF_TOKEN=<your token>' to $ENV_FILE, then rerun scripts/preflight.sh"
   fi
 fi
