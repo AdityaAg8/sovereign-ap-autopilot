@@ -1,14 +1,12 @@
-# ADR-0012: Extraction contract for BT-3 and BT-151, and the Extractor B training inputs (M7.1)
+# ADR-0012: Extraction contract for BT-3 and BT-151, and the Extractor B training inputs
 
-This ADR settles the cross-module decisions that block the M7.1 GPU run. It adds the invoice type
+This ADR settles the cross-module decisions that blocked the first Extractor B GPU run. It adds the invoice type
 code and the line VAT category to the extraction contract, fixes which UAE build trains B,
 masks FATURA's unlabelled line items, pins the training base checkpoint, gives B's image budget a
 single source and confirms the image-only B prompt in the worker.
 
 - Status: accepted
 - Date: 2026-09-23
-- Deciders: architect (M7.1 unblock)
-- PRD: §2, §4, §6.2 I1/I2, §8 (money path), §10 M2.2, M3.3, M4.1, M4.3, M7.1, M8
 - Related: ADR-0003 (trust boundary), ADR-0005 (eval protocol), ADR-0009 §1.2-1.6 (B recipe),
   ADR-0011 amendment 1 (the open questions this ADR answers)
 - Interfaces: `apx/extract/interfaces.py`, `apx/extract/prompt_b.py`, `ml/extractor_b/*`
@@ -31,7 +29,7 @@ single source and confirms the image-only B prompt in the worker.
 5. Data prep resizes pages for `config.yaml: rung`, serving always uses L0, and the probe runs
    every rung on images prepared for the configured rung. So its VRAM numbers for L1-L3 are wrong,
    and the rung it picks is never passed on.
-6. The builder switched the worker's Extractor B to the image-only prompt, which changes live
+6. A recent change switched the worker's Extractor B to the image-only prompt, which changes live
    behaviour.
 
 ## Decision drivers
@@ -52,7 +50,7 @@ serve parity (ADR-0009 §1.2), no change to the trust-gate feature vector (28 co
 - **1c** Copy the printed document title and the tax-treatment text, then map them to codes in code.
   Rejected: a brittle string classifier in EN and AR, and a line category is rarely printed per
   line.
-- **2a** Regenerate the splits from `data/uae`. Rejected: M3.3 (running now) and every committed
+- **2a** Regenerate the splits from `data/uae`. Rejected: the Extractor A eval (running at the time) and every committed
   eval result are keyed to the `uae_full2` sha256s, and changing a gate input needs an ADR anyway.
 - **2b** Re-render the factory. Rejected: the bytes are not reproducible, so this would repeat
   problem 2.
@@ -82,7 +80,7 @@ serve parity (ADR-0009 §1.2), no change to the trust-gate feature vector (28 co
 
 1.3 **Training labels.** UAE: `uae_classification(truth.tax_case)` gives `380` plus the
     document's category for every line. It reads `factory.layouts.TAX_CASE_VAT_CATEGORY`, so it
-    uses the same map as the M2.5 gold XML, and a test pins the equality. The factory issues
+    uses the same map as the factory's gold XML, and a test pins the equality. The factory issues
     invoices only. FATURA: `380` (an invoice-only corpus). DocILE: null for both, because the
     document type is unknown and EU VAT is not a UAE category. The honest label for unknown is
     null.
@@ -95,12 +93,12 @@ serve parity (ADR-0009 §1.2), no change to the trust-gate feature vector (28 co
 
 ### 2. Which UAE data trains B
 
-`data/uae_full2` becomes `data/uae`, after the M3.3 run and the before/after run (§7) have
+`data/uae_full2` becomes `data/uae`, after the Extractor A run and the before/after run (§7) have
 finished reading `data/uae_full2/test`:
 `mv data/uae data/uae_stale_m2 && mv data/uae_full2 data/uae` (then `rm -rf data/uae_stale_m2`
 once `make train-b-data` passes). **Done 2026-09-25:** promoted after the first B run; `data/_stage_b/data/uae` is a junction to
-`data/uae`, and the stale render is kept as `data/uae_stale_m2` (the M6.4 guard dataset mines both). B trains on `data/uae/train` ∩ the splits train pool, plus FATURA
-train from the manifest. DocILE stays deferred (BLOCKED token). Leakage: the splits validate
+`data/uae`, and the stale render is kept as `data/uae_stale_m2` (the guard dataset mines both). B trains on `data/uae/train` ∩ the splits train pool, plus FATURA
+train from the manifest. DocILE stays deferred (it needs an access token). Leakage: the splits validate
 leak-free (`train_split_sha256` raises otherwise), the per-row `check_leakage` guard runs, and split
 assignment is by `doc_seed`, so no seed crosses splits. The new guard in `uae_docs` stops prep with
 `DataLeakError` if any `data/uae/train` document is off the train split, which is the stale-build
@@ -141,17 +139,16 @@ then `make train-b-data` is re-run. Serving and training then change together.
 ADR-0009 §1.2 chose image-only B so that its errors are decorrelated from A's, which reads text
 first. That is what makes A/B agreement informative, and it serves the ≤ 60% latency budget.
 Training uses the same `b_messages`, so serving any other prompt would break parity. No trust
-calibration has been fitted on real outputs yet (M7.4 is pending), so nothing is invalidated. The
-condition: M7.4/M7.5 calibration must run on outputs of the B actually served (the image-only
+calibration has been fitted on real outputs yet (at the time of this ADR), so nothing is invalidated. The
+condition: trust-gate calibration must run on outputs of the B actually served (the image-only
 base now, and again for each promoted LoRA champion).
 
-### 7. M3.3 comparability (before/after on the same documents)
+### 7. Extractor A comparability (before/after on the same documents)
 
-Before: the running int-m3b M3.3 rows (`int-m3b/logs/extraction_a.jsonl`, old prompt and schema,
-750 `uae_full2/test` docs). After: the same harness and settings on the branch that carries M3.3
-plus this contract, writing to separate rows and report files. The paired comparison per sha256
+Before: the Extractor A rows then running (`logs/extraction_a.jsonl`, old prompt and schema,
+750 `uae_full2/test` docs). After: the same harness and settings with this contract, writing to separate rows and report files. The paired comparison per sha256
 must meet all of these:
-- valid JSON ≥ 99% (the M3.3 gate, re-attested on the shipping schema);
+- valid JSON ≥ 99% (the Extractor A gate, re-attested on the shipping schema);
 - mean header-field accuracy drop ≤ 0.5 pt;
 - no field with a paired-bootstrap 95% CI entirely below −1.0 pt.
 
@@ -159,7 +156,7 @@ The report also gives `invoice_type_code` accuracy and line `vat_category` accur
 against the truth `tax_case`. If the comparison fails, the classification wording is revised and
 the run repeated; only failing twice needs an ADR amendment with the evidence.
 
-## Consumer spec for m5-wiring (builder, precise)
+## Consumer spec
 
 - `apx/common/invoice.py`: add `InvoiceKind(StrEnum)` (`invoice`, `credit_note`). Add
   `Invoice.kind: InvoiceKind | None`, and make `InvoiceLine.vat_category: VatCategory | None` and
@@ -257,7 +254,7 @@ the run repeated; only failing twice needs an ADR amendment with the evidence.
 
 What happened. §2 promoted `data/uae_full2` to `data/uae`. That build was rendered scan-free:
 every `truth.json` said `has_scan: false` and there were no `<sha>.pageN.scan.png` files, while
-PRD §10 M2.3 requires 30% scanned variants (the stale build, now `data/uae_stale_m2`, had 1,498
+the factory spec requires 30% scanned variants (the stale build, now `data/uae_stale_m2`, had 1,498
 of 4,995 documents, 30.0%). The session notes of the day record the new build as "Noto,
 scan-free": Smart App Control then blocked numba on the host, and Augraphy needs numba. Nothing
 failed loudly because no consumer reads the scan PNGs (see Impact) and the plan, splits and
@@ -274,15 +271,15 @@ factory's own per-page seeds, writes the PNGs atomically and flips `has_scan` la
 splits, sha256s and `data/manifest.json` are unchanged; the run is idempotent and resumable.
 Report: `reports/restore_scans.md`.
 
-Impact. A's M3.3 numbers (`reports/extraction_a.md`), the §7 before/after run and B's M7.1
+Impact. A's eval numbers (`reports/extraction_a.md`), the §7 before/after run and B's first
 training run were all digital-only: they read `<sha>.pdf`, never a scan PNG. B's training
 manifest (`data/ml/extractor_b/manifest.jsonl`, fingerprinted by B's run) is left as is.
 Measuring the scan path needs a consumer change (feed the scan PNG instead of the PDF for
 `has_scan` documents), which is out of this amendment's scope.
 
-## Amendment 4 (2026-09-26): supplier address and totals in review (M5.6 e2e)
+## Amendment 4 (2026-09-26): supplier address and totals in review (end-to-end run)
 
-What happened. In the M5.6 run of 20 factory invoices, a reviewer could approve two invoices
+What happened. In the end-to-end run of 20 factory invoices, a reviewer could approve two invoices
 that then failed PINT AE schematron at the build, and had no way to fix either. For
 `fbf2cc1d12b3`, OCR read the supplier's emirate as "Ras Al Khalaimah". The builder's emirate
 lookup found none, so the UBL had no seller CityName or CountrySubentity and failed
@@ -342,7 +339,7 @@ Decision.
 
 Consequences. An invoice whose supplier address names no emirate now costs a review, where
 before it reached the build and failed there. An invoice with amounts that do not add up can
-only be rejected. The M5.6 e2e driver (`scripts/e2e_pipeline.py`) now fixes a misread seller
+only be rejected. The end-to-end driver (`scripts/e2e_pipeline.py`) now fixes a misread seller
 address through the fields API before approving, as a reviewer would. The web client needs no
 schema change: `reasons` stays a list of strings, and
 the 422 detail keeps the `correct these fields first:` list it already parses.
@@ -353,10 +350,10 @@ the 422 detail keeps the `correct these fields first:` list it already parses.
   three silent defaults. The trust features, grounding and factory self-check are unchanged. B's
   pixels are provably the same in data prep, training and serving. The base checkpoint is pinned.
 - Negative: an A/B disagreement on a classified value costs a human review. With B still the base
-  model, expect more reviews until the M7.1 champion ships. The factory has no credit notes, so
+  model, expect more reviews until a fine-tuned B champion ships. The factory has no credit notes, so
   381 gets no training signal: B will tend to say 380 on credit notes, and the disagreement
   routes them to review, which is the safe direction. The prompt change needs the §7 re-run
-  (about 2 GPU-hours) before the M3.3 number can stand for the shipping contract.
+  (about 2 GPU-hours) before the Extractor A number can stand for the shipping contract.
 - Follow-up: optional factory credit-note layouts (would regenerate the splits, so only with an
   ADR amendment).
 

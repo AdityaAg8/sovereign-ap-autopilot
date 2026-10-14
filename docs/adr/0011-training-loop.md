@@ -1,13 +1,11 @@
-# ADR-0011: Extractor B training loop: checkpoints, resume, data guards and recipe (M7.1)
+# ADR-0011: Extractor B training loop: checkpoints, resume, data guards and recipe
 
 This ADR fixes how the Extractor B fine-tune runs as a long, pausable job on the one 12 GB GPU.
 It adds best-checkpoint selection, auto-save, deterministic resume and bad-data protection on top
-of the recipe in ADR-0009 §1. The builder-level detail is in `docs/design/training-loop.md`.
+of the recipe in ADR-0009 §1. Implementation detail is in `docs/design/training-loop.md`.
 
 - Status: accepted
 - Date: 2026-09-23
-- Deciders: architect (M7.1 design prep)
-- PRD: §2 C1-C3, C5, C6, §4, §5, §6.2 I5/I6, §8, §10 M7.1, M10.2
 - Related: ADR-0001 (local-only), ADR-0002 (VRAM staging), ADR-0005 (eval protocol),
   ADR-0006 (Windows host, Smart App Control), ADR-0009 §1 (Extractor B recipe, data mix, export,
   promotion gates P1-P5)
@@ -74,7 +72,7 @@ generation, and because its `save_total_limit` pruning does not know about torn 
 
 ### 2. Best-checkpoint selection
 
-- The selection metric is UAE dev micro field F1 over the 14 header fields (M1.3 scorer), computed
+- The selection metric is UAE dev micro field F1 over the 14 header fields (the eval harness scorer), computed
   from greedy, thinking-off generation on the full dev holdout (~175 documents, ADR-0009 §1.4)
   with the in-memory model. Output that is not valid JSON scores every field of that document as
   wrong. Ties within 0.1 F1 points break on lower dev loss, then on the earlier step.
@@ -151,7 +149,7 @@ During the run (`GuardedSFTTrainer` + `SpikeGuard`):
   not skipped.
 - Divergence: 3 consecutive skipped steps, more than 5 skips in any 100 steps, or dev loss rising
   above 1.5× its best stops the run with `TrainingDivergedError` after pointing `best.json` at the
-  last good checkpoint. No automatic LR change; the human or debugger decides.
+  last good checkpoint. No automatic LR change; a person decides.
 - VRAM: `torch.cuda.set_per_process_memory_fraction` caps the process at 11.5 GB. Peak reserved
   memory is logged every 25 steps, and a cap hit raises `VramBudgetError` after a checkpoint.
 - Samples flagged in `spikes.jsonl` are reviewed before the next run and added to quarantine
@@ -202,7 +200,7 @@ Trainer-image tests (`-m trainer`, CPU inside the container, no GPU):
   download) trains 12 steps straight vs 6 steps, SIGTERM, resume 6. Final LoRA weights, optimizer
   state and the logged loss sequence must be identical.
 
-The M7.1 run itself: `reports/extractor_b.md` gains the selected step, the dev F1 curve, the
+The first B training run itself: `reports/extractor_b.md` gains the selected step, the dev F1 curve, the
 quarantine table, the skipped-step count and the resume count.
 
 ## Amendment 1 (2026-09-23): trainer image pins, train/serve prompt, data-prep rules
@@ -222,7 +220,7 @@ quarantine table, the skipped-step count and the resume count.
   printed subtotal + tax = total (±0.02). About half of FATURA's synthetic totals do not add up
   as printed; those documents are skipped at sampling instead of being counted against the 5%
   mapping-bug quarantine rate, which stays in force. FATURA has no line-item text, so its
-  targets carry `line_items: []`; the architect should decide whether that signal is acceptable
+  targets carry `line_items: []`; a later design decision settles whether that signal is acceptable
   or FATURA rows need a loss mask on `line_items`.
 - Label date check: `DD-Mon-YYYY` (FATURA) is checked as `DD Mon YYYY` by the guard; the label
   stays as printed. No comparator or gate changed.
@@ -317,8 +315,7 @@ ADR-0009 §1.6 assumed. The bf16 base weights alone are 8.68 GiB.
   headroom under 11.2. The main risk is unchunked logits (6144 × 248320 in bf16 = 2.8 GiB, more
   than double that with an fp32 upcast). This relies on Unsloth's fused/chunked loss, and the
   probe is what proves it.
-- *Optional headroom (not required):* BLOCKED.md lists desktop GPU consumers the user may close
-  before the run.
+- *Optional headroom (not required):* close other GPU apps on the desktop before the run.
 
 **Consequences.** Earlier `raw_*.jsonl` files are stale (indented targets, estimated lengths);
 prep rewrites them. The run fingerprint changes (config hash), so no stale run can be resumed.
@@ -375,12 +372,12 @@ container nvidia-smi may not list other containers' processes.
   reclaimed there); the tests run the same races on both platforms through
   `tests/unit/ml/_file_lockers.py` (real flock on Linux, a byte-range lock on Windows) (2026-09-25).
 
-## Amendment 5 (2026-09-27): faster generative dev evals, same selection (M10.2 prep)
+## Amendment 5 (2026-09-27): faster generative dev evals, same selection (retrain prep)
 
-**Context: where M7.1 time went.** Run `b-20260923T2025-eb0aea7d` (510 steps, 4074 train /
+**Context: where the first B run's time went.** Run `b-20260923T2025-eb0aea7d` (510 steps, 4074 train /
 178 dev rows) took ~36 h wall-clock, but the train log did not survive (it lived in a deleted
 worktree) and `trainer_state.json` has no timestamps, so the split below is reconstructed from
-the PROGRESS notes and checkpoint `created_at` stamps:
+the run notes and checkpoint `created_at` stamps:
 
 | Phase | Evidence | Time |
 |---|---|---|
@@ -401,7 +398,7 @@ batches mixed short and long outputs and most rows idled behind the longest one.
 1. *Longest target first* (`evaluator.generation_order`): dev rows are generated in order of
    descending gold `n_target_tokens`, then prompt length, then `sample_id`. For contiguous
    batches of a fixed size, this order minimises the sum of batch maxima (a hypothesis test
-   checks it against random permutations). Decode steps on the M7.1 dev set, against the
+   checks it against random permutations). Decode steps on the first run's dev set, against the
    93.2k of the old order at batch 4: batch 4 69.0k (−26%), batch 6 46.4k (−50%), batch 8
    35.3k (−62%); prompt order itself would need 66.2k at 6 and 51.6k at 8. The gold length only schedules
    rows; it never reaches the prompt, the model or the scorer.
@@ -422,12 +419,12 @@ true, because the OOM backoff changes batch composition mid-eval (#51). It is th
 noise as the backoff, and it is far below the 0.1-point tie epsilon on aggregate F1 unless a
 row flips. *Check* (trainer image, GPU, once the GPU is free): re-run the dev eval of
 `checkpoint-000383` with the new order. It must reproduce dev_f1 97.17 ± 0.1 and valid_json
-0.955 ± 1/178. If it does not, this amendment is reverted before the M10.2 run.
+0.955 ± 1/178. If it does not, this amendment is reverted before the retrain.
 
 **Considered and rejected.**
 - *Subset screening* (intermediate evals on a stratified ~60-row subset, full dev only for
   competitive checkpoints and the final step). Selection on full dev needs a full eval of
-  every checkpoint within noise of the best. In M7.1 the three 4096-token evals landed within
+  every checkpoint within noise of the best. In the first run the three 4096-token evals landed within
   0.18 points of each other (96.99 / 97.17 / 97.17), so all of them would have been extended to
   full dev, and the saving would have been zero. A deferred variant (screen everything and
   re-evaluate candidates at the end by reloading their adapters) costs more when late
@@ -451,11 +448,11 @@ row flips. *Check* (trainer image, GPU, once the GPU is free): re-run the dev ev
   the loss and its kernels. Compile and static cache on Qwen3.5's hybrid DeltaNet layers under
   4-bit have not been measured safe, and no GPU is free to measure them now.
 
-**Expected effect on the M10.2 retrain** (same data size; scans add rows, so steps scale with
+**Expected effect on the retrain** (same data size; scans add rows, so steps scale with
 `n_train`): steps ~5.7 h and dev-loss evals < 0.5 h stay the same. Generative evals go from
 ~11.3 h to ~8.4 h if batch 6 OOMs and the run falls back to 4 (−26%), or to ~6.2 h if batch 6
 fits (−50% steps, assuming ~10% more latency per step at 6). That saves ~3-5 h of compute:
-~17.5 h → ~12.5-14.5 h. Pauses are the rest of the M7.1 wall-clock and are an operations matter.
+~17.5 h → ~12.5-14.5 h. Pauses are the rest of the first run's wall-clock and are an operations matter.
 
 **Proof (gate).** CPU: `tests/unit/ml/test_evaluator.py` (target-first order and tie-break,
 same row multiset, no permutation decodes fewer steps (hypothesis), 8→6→4→3→2→1 backoff
@@ -463,11 +460,11 @@ carried to the next eval) and `tests/unit/ml/test_loop.py` (`PhaseClock`). GPU (
 image): the `checkpoint-000383` re-eval check above, and `make test-trainer`
 (`test_batched_eval_real_processor.py`, `test_private_api_pins.py`).
 
-## Amendment 6 (2026-09-28): fast Gated DeltaNet kernels, same function (M10.2 prep)
+## Amendment 6 (2026-09-28): fast Gated DeltaNet kernels, same function (retrain prep)
 
-**Measured time breakdown of M7.1** (run `b-20260923T2025-eb0aea7d`). The last session (resume
+**Measured time breakdown of the first B run** (run `b-20260923T2025-eb0aea7d`). The last session (resume
 at checkpoint 131 to step 510) has HF `train_runtime` 45,533 s (12 h 39 min). Checkpoint file
-mtimes and the PROGRESS notes split it:
+mtimes and the run notes split it:
 
 | Phase | Evidence | Per unit | Share of the session |
 |---|---|---|---|
@@ -488,7 +485,7 @@ packages import. Otherwise it falls back, with only a log line, to PyTorch refer
 defined in the modeling module: `torch_chunk_gated_delta_rule` loops in Python over 64-token
 chunks and materialises fp32 per-chunk tensors, and decode runs a dozen small ops per layer per
 token. The trainer image never installed either package (`infra/docker/trainer/Dockerfile` up to
-2026.9.11), so every M7.1 step and every dev eval ran on the reference path.
+2026.9.11), so every step and every dev eval of the first run ran on the reference path.
 
 **Decision.**
 1. *Install the kernels.* The trainer image adds `flash-linear-attention==0.5.2` and
@@ -512,7 +509,7 @@ accumulation in the kernels, fp32 in the reference). That is the same class of n
 composition in the eval (amendment 5), and it is far below the 0.1-point tie epsilon unless a
 greedy token flips. Serving is unaffected: B is served by llama.cpp from the merged GGUF, which
 never used these kernels. The image digest is part of the run fingerprint, so a run started on
-the old image cannot resume on the new one (`ResumeMismatchError`). M10.2 is a new run anyway.
+the old image cannot resume on the new one (`ResumeMismatchError`). The retrain is a new run anyway.
 
 **Expected speedup (estimates until `PhaseClock` measures them).**
 - *Training steps.* At a mean 3.77k tokens, the reference path runs ~59 chunk iterations per
@@ -525,10 +522,10 @@ the old image cannot resume on the new one (`ResumeMismatchError`). M10.2 is a n
   instead of a dozen ops: est. 10-25% less per decode step. The larger effect is memory. The
   reference prefill materialises fp32 per-chunk tensors for 3.1k-token prompts times the batch,
   so the fast path makes amendment 5's default batch 8 far more likely to fit under the 9.0 GB
-  cap (35.3k decode steps on the M7.1 dev set, against 69.0k at batch 4). Per eval: batch 4 is
+  cap (35.3k decode steps on the first run's dev set, against 69.0k at batch 4). Per eval: batch 4 is
   69.0k x 0.107 s x 0.8-0.9 = 1.6-1.8 h; batch 8 is 35.3k x 0.107 s x ~1.2 (larger batch) x
   0.8-0.9 = 1.0-1.1 h.
-- *M10.2 at the M7.1 data size* (4 evals, 510 steps). Before amendments 5 and 6: ~16.3 h of
+- *The retrain at the first run's data size* (4 evals, 510 steps). Before amendments 5 and 6: ~16.3 h of
   compute. Amendment 5 alone: ~12-14 h. With amendment 6: 4.2-4.8 h of steps, 4.0-7.2 h of evals
   and 0.25 h of the rest, **~8.5-12.3 h**. Scans add rows: each extra 1,000 train rows adds ~125
   optimizer steps (~1.0-1.2 h). Wall-clock equals compute only if the run is not paused, so queue
@@ -542,11 +539,11 @@ the old image cannot resume on the new one (`ResumeMismatchError`). M10.2 is a n
   accumulation steps, which re-weights the two samples of a pair, and the spike guard would see
   pair losses. Doubling activations from the 5.8 GB probe peak also risks the 9.0 GB cap, and
   pairs of random lengths waste padding. Revisit only with a measured normalisation path.
-- *Warm-starting M10.2 from the champion adapter.* It changes the trajectory and the selected
+- *Warm-starting the retrain from the champion adapter.* It changes the trajectory and the selected
   model, and it couples challenger to champion in the ADR-0015 shadow comparison. That needs its
   own ADR.
 - *Early stop on a dev_f1 plateau.* With 4 evals and the tie rule, stopping after eval 383 would
-  have kept 383 in M7.1, but in general a later checkpoint can beat the best by more than 0.1.
+  have kept 383 in the first run, but in general a later checkpoint can beat the best by more than 0.1.
 - *Aborting an eval once its F1 upper bound falls below best minus 0.1.* The longest-first order
   puts the hardest rows first, so the bound only drops near the end. The saving is about zero,
   and the report would lose the checkpoint's F1.
@@ -555,7 +552,7 @@ the old image cannot resume on the new one (`ResumeMismatchError`). M10.2 is a n
 - Amendment 5's rejections (subset screening, stopping at JSON completion, length-grouped
   training, a pixel cache, no gradient checkpointing, compile or a static cache) still hold.
 
-**GPU validation checklist** (local, before the M10.2 run; extends amendment 5's check).
+**GPU validation checklist** (local, before the retrain; extends amendment 5's check).
 1. Rebuild the trainer image (causal-conv1d compiles on the CPU in ~10-20 min for one arch) and
    bump `TRAINER_IMAGE` in the Makefile.
 2. `make test-trainer` (CPU): the existing pins, prompt parity and batched-eval tests.
@@ -568,7 +565,7 @@ the old image cannot resume on the new one (`ResumeMismatchError`). M10.2 is a n
    reproduce dev_f1 97.17 ± 0.1 and valid_json 0.955 ± 1/178, and it records the batch size that
    fit and the eval's seconds. About 1-2 h. If it fails, revert this amendment, then amendment 5,
    to find which one moved the number.
-6. The first 25 steps of the M10.2 run: `step_seconds` in MLflow should be near 30-34 s. If it is
+6. The first 25 steps of the retrain: `step_seconds` in MLflow should be near 30-34 s. If it is
    still ~39 s, the estimate above is wrong and this section is corrected with the measurement.
 
 **Proof (gate).** CPU: `tests/unit/ml/test_kernels.py` (fast handles pass; None, a

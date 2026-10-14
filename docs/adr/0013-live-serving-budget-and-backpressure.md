@@ -2,8 +2,6 @@
 
 - Status: accepted
 - Date: 2026-09-23
-- Deciders: orchestrator (M5.6 live e2e), measurements below
-- PRD: §2 C2, §3, §4, §6.4, §10 M5.6
 - Amends: ADR-0002 (serving and VRAM staging). ADR-0012 §5 (`SERVING_RUNG`) is unchanged.
 
 ## Context and problem statement
@@ -106,7 +104,7 @@ B median 24 s alone with 2 slots.
   Co-residence, had it fit, would have taken about 16. A larger `WORKER_LLM_ACTIVITY_SLOTS` means fewer swaps but longer waits
   inside the activity.
 - Limits: the scheduler lives in one worker process, so running two worker replicas would need a
-  shared lock (not needed at M5 scale). The API's ops chat calls A directly. llama-swap's swap
+  shared lock (not needed at the current scale). The API's ops chat calls A directly. llama-swap's swap
   keeps memory safe, but a chat request during a B batch forces one extra swap.
 - The worker's slot counts must match `--parallel` in `infra/llama-swap.yaml`. Both carry a
   comment saying so.
@@ -148,7 +146,7 @@ out of payment, and extracted fields matched truth on all 18. All 8 invoices tha
 archived were refused approval by policy **P1**. Their vendors (VEND-0004, -0009, -0013, -0015
 and -0016) each have **two** current admin-verified accounts. `factory.erp` gives about 20% of
 vendors two accounts on purpose, and `select_payee` requires exactly one. That is the payment
-guard working, not a serving failure. The M5.6 criterion "all factory invoices archived" and P1
+guard working, not a serving failure. The end-to-end criterion "all factory invoices archived" and P1
 disagree for those vendors, which needs a decision (open question below). In the `--offset 30`
 run the same rule refused 1 of 12 (`reports/e2e_pipeline_offset30.md`, 11/12 archived, 2/2
 attacks).
@@ -166,12 +164,12 @@ attacks).
 - In the e2e script: `--fresh` selection, re-login when the token expires, `--resume`, and a
   refusal to run a short selection.
 
-**Open question for the owner:** should M5.6's e2e population exclude invoices from vendors that
+**Open question (resolved by ADR-0014):** should the e2e population exclude invoices from vendors that
 P1 cannot pay (two verified accounts), or should P1 pick the verified account that matches the
 invoice's printed IBAN? The second is a change to the payment guard (`select_payee` "never reads
 `Invoice.iban`"), so it needs its own ADR. *Resolved by ADR-0014 (the second option).*
 
-## Addendum (M5.6a): preflight headroom
+## Addendum: preflight headroom
 
 Every GPU stage switch, and the Extractor B trainer, now checks for free memory before it loads a
 model (`apx.llm.preflight`, wired in `apx.workflows.gpu_stage` and `ml.extractor_b.gpu_job`).
@@ -186,7 +184,7 @@ partway through a load.
 | extractor-b | 4.4 | 0 | Measurements above, B alone |
 | parse | 4.3 | 0 | 0.35 × 12 GB fraction cap |
 | arbiter | 8.0 | 0 | **unmeasured** estimate |
-| page-similarity | 4.7 | 0 | Measured 2026-09-25 (M8.1): `page-embed` alone, 5-page A4 invoice at 150 dpi, every page at the reference 1750-token cap. Whole-card peak 6260 MiB minus 1465 MiB idle desktop = 4.68 GiB (service `peak_vram_gb`, CUDA-reserved, 4.87 GB). Resize matches the reference embedder's smart_resize exactly (the processor's own resize capped pages at 1260 tokens, so pages are pre-resized) |
+| page-similarity | 4.7 | 0 | Measured 2026-09-25: `page-embed` alone, 5-page A4 invoice at 150 dpi, every page at the reference 1750-token cap. Whole-card peak 6260 MiB minus 1465 MiB idle desktop = 4.68 GiB (service `peak_vram_gb`, CUDA-reserved, 4.87 GB). Resize matches the reference embedder's smart_resize exactly (the processor's own resize capped pages at 1260 tokens, so pages are pre-resized) |
 | guard | 1.0 | 0 | estimate |
 | trainer | 6.0 | 12.0 | trainer budget |
 
@@ -215,9 +213,9 @@ partway through a load.
   `capabilities: [utility]`, which gives it `nvidia-smi` and NVML but no compute. The runtime
   mounts `nvidia-smi` at `/usr/bin`, which stays on the apx image's `PATH`.
 
-## Amendment 1 (2026-09-26): one Extractor A slot, and no silent OCR truncation (M5.6 e2e)
+## Amendment 1 (2026-09-26): one Extractor A slot, and no silent OCR truncation (end-to-end run)
 
-Two invoices from the M5.6 e2e run lost line items before any reviewer saw them. Both were
+Two invoices from the end-to-end run lost line items before any reviewer saw them. Both were
 replayed from their cached parses on the live stack (llama.cpp build 11096, PaddleOCR-VL-1.6).
 
 **Evidence.**
@@ -304,7 +302,7 @@ before, old manifests load, a truncated page round-trips), `tests/unit/test_pars
 - Page 1 of `13e9e6552e94` still loops even with the penalty. It is flagged and routed to review,
   but its text is lost; try a lower-resolution retry of a looping page.
 
-## Amendment 2 (2026-09-27): loop guard and strip re-read for scanned pages (M3.1/M3.3)
+## Amendment 2 (2026-09-27): loop guard and strip re-read for scanned pages
 
 **Problem.** Amendment 1 made a looping page visible (`truncated: true`) but did not recover its
 text. A probe of the 20-document scan set (16 Arabic-first, 4 English; 32 pages) found that
@@ -372,7 +370,7 @@ after 37 to 967 generated tokens, against 3072 before. No page that finished mat
   finished means complete, an unfinished strip means truncated, and the deadline before and
   during strips, with the first pass kept when the strips read less.
 
-**Live verification.** Pending: the GPU run on the 20-document set, measuring IBAN, total and zone
+**Live verification.** Not re-validated after v1.0: the GPU run on the 20-document set, measuring IBAN, total and zone
 recovery against baseline, and the 4 English documents byte-identical.
 
 ## Amendment 3 (2026-09-28): scan parse throughput without changing the output
@@ -426,7 +424,7 @@ part scales by 21/60: about 95 × 0.35 ≈ 33 s per scan, about 4.2 h for 458. T
 running the cache fill with nothing else on the GPU or the host CPU. Deadline-bound strip passes
 then read more strips before 90 s, which can only recover more zones.
 
-**Validation (GPU, pending).**
+**Validation (GPU, not re-validated after v1.0).**
 
 - Byte-identical output: parse the 4 English and 4 Arabic-first documents of the amendment-2 probe
   set before and after this change (same image, nothing else on the GPU), and compare the
@@ -437,7 +435,7 @@ then read more strips before 90 s, which can only recover more zones.
 
 ## Amendment 4 (2026-09-29): strip merge in reading order, and half-band re-read of an unfinished strip
 
-**Problem.** The M5.6 e2e run parsed invoice 165d017b0a90 page 2 (1683 px) through the strip
+**Problem.** The end-to-end run parsed invoice 165d017b0a90 page 2 (1683 px) through the strip
 path (`parse_page_truncated page_index=1`). Strip 3's kept band (page y 0.5006 to 0.7359) lost a
 whole table row: nothing was parsed between y 0.492 and 0.612. The next two rows came out
 bottom-up, with their cells right to left. Two causes: `merge_strips` kept each strip's zones in
@@ -483,7 +481,7 @@ any page height; an unfinished strip is re-read as two half-bands whose rows com
 half-bands that also fail keep what they read and the page truncated; the deadline admits only the
 halves that fit; the finished first pass never touches the new code.
 
-**Validation (GPU, pending).**
+**Validation (GPU, not re-validated after v1.0).**
 
 - Re-parse invoice 165d017b0a90 (page 2 in particular): the row between y 0.492 and 0.612 is
   present, rows run top to bottom with cells left to right, and the page log shows

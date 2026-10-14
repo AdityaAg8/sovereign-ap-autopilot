@@ -2,22 +2,19 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M9.1)
-- PRD: §5 (scoreboard rows for tool calls, citations, AgentDojo); §6.2 I2, I3, I4; §6.3 P5;
-  §10 M9
 - Extends ADR-0003 and ADR-0008 (it replaces neither). Related: ADR-0001, `docs/security.md`
   boundaries B6 and B7, controls SEC-12, SEC-13, SEC-18, SEC-21, SEC-22.
 - Contracts: `apx/agent/interfaces.py`.
 
 ## Context and problem statement
 
-M9 connects a tool-calling model (Qwen3.5-9B, §4) to invoice, vendor and audit state. The
+The agent layer connects a tool-calling model (Qwen3.5-9B, §4) to invoice, vendor and audit state. The
 exception agent writes review notes, ops chat answers questions in the UI, and an MCP server
 offers the same tools to local MCP clients. Every one of these reads text that an attacker wrote.
 
 ADR-0008 already decides that the agent cannot change payment state: `apx.agent` never receives
 a `Grant`, `PolicyGuard` or payment-state writer, and a `ProposalSink` is its only write
-dependency (K3). Before M9.2 can be built and tested, this ADR has to fix:
+dependency (K3). Before the agent tools can be built and tested, this ADR has to fix:
 
 1. which tools exist, with typed parameters and results, caps and role scoping;
 2. how tool SQL stays parameterised, and how we prove it;
@@ -26,7 +23,7 @@ dependency (K3). Before M9.2 can be built and tested, this ADR has to fix:
 5. the citation format, which links answers to audit events;
 6. what the agent does when it refuses a request;
 7. what MCP exposes, and how an MCP client authenticates;
-8. the hooks that M9.5 needs for its evaluations.
+8. the hooks the agent evaluations need.
 
 ## Decision drivers
 
@@ -37,7 +34,7 @@ dependency (K3). Before M9.2 can be built and tested, this ADR has to fix:
   (`docs/security.md` B6, R row).
 - One contract table should drive the tool specs, dispatch, MCP listing and tests.
 - C1 and C6: no path sends anything and no path reaches the network.
-- Use the simplest design that passes M9.2 to M9.5.
+- Use the simplest design that passes the proofs below.
 
 ## Considered options
 
@@ -49,7 +46,7 @@ dependency (K3). Before M9.2 can be built and tested, this ADR has to fix:
 2. A generic read-only SQL tool (text-to-SQL over views). This is flexible, but the model would
    write the SQL, so we could not guarantee parameters. Masking and caps become best effort, and
    bulk export becomes one query.
-3. Keep the M0 `AgentTool` shape (untyped `dict` arguments per tool). Checks would be spread
+3. Keep the scaffold's `AgentTool` shape (untyped `dict` arguments per tool). Checks would be spread
    across tools, and there would be no typed result to test.
 
 ### Citations
@@ -81,10 +78,10 @@ We choose option 1, option A, option i, and the registry of constant statements.
 
 | Tool | Effect | Key parameters | Result (`content`) | `untrusted` | Cap | Roles (chat, MCP) | Origins | Proposal |
 |---|---|---|---|---|---|---|---|---|
-| `search_invoices` | read | `vendor_id`, `vendor_query` (vendor-master names only), `invoice_number` (T2 pattern), `status`, `route`, received date range, total range, `currency`, `sort` (3 fixed orders), `limit` ≤ 25 | `InvoiceSearchResult` with `InvoiceRow`s | none | 25 rows | all | all; for `agent`, the vendor is forced to the scope invoice's vendor | – |
-| `get_invoice` | read | `invoice_id` | `InvoiceView`: typed fields, field acceptance, routing reasons, flags (no evidence text), masked payee, `document_iban_matches_payee`, pending proposals | supplier and buyer names and addresses, up to 50 line descriptions, any off-format value | 50 lines | all | all; for `agent`, only the scope invoice | – |
-| `explain_decision` | read | `invoice_id`, `topic` | `DecisionExplanation`: `CitedReason`s (each with at least one audit id), `AuditEventView`s (payload filtered to `AUDIT_FACT_KEYS`) | none | 50 events | all | all; for `agent`, only the scope invoice | – |
-| `vendor_history` | read | `vendor_id`, `since`, `limit` ≤ 50 | `VendorHistory`: master name, TRN, masked accounts (≤ 10), bank changes (≤ 20), invoice rows, counts | none | 50 invoices | all | all; for `agent`, only the scope invoice's vendor | – |
+| `search_invoices` | read | `vendor_id`, `vendor_query` (vendor-master names only), `invoice_number` (T2 pattern), `status`, `route`, received date range, total range, `currency`, `sort` (3 fixed orders), `limit` ≤ 25 | `InvoiceSearchResult` with `InvoiceRow`s | none | 25 rows | all | all; for `agent`, the vendor is forced to the scope invoice's vendor | none |
+| `get_invoice` | read | `invoice_id` | `InvoiceView`: typed fields, field acceptance, routing reasons, flags (no evidence text), masked payee, `document_iban_matches_payee`, pending proposals | supplier and buyer names and addresses, up to 50 line descriptions, any off-format value | 50 lines | all | all; for `agent`, only the scope invoice | none |
+| `explain_decision` | read | `invoice_id`, `topic` | `DecisionExplanation`: `CitedReason`s (each with at least one audit id), `AuditEventView`s (payload filtered to `AUDIT_FACT_KEYS`) | none | 50 events | all | all; for `agent`, only the scope invoice | none |
+| `vendor_history` | read | `vendor_id`, `since`, `limit` ≤ 50 | `VendorHistory`: master name, TRN, masked accounts (≤ 10), bank changes (≤ 20), invoice rows, counts | none | 50 invoices | all | all; for `agent`, only the scope invoice's vendor | none |
 | `request_approval` | propose | `invoice_id`, `rationale` ≤ 500 characters, `cited_audit_ids` (1 to 10) | `ProposalReceipt` (`executed: Literal[False]`) | none | 1 | reviewer, approver | chat, mcp | `approve_payment` |
 | `draft_vendor_email` | propose | `invoice_id`, `reason` (enum), `details` ≤ 800 characters, `language` | `EmailDraftReceipt` (`sent: Literal[False]`) | none | 1 | reviewer, approver | agent, chat, mcp | `request_info` |
 
@@ -146,8 +143,8 @@ Rules that apply to every tool:
   | Caller | `origin` | `user` | Scope |
   |---|---|---|---|
   | Exception agent | `agent` | none | `scope_invoice_id` = the invoice under review |
-  | Ops chat | `chat` | the JWT user | – |
-  | MCP | `mcp` | the user from the session token | – |
+  | Ops chat | `chat` | the JWT user | none |
+  | MCP | `mcp` | the user from the session token | none |
 
 - **Read tools** are free for any authenticated role (ADR-0008 K2). The `agent` origin can read
   only its scope invoice and that invoice's vendor; anything else returns `out_of_scope`.
@@ -225,7 +222,7 @@ Rules that apply to every tool:
     `refusal="unverifiable"` and records the audit event `agent.reply_unverifiable`.
   - The exception agent stores no note, and the reviewer sees the same template.
   - There is no retry loop.
-- **Rendering (M9.3).**
+- **Rendering.**
   - `[audit:N]` links to `/audit/N`.
   - `[document:<source>]` is shown as a quote chip, never as a link.
   - Markdown is rendered without raw HTML or remote images (SEC-18).
@@ -252,7 +249,7 @@ Rules that apply to every tool:
 ### D8 MCP exposure
 
 - **Server.**
-  - `apx/agent/mcp_server.py` is built on the MCP Python SDK; M9.4 pins the version in
+  - `apx/agent/mcp_server.py` is built on the MCP Python SDK, with the version pinned in
     `uv.lock`.
   - It uses the stdio transport only and is started as
     `docker compose exec -T api python -m apx.agent.mcp_server`.
@@ -276,7 +273,7 @@ Rules that apply to every tool:
     model also receives spotlighted data.
   - MCP reads are audited as `mcp.read`, with the tool name and a hash of the arguments.
 
-### D9 Eval hooks (M9.5)
+### D9 Eval hooks
 
 - **Scorer inputs.**
   - Every `AgentReply` carries `trace: tuple[ToolTrace, ...]`: validated arguments, outcome,
@@ -315,7 +312,7 @@ Rules that apply to every tool:
     `send_money`, so this measures how easily the model is steered, which is exactly what P5
     neutralises in our product.
 - **Stock vs uncensored.**
-  - The M6.3 attack manifests run through the workflow to the exception agent, plus one
+  - The attack-suite manifests run through the workflow to the exception agent, plus one
     scripted chat probe per case.
   - This runs once with `AgentConfig.model` set to the stock Qwen3.5-9B and once with the
     uncensored red-team build (offline only, §4).
@@ -329,25 +326,24 @@ Rules that apply to every tool:
 - **Outputs.** Results go to `reports/agent.md` and `reports/agent.json`, plus the §5
   scoreboard rows. `make eval-quick` runs 20 of the tasks.
 
-### Dependency on ADR-0008 (M6.5)
+### Dependency on ADR-0008
 
 `main` (f39d7e4) does not have `ProposalSink`, `ProposalOrigin="mcp"`, `SPOTLIGHT_RULE` or
-`render_untrusted` yet; they arrive with M6.5 from branch `m6-security`. For now,
+`render_untrusted` yet; they arrive with the ADR-0008 security work. For now,
 `apx/agent/interfaces.py` restates `ToolOrigin` and a structurally identical `ProposalSink`
 Protocol. Any ADR-0008 implementation satisfies it.
 
-M9.2 starts only after M6.5 is merged. At that point:
+The agent tools start only after that work is merged. At that point:
 
-- rebase `m9-agent` onto `main`;
 - replace both restatements with re-exports from `apx.policy.interfaces`;
 - `Proposal(created_by="mcp")` validates from then on.
 
-M9.3 also needs `tool_calls` added to `llm.ChatMessage` for assistant turns. The change is
+The agent loop also needs `tool_calls` added to `llm.ChatMessage` for assistant turns. The change is
 additive.
 
 ### Interface changes (`apx/agent/interfaces.py`)
 
-Everything is additive. The M0 names are kept, and `Citation.source` gains `proposal`.
+Everything is additive. The scaffold's names are kept, and `Citation.source` gains `proposal`.
 
 - **Vocabulary.** `ToolName`, `ToolEffect`, `ToolOrigin`, `ToolProposalKind`,
   `TOOL_PROPOSAL_KINDS`, and the id, pattern and mask types (`InvoiceIdArg`, `InvoiceNumber`,
@@ -365,7 +361,7 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
 - **Pure helper stubs.** `tool_spec`, `authorize_tool`, `mask_iban`, `audit_actor`,
   `parse_citations` and `check_citations`.
 
-### Follow-ups from the M9.2 review (tracked for M9.3)
+### Follow-ups from the agent-tools review
 
 - **Bank-change audit ids (D6).** `vendor_history`'s `BankChangeView.audit_id` is always `None`
   in `PgAgentToolbox`: `bank_details_history` (the source of `v_agent_vendor_accounts`'s "change"
@@ -391,7 +387,7 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
   type needs a new tool and an update to this ADR.
 - Bad: masked IBANs, row caps and the 8000-character budget mean the agent sees less.
   Unverifiable answers become refusals, which will sometimes feel unhelpful.
-- Bad: the read-only role and masked views add migration work in M9.2.
+- Bad: the read-only role and masked views add migration work.
 - Residual: a human may click through a chat-drafted approval (R-3, bounded by P1-P3).
   Assistant turns in the chat history can repeat document text, but only in the assistant role.
   AgentDojo measures how easily the model is steered but does not prevent it; P5 covers the
@@ -399,8 +395,8 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
 
 ## Proof (gate)
 
-- **M9.1:** this ADR is merged, and `mypy --strict apx` is clean with the contracts in place.
-- **M9.2** (unit tests, no GPU):
+- Contracts: this ADR is merged, and `mypy --strict apx` is clean with the contracts in place.
+- Tools (unit tests, no GPU):
   - `agent/test_tool_contracts.py` covers:
     - there are six tools, and the effects, origins and roles follow D1 and D3;
     - `MCP_TOOL_NAMES` equals all read and proposal tools;
@@ -422,7 +418,7 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
     tool errors propagate.
   - ADR-0008's `agent/test_no_write_imports.py` still passes.
   - `integration/test_agent_ro.py`: a write through the reader's session fails.
-- **M9.3:**
+- Prompt and chat:
   - `agent/test_prompt_builder.py`:
     - the system message is only the rules, `SPOTLIGHT_RULE` and typed JSON;
     - canaries appear only between fences;
@@ -430,23 +426,23 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
   - `agent/test_citations.py`.
   - Playwright `chat.spec.ts`: asking "why was X blocked" returns an answer citing at least one
     audit id, and each cited id resolves to `/audit/N`.
-- **M9.4:** `integration/test_mcp_tools.py`:
+- MCP: `integration/test_mcp_tools.py`:
   - the tool list is exactly `MCP_TOOL_NAMES`, with the annotations in D8;
   - one read call and one proposal call succeed;
   - a bad token is refused;
   - there is no execute tool.
-- **M9.5:** `reports/agent.md` contains:
+- Agent evals: `reports/agent.md` contains:
   - tool-call accuracy and citation faithfulness over the 100 tasks;
   - AgentDojo utility, utility under attack and ASR, with and without spotlighting;
   - the stock-vs-uncensored table, where payment-changing success must be 0 for both models.
 
-## M9 build plan (builder, no further design needed)
+## Implementation plan
 
-1. After M6.5 merges: rebase `m9-agent` onto `main`, turn the `ToolOrigin` and `ProposalSink`
+1. After the ADR-0008 work merges, turn the `ToolOrigin` and `ProposalSink`
    restatements into re-exports from `apx.policy.interfaces`, and add
    `tool_calls: tuple[ToolCall, ...] = ()` to `llm.ChatMessage`.
 2. `apx/agent/contracts.py`: implement `tool_spec`, `authorize_tool`, `mask_iban` and
-   `audit_actor`, and add `tests/unit/agent/test_tool_contracts.py` (M9.2 proof above).
+   `audit_actor`, and add `tests/unit/agent/test_tool_contracts.py` (tools proof above).
 3. Add a `db/migrations` revision that creates the `apx_agent_ro` role (SELECT only) and the
    views `v_agent_invoices`, `v_agent_vendor_accounts` (IBANs masked in SQL, plus the
    document-vs-payee match column) and `v_agent_audit`.
@@ -481,7 +477,7 @@ Everything is additive. The M0 names are kept, and `Citation.source` gains `prop
     subset into `eval-quick`.
 14. Add the AgentDojo adapter (defences `none` and `spotlight`, banking suite pinned; an
     eval-only dependency group, listed in `docs/licenses.md`) and the stock-vs-uncensored attack
-    run (M6.3 manifests, `AgentConfig.model` swapped).
+    run (attack-suite manifests, `AgentConfig.model` swapped).
 15. `make verify-m9`: run the agent unit and integration tests, the MCP test and the Playwright
     chat spec; require `reports/agent.md` with payment-changing success = 0 for both models; set
     the status of SEC-12, SEC-13, SEC-21 and SEC-22 in `docs/security.md` §8.

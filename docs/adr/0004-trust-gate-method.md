@@ -2,13 +2,12 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M0.3)
-- PRD: §5, §6.1, §6.2 I5, I6
 
 ## Context and problem statement
 
-The product claims a provable error rate among auto-accepted fields (≤ α = 1% with probability
-≥ 1 − δ = 95%). A heuristic confidence cut-off gives no guarantee. We need a threshold procedure
+The product bounds the error rate among auto-accepted fields (≤ α = 1% with probability
+≥ 1 − δ = 95%) on documents exchangeable with the calibration split; the bound does not transfer
+to other document distributions. A heuristic confidence cut-off gives no guarantee. We need a threshold procedure
 with a finite-sample guarantee under exchangeability, using a held-out calibration split.
 
 ## Considered options
@@ -41,7 +40,7 @@ Option 1.
 
 ## Proof (gate)
 
-- M7: simulation test with known ground truth over 500 random cal/test splits; the guarantee holds
+- Simulation test with known ground truth over 500 random cal/test splits; the guarantee holds
   in ≥ (1 − δ) − 0.02 of splits. Unit tests for the walk (monotone grid, empty accept set, λ̂=None).
 - Scoreboard: error among auto-accepted fields on UAE test ≤ α; straight-through at
   α ∈ {0.5, 1, 2}%.

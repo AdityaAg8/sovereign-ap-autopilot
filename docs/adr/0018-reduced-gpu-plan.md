@@ -2,8 +2,6 @@
 
 - Status: accepted
 - Date: 2026-09-28
-- Deciders: orchestrator (user-approved plan), builder
-- PRD: §4 (serving), §6.1 (trust gate), §10 M3.4, M5.6, M6.6, M7.4/M7.5, M10.2
 - Related: ADR-0009 §5-§8 (trust calibration inputs), ADR-0013 (VRAM budget, A one slot),
   ADR-0015 (promotion gates), ADR-0016 (bake-off)
 - Interfaces: `scripts/gpu_queue.sh` ('|' concurrent groups), Makefile `REDUCED_GPU_QUEUE`
@@ -33,18 +31,18 @@ Deferred, with the exact commands to run later:
 
 | Item | Command | Est. |
 |---|---|---|
-| M3.4 bake-off (A stays champion) | `make bakeoff-probe && make bakeoff` | per ADR-0016 |
+| Extractor A bake-off (A stays champion) | `make bakeoff-probe && make bakeoff` | per ADR-0016 |
 | B on cal | `make cal-rows-b CAL_B_MODEL=extractor-b-challenger` | 750 × 24 s = 5.0 h |
 | A on test (trust-gate test half, P1) | `make extraction-a-adr0012 M33_DATA_DIR=data/uae/test` | 750 × 37 s = 7.7 h |
 | P1-P5 gates | `make gates-b` | 200-doc P2 run + F1 |
-| B retrain (M10.2) | `make retrain` (outside the queue, it takes the lock) | trainer |
+| B retrain | `make retrain` (outside the queue, it takes the lock) | trainer |
 
 ### 2. What the reduced plan does and does not prove
 
-- Holds: the e2e pipeline claim (M5.6) and v0.1.0; attack-suite ASR and the payment gate
-  (M6.6); B's test F1/valid-JSON on 750 UAE docs; A remains the served champion, so every
+- Holds: the e2e pipeline claim and v0.1.0; attack-suite ASR and the payment gate
+ ; B's test F1/valid-JSON on 750 UAE docs; A remains the served champion, so every
   runtime claim is about the build that ships.
-- Does **not** re-establish the M7.5 trust gate (the "provable field error rate") on its own.
+- Does **not** re-establish the runtime trust gate (the bounded field error rate) on its own.
   `evals.trust_gate calibrate` needs cal A **and** cal B rows plus test A and test B rows of the
   same builds (`evals.trust_rows.load_split_rows`, `evaluate_test` refuses another build). This
   plan produces cal A and test B (challenger) only, so `calibrate` fails typed with a
@@ -63,9 +61,9 @@ Deferred, with the exact commands to run later:
 | Client prefetch for A | already in place | `cal-rows-a` runs `--concurrency 2` against A's one slot, so the next request is queued server-side while the current decodes; outputs are per-request (no prompt cache on A). | 0 |
 | `--flash-attn on` | already on | Every alias, via the `llama-server` macro. | 0 |
 | A prompt-prefix cache (`cache_prompt`, `--cache-reuse`) | **rejected** | Not output-identical: llama.cpp documents that cached vs recomputed prefixes can differ in logits (different batch sizes). Qwen3.5 is hybrid recurrent and partial reuse killed llama-server (ADR-0013). The shared prefix is only the ~3.4 k-char / ~850-token system prompt (the schema is a grammar, not prompt tokens): ~0.3 s/doc × 750 = ~4 min. | would be ~4 min |
-| A `--parallel 2` | rejected | ADR-0013 amendment 1: two A slots degraded output (lost quantities, a lost IBAN). | — |
-| B `--parallel` > 2 | rejected | ADR-0013: B's 2 × 8192 slots are sized to the 3-image prompt; more slots means a new VRAM measurement and new rows, for a job this plan already overlaps. | — |
-| Speculative/MTP decoding, KV quantisation | excluded | Not token-identical (ADR-0016). | — |
+| A `--parallel 2` | rejected | ADR-0013 amendment 1: two A slots degraded output (lost quantities, a lost IBAN). | n/a |
+| B `--parallel` > 2 | rejected | ADR-0013: B's 2 × 8192 slots are sized to the 3-image prompt; more slots means a new VRAM measurement and new rows, for a job this plan already overlaps. | n/a |
+| Speculative/MTP decoding, KV quantisation | excluded | Not token-identical (ADR-0016). | n/a |
 | Attacks reading the parse cache | not applicable | The suite measures the runtime path end to end: its cases are rendered attack PDFs (unique sha256, none in the UAE cache) plus 24 clean test PDFs dropped as uploads, parsed host-side. Feeding cached parses would bypass the runtime parse the gate is about. | 0 |
 
 No `infra/llama-swap.yaml` argument changes, so every alias keeps its `serving_args_sha256` and no
@@ -121,7 +119,7 @@ REDUCED_GPU_QUEUE = parse-cache SPLITS=test,parse-cache SPLITS=cal,extraction-a-
 "deferred" into the plan; B on cal stays deferred. The new estimate, all sequential, is
 6.1 + 5.5 + 7.7 + 7.7 + ~0 + 5.0 + 4.2 = 36.2 h, plus the 1.5 h e2e.
 
-### 5.2 A champion-only M7.4/M7.5 gate
+### 5.2 A champion-only trust gate
 
 B is not promoted and not the extractor whose accepted values ship, so the reduced plan
 calibrates the serving champion A alone (ADR-0009 §5.B):
@@ -131,7 +129,7 @@ calibrates the serving champion A alone (ADR-0009 §5.B):
   the full 750-document test split `extraction-a-adr0012` writes by default). It never reads a B
   file. The default is still `TRUST_EXTRACTORS = a b`, and without the flag, missing B rows raise
   `TrustRowsError` as before. There is no silent fallback.
-- It uses the same alpha set, delta = 5%, λ grid, `LTT_MIN_ACCEPTED` and M7.5 test gate (error
+- It uses the same alpha set, delta = 5%, λ grid, `LTT_MIN_ACCEPTED` and test gate (error
   among auto-accepted UAE test fields ≤ 1% at alpha = 1%). No threshold changes.
 - The artifact records `extractor_b: null`, is saved under `data/trust/calibrators/` and is never
   activated. The runtime's dual pipeline serves B output, which this calibrator never saw. The
@@ -143,8 +141,8 @@ calibrates the serving champion A alone (ADR-0009 §5.B):
   refusal is audited. A's calibrator is never applied to B-derived features, and B output is
   never trusted uncalibrated.
 
-What this proves: the provable field error rate of A's values on the UAE test split, under an
-A-only feature set. It does not re-establish the runtime M7.5 activation: `make verify-m7`
+What this proves: the bounded field error rate of A's values on the UAE test split, under an
+A-only feature set. It does not re-establish the runtime activation: `make verify-m7`
 still fails "active calibrator" and "fitted on served champions" until the deferred cal-B and
 test-B rows of the champion `extractor-b` exist and `make calibrate` (default `a b`) activates a
 two-extractor artifact.
