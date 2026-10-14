@@ -265,7 +265,7 @@ for (const scheme of ["dark", "light"] as const) {
     await openFirstWithStatus(page, /^awaiting review$/i);
     const approve = page.getByRole("button", { name: /Approve/ });
     await expect(approve).toBeEnabled();
-    // The button's `transition-all` fades it in from the disabled opacity while the invoice
+    // The button's opacity transition fades it in from the disabled opacity while the invoice
     // loads, so both readings are polled until the transition settles.
     await expect.poll(() => approve.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
     await expect.poll(() => contrast(approve)).toBeGreaterThanOrEqual(4.5);

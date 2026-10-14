@@ -67,7 +67,7 @@ export const FieldList = forwardRef<
     focusFirstNeedsReview: () => {
       const target = fields.find((f) => !f.accepted);
       if (!target) {
-        toast.success("Every field is auto-accepted — nothing left to fix.");
+        toast.success("Every field is auto-accepted. Nothing left to fix.");
         return;
       }
       onSelectField(target.name);
@@ -123,7 +123,7 @@ export const FieldList = forwardRef<
         <section key={index} aria-labelledby={`line-${index}-heading`}>
           <h2
             id={`line-${index}-heading`}
-            className="bg-muted/40 text-muted-foreground border-border/70 border-b px-4 py-1.5 text-xs font-medium"
+            className="bg-muted text-muted-foreground border-border/60 sticky top-0 z-[1] border-b px-4 py-1.5 text-2xs font-semibold"
           >
             Line {index}
           </h2>

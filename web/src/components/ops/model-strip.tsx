@@ -7,14 +7,21 @@ import { cn } from "@/lib/utils";
 export const MODEL_NAMES: Readonly<Record<string, string>> = {
   "extractor-a": "Extractor A",
   "extractor-b": "Extractor B",
-  arbiter: "Arbiter",
 };
 
+/** The models the pipeline actually runs. llama-swap also lists an arbiter, but the pipeline
+ * does not call it, so it is never shown as a live model here. */
 const KNOWN: readonly { model: string; detail: string }[] = [
   { model: "extractor-a", detail: "Qwen3.5-9B · reads every invoice" },
-  { model: "extractor-b", detail: "Qwen3.5-4B + LoRA · second opinion" },
-  { model: "arbiter", detail: "Gemma 4 12B · settles disagreements" },
+  { model: "extractor-b", detail: "Qwen3.5-4B · second opinion" },
 ];
+
+const NOT_IN_PIPELINE: ReadonlySet<string> = new Set(["arbiter"]);
+
+/** The snapshot's resident models, minus any the pipeline does not run. */
+export function pipelineModels(models: OpsSnapshot["models"]): OpsSnapshot["models"] {
+  return models.filter((m) => !NOT_IN_PIPELINE.has(m.model));
+}
 
 function held(since: number | undefined, now: number): string | null {
   if (since === undefined) return null;
@@ -34,15 +41,12 @@ export function ModelStrip({
   now: number;
 }) {
   const state = new Map(models.map((m) => [m.model, m.state]));
-  const extra = models
+  const extra = pipelineModels(models)
     .filter((m) => !KNOWN.some((k) => k.model === m.model))
     .map((m) => ({ model: m.model, detail: m.model }));
   return (
-    <section
-      aria-labelledby="ops-models"
-      className="bg-card h-full overflow-hidden rounded-xl border"
-    >
-      <header className="px-5 pt-4 sm:px-6">
+    <section aria-labelledby="ops-models" className="panel h-full overflow-hidden">
+      <header className="px-5 pt-4">
         <h2 id="ops-models" className="text-sm font-semibold">
           Models on the GPU
         </h2>
@@ -52,7 +56,7 @@ export function ModelStrip({
             : "The model server is not answering; states are unknown."}
         </p>
       </header>
-      <ul className="mt-3 divide-y border-t">
+      <ul className="divide-border/60 mt-3 divide-y border-t">
         {[...KNOWN, ...extra].map(({ model, detail }) => {
           const current = state.get(model);
           const loaded = reachable && current === "ready";
@@ -62,7 +66,7 @@ export function ModelStrip({
             <li
               key={model}
               className={cn(
-                "flex items-center gap-3 px-5 py-3 transition-colors duration-500 sm:px-6",
+                "flex items-center gap-3 px-5 py-3 transition-colors duration-200",
                 loaded && "bg-accent/[0.06]",
               )}
               data-testid={`model-${model}`}

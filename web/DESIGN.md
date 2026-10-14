@@ -1,138 +1,119 @@
-# Design system — "Ledger"
+# Design system: "Ledger"
 
-Locked design direction for the Sovereign AP Autopilot review UI (M5.4). Read this before adding
-any screen; every color and font declaration in the app must reference a token defined here.
-
-## Process note (Hallmark adaptation)
-
-Hallmark's macrostructure/nav-archetype/footer-archetype apparatus targets marketing pages (hero,
-footer, public nav). This is an authenticated, dense, keyboard-first **operator app**, not a
-landing page — there is no hero and no footer. Per Hallmark's own component-scope guidance, the
-disciplines that still apply in full are: locked tokens (no ad-hoc hex/OKLCH in components),
-typography purity (no italic headers), full interaction-state coverage, honest copy, motion
-restraint, contrast/focus/keyboard rigor, and the 320–768px responsiveness floor. Those are what
-the slop-test pass below checks. Frontend-design and ui-ux-pro-max were used for the token system,
-type pairing and component patterns (dense tables, command palette, detail/side-panel review).
+The visual system for the Sovereign AP review UI. Read this before adding a screen. Every color,
+shadow and font in the app resolves to a token in `src/app/globals.css`; components use the
+Tailwind utilities those tokens generate (`bg-card`, `text-muted-foreground`, `shadow-panel`)
+and never a raw hex or OKLCH value.
 
 ## Direction
 
-**Ledger**: a precise, technical, restrained finance-operator system — closer to a Bloomberg
-terminal or Mercury Bank's ops console than a generic SaaS dashboard. No warm-cream/serif
-(AI-default #1), no near-black+neon-accent cliché (#2), no broadsheet hairlines (#3): those are
-marketing-page defaults, and this is a control surface for money. The single signature move:
-**synchronized grounding** — selecting a field in the field list simultaneously highlights its
-literal bounding box on the source document and its confidence readout, in the same cobalt accent
-and the same instant — because the product's whole trust claim is that every value traces back to
-a literal box in the source page, never a hallucinated one. Every other surface stays quiet so
-that synchronization reads clearly.
+A financial control room: calm, precise, dense where the data lives. The reference points are
+the best finance and ops tools (Linear, Mercury, Ramp), not a dashboard template. One teal
+accent, taken from the rule color of the invoice documents themselves, ties the interface to
+the paper it is checking. Status colors appear only where they carry meaning.
+
+**Signature: the accountant's double rule.** The invoice total sits on a teal double underline
+(`.ledger-total`), the mark bookkeepers draw under a final figure, and the brand mark is an
+auditor's tick over the same rule. It is used in those two places only.
 
 ## Type
 
-- **UI / display face:** IBM Plex Sans — a grotesk built for data-dense technical interfaces
-  (originally IBM's own product typeface), not a marketing sans.
-- **Arabic pairing:** IBM Plex Sans Arabic — drawn by the same foundry program as Plex Sans, so
-  x-height, stroke contrast and weight steps match instead of the common mismatched
-  Latin-sans + Noto-Arabic pairing. Applied automatically whenever `dir="rtl"` / `lang="ar"`.
-  Every place invoice content is bilingual (vendor names, line items) sets `lang`/`dir` per span so
-  Arabic text always renders in Plex Sans Arabic even inside an LTR shell.
-- **Data / mono face:** IBM Plex Mono — tabular figures for amounts, dates, TRNs, IBANs, invoice
-  IDs and timestamps, so columns of numbers align and never reflow on hover/selection. Mono is
-  for those values only — labels, names, descriptions and prose stay in Plex Sans.
+| Role | Face                      | Use                                                          |
+| ---- | ------------------------- | ------------------------------------------------------------ |
+| UI   | Instrument Sans, variable | labels, names, headings, KPI values (with `tabular-nums`)    |
+| Data | Geist Mono, variable      | amounts, invoice numbers, TRNs, IBANs, dates and times       |
+| AR   | IBM Plex Sans Arabic      | bilingual vendor names (`lang="ar"`), loaded on vendors only |
+
+Both Latin faces are self-hosted through `next/font` (no runtime CDN). The data face is not
+preloaded because it never renders the LCP text. `.tabular-mono` is the one class for figures.
+
+Scale (rem, 16px root, compact for table density): `2xs` 11px for meta and keycaps, `xs` 12px
+for labels and secondary text, `sm` 13px for rows and body, `base` 14px for page titles and the
+invoice total, `xl` 20px for the operations headline and login heading, 26px for KPI values.
+Weights: 400 body, 500 labels and values, 600 headings. Headings track at -0.01em to -0.025em.
 
 ### Numbers: Latin digits, always
 
-Every amount and count goes through one formatter (`src/lib/format.ts`): `en-AE` grouping (comma
-thousands, period decimals, two decimals for money) pinned to Latin digits (`nu-latn`), whatever
-the browser locale or the invoice's language. Arabic-Indic input digits are read (with the same
-comma-vs-period rule as `apx.common.normalize.normalize_amount`) but always displayed in Latin
-digits, so an Arabic invoice's totals line up with the English inbox. Money and IDs render
-`dir="ltr"` so bidi never reorders them. Text that does not parse cleanly, or has more than two
-decimals, is shown as extracted — never rounded or reinterpreted into a different number.
+Every amount and count goes through `src/lib/format.ts`: `en-AE` grouping pinned to Latin
+digits, two decimals for money, `dir="ltr"` on figures. Text that does not parse cleanly is shown
+as extracted, never rounded. `<Amount>` sets the currency code back in the muted tone without
+changing the text content.
 
-### Scale (rem, 16px root; UI defaults to compact `sm` size for table density)
+## Color (OKLCH)
 
-| Token         | Size             | Use                                  |
-| ------------- | ---------------- | ------------------------------------ |
-| `--text-2xs`  | 0.6875rem / 11px | timestamps, table meta, kbd hints    |
-| `--text-xs`   | 0.75rem / 12px   | captions, badges, secondary labels   |
-| `--text-sm`   | 0.8125rem / 13px | default table/list row text          |
-| `--text-base` | 0.875rem / 14px  | body text, form inputs, field values |
-| `--text-md`   | 1rem / 16px      | section headers, emphasized labels   |
-| `--text-lg`   | 1.125rem / 18px  | page titles                          |
-| `--text-xl`   | 1.375rem / 22px  | dialog / panel headers               |
-| `--text-2xl`  | 1.75rem / 28px   | dashboard hero numbers               |
-| `--text-3xl`  | 2.25rem / 36px   | login brand mark                     |
+Light and dark are designed as a pair. In dark mode elevation reads as lightness
+(sidebar < canvas < panel < popover) and shadows are dropped.
 
-Line-height 1.4 for UI text, 1.6 for prose (help overlay, empty states). Weights: 400 body, 500
-labels/emphasis, 600 headers, 700 reserved for the brand mark only.
+| Token                | Light                  | Dark                   | Role                                 |
+| -------------------- | ---------------------- | ---------------------- | ------------------------------------ |
+| `--background`       | oklch(0.979 0.004 205) | oklch(0.172 0.012 232) | canvas                               |
+| `--card`             | oklch(1 0 0)           | oklch(0.206 0.014 232) | panels                               |
+| `--foreground`       | oklch(0.2 0.02 235)    | oklch(0.94 0.008 210)  | primary text                         |
+| `--muted-foreground` | oklch(0.47 0.02 232)   | oklch(0.71 0.016 220)  | secondary text                       |
+| `--border`           | oklch(0.915 0.008 215) | oklch(0.285 0.016 232) | hairlines                            |
+| `--input`            | oklch(0.665 0.014 220) | oklch(0.51 0.018 228)  | control borders (3:1)                |
+| `--accent`, `--ring` | oklch(0.48 0.085 192)  | oklch(0.79 0.1 185)    | teal: selection, focus, links, bars  |
+| `--primary`          | oklch(0.46 0.085 192)  | oklch(0.79 0.1 185)    | primary button (Sign in)             |
+| `--success`          | oklch(0.47 0.11 158)   | oklch(0.76 0.13 160)   | approved, Auto route, Approve button |
+| `--warning`          | oklch(0.52 0.12 66)    | oklch(0.81 0.12 80)    | needs review, review route           |
+| `--destructive`      | oklch(0.51 0.19 27)    | oklch(0.72 0.16 25)    | blocked, reject, errors              |
+| `--sidebar`          | oklch(0.235 0.03 222)  | oklch(0.142 0.012 232) | the ink-teal spine (dark in both)    |
+| `--sidebar-primary`  | oklch(0.8 0.1 185)     | oklch(0.79 0.1 185)    | brand tile, active nav marker        |
 
-## Color (OKLCH, semantic tokens only — see `src/app/globals.css` for the source of truth)
+All text pairs pass WCAG 2.1 AA (4.5:1; most are above 6:1) and control borders reach 3:1. The
+sidebar is dark in both themes, so `[data-surface="spine"]` switches the focus ring to the
+lifted teal. Status is never color alone: every dot, icon or bar sits beside a word or a number.
 
-Light and dark are designed together, not inverted. Both pass WCAG 2.1 AA (4.5:1 body text, 3:1
-large text/UI outlines) — verified in the accessibility pass below.
+## Surfaces and elevation
 
-| Token                 | Light                 | Dark                   | Role                                          |
-| --------------------- | --------------------- | ---------------------- | --------------------------------------------- |
-| `--background`        | oklch(0.99 0.002 95)  | oklch(0.17 0.009 260)  | app canvas                                    |
-| `--foreground`        | oklch(0.19 0.012 260) | oklch(0.94 0.006 260)  | primary text                                  |
-| `--card`              | oklch(1 0 0)          | oklch(0.205 0.010 260) | panels, rows on hover                         |
-| `--muted`             | oklch(0.96 0.004 260) | oklch(0.24 0.011 260)  | subtle fills                                  |
-| `--muted-foreground`  | oklch(0.47 0.014 260) | oklch(0.68 0.013 260)  | secondary text                                |
-| `--border`            | oklch(0.90 0.006 260) | oklch(0.30 0.013 260)  | hairlines                                     |
-| `--primary`           | oklch(0.32 0.06 260)  | oklch(0.80 0.09 260)   | primary buttons                               |
-| `--accent` / `--ring` | oklch(0.55 0.19 260)  | oklch(0.74 0.15 260)   | focus, active, links, the grounding highlight |
-| `--destructive`       | oklch(0.48 0.19 25)   | oklch(0.70 0.18 25)    | reject, block, errors                         |
-| `--success`           | oklch(0.42 0.12 155)  | oklch(0.72 0.15 155)   | auto-route, approved, the Approve button fill |
-| `--warning`           | oklch(0.44 0.13 75)   | oklch(0.78 0.14 80)    | review-route, low confidence                  |
-
-Approve is a solid `--success` fill with `--success-foreground` text in both themes; only its
-disabled state (50% opacity) may look dimmed. Shortcut hints on action buttons (`A`, `F`, `R`) are
-text: they keep the label's full color (≥ 4.5:1) and are set apart by a faint keycap border, never
-by reduced opacity.
-
-Route/status color is **never** the only signal: every badge pairs color with an icon and text
-(`Auto`, `Review`, `Blocked`), per WCAG SC 1.4.1.
-
-## Spacing, radii, layout
-
-4px base scale (Tailwind default `--spacing`). Dense-table rows use `py-1.5 px-3`; detail panels
-use `p-4`/`p-6`; page gutters `px-6` desktop / `px-4` at ≤640px. `--radius: 0.5rem` (8px) — precise
-without being sharp (brutalist) or soft (consumer-app). Sidebar fixed at 240px (56px collapsed);
-content max-width unconstrained (operators want the full data-dense width).
-
-## Motion
-
-`--dur-fast: 120ms`, `--dur-base: 180ms`, `--dur-slow: 240ms`. `--ease-out` for entrances/hover,
-`--ease-in` for exits, `--ease-in-out` for state toggles — never the browser default `ease`, never
-spring/bounce on UI chrome. Only `transform`/`opacity` animate. `prefers-reduced-motion: reduce`
-collapses everything to an instant or ≤1ms crossfade. The one deliberate motion moment is the
-grounding highlight: the PDF field box and its list row both transition `outline-color`/`opacity`
-over `--dur-base` in lockstep — everything else on the page is static.
-
-## Focus states
-
-`:focus-visible` only (never on mouse click) — 2px solid `--ring`, 2px offset, `border-radius`
-matching the element. Never animated in (must appear the instant focus lands). Every interactive
-element (row, button, tab, field, command item) has a visible focus ring.
-
-**Rows inside scrolling lists use an inset ring instead** (`outline-offset: -2px`): a 2px-outside
-ring on a row would be clipped by the list's overflow edge and cut through its text. The inbox
-list keeps DOM focus on the listbox (`aria-activedescendant`) and draws the ring on the active row
-— 1px while it is only the hovered/active row, 2px inset while the list has keyboard focus — so
-keyboard focus and the visual "active row" stay identical. Invoice field rows get the same 2px
-inset ring on `:focus-visible`. (Tailwind v4's `outline-none` sets the outline style to none, so
-any ring layered on top of it must re-state `outline-solid`.)
+- `panel` utility: card background, 1px border, `--radius-xl` (12.6px) and `shadow-panel` (a
+  1px shadow in light mode, none in dark). It is the only container style on the canvas.
+- `shadow-bar` lifts the sticky review action bar; `shadow-paper` lifts the invoice page.
+- `--radius` is 0.5625rem: buttons and inputs at 9px, panels at 12.6px.
+- Page gutters are `p-3` on phones and `p-5` from `sm`; panels pad `px-4`/`px-5`.
 
 ## Components
 
-shadcn/ui installed via the CLI (`components.json`, Radix primitives, `radix-nova` base style,
-RTL enabled) — see `src/components/ui/*`. Tokens above override the generated defaults in
-`src/app/globals.css`; components never hardcode a color or font, only Tailwind utility classes
-that resolve to the tokens (`bg-background`, `text-muted-foreground`, `font-mono`, etc).
+- **App shell.** 240px spine (56px icon rail below `md`) with grouped navigation (Invoices,
+  Records, System), live Inbox and Review queue counts fetched when the browser is idle, and the
+  account menu at the bottom. The topbar holds the page title, search (⌘K), Ask (C) and the
+  theme toggle.
+- **Tables.** Tinted header row in `2xs`, hairline row separators, 44px rows, right-aligned mono
+  figures. Status is a 6px dot plus label, route an icon plus label, flags a compact red count
+  badge. Active rows take a faint teal tint; keyboard focus draws a 2px inset ring.
+- **Confidence.** Percent plus a 48px bar, teal when high, warning or danger when low.
+- **Invoice review.** Document left, field column right (400px). Each field row is label and
+  review state, value with an edit button, then source and confidence. Rows that need review
+  are tinted, and only their boxes are outlined on the document (dashed); the selected field's
+  box and row highlight together in teal. Underline tabs; the action bar is raised and shows
+  `A`, `F`, `R` keycaps at full label contrast.
+- **Operations.** A live band (headline sentence plus an in-flight trace), five KPI cards that
+  draw only what the snapshot backs (share bars, median against p95), the stage flow with bars
+  sized against the busiest station beside the settled breakdown, then activity beside the
+  models on the GPU.
+- **Login.** Split layout: product summary on the spine, sign-in form and the demo account
+  picker on the canvas. On phones only the form remains, under the brand mark.
 
-## Accessibility and performance budgets
+shadcn/ui primitives live in `src/components/ui/*`; menu items highlight with `bg-muted`, never
+the accent.
 
-WCAG 2.1 AA on every screen; Lighthouse performance + accessibility ≥ 95 on `/login` and `/inbox`
-(production build, measured with the Lighthouse CLI — see the M5.4 report for numbers); zero
-layout shift (skeletons reserve space, fonts use `display: swap` with metric-matched fallbacks);
-lean bundles (route-level code, no client bundle for the fixture data unless the page needs it).
+## Motion
+
+`--duration-fast` 120ms, `--duration-base` 180ms, `--duration-slow` 240ms; hover and selection
+color changes run at 150ms. Custom `--ease-out`, `--ease-in` and `--ease-in-out` curves replace
+the browser default. Only color, opacity and transform animate, never layout. Motion that
+carries meaning: the live dot and loaded models ping softly, and an activity row glows once
+when its invoice moves. `prefers-reduced-motion: reduce` removes the pings and collapses every
+other transition to an instant change.
+
+## Focus
+
+`:focus-visible` only, 2px solid `--ring` with a 2px offset, never animated in. Rows inside
+scrolling lists use an inset ring (`outline-offset: -2px`) so the scroll edge cannot clip it.
+Tailwind v4's `outline-none` sets the outline style to none, so a ring layered on top must
+re-state `outline-solid`.
+
+## Browser surfaces
+
+`color-scheme` follows the theme, text selection uses a teal tint, the caret is teal and
+scrollbars use the border color. The tab icon (`src/app/icon.svg`) is the brand mark.

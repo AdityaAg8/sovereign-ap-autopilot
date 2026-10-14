@@ -1,4 +1,4 @@
-/** Topbar account menu (signed-in user, roles, sign out). Renders its trigger right away and
+/** Sidebar account menu (signed-in user, roles, sign out). Renders its trigger right away and
  * swaps in the Radix dropdown (account-menu-dropdown.tsx) once it loads on the first
  * interaction, so Radix Menu and its positioning code stay off every signed-in page's critical
  * path; a press or focus on the trigger before then carries over to the real menu. */
@@ -6,6 +6,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
+import { ChevronsUpDown } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useDeferredControl } from "@/lib/deferred-control";
@@ -26,10 +27,24 @@ export function AccountMenuTrigger({
   ...props
 }: ComponentProps<typeof Button> & { user: AuthUser }) {
   return (
-    <Button type="button" variant="ghost" size="icon-sm" {...props}>
+    <Button
+      type="button"
+      variant="ghost"
+      className="hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground h-10 w-full justify-center gap-2.5 px-1.5 font-normal md:justify-start"
+      {...props}
+    >
       <Avatar className="size-7">
-        <AvatarFallback className="text-xs">{initials(user.name)}</AvatarFallback>
+        <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-2xs font-semibold">
+          {initials(user.name)}
+        </AvatarFallback>
       </Avatar>
+      <span aria-hidden className="hidden min-w-0 flex-1 text-start leading-tight md:block">
+        <span className="text-sidebar-accent-foreground block truncate text-sm">{user.name}</span>
+        <span className="text-sidebar-muted block truncate text-2xs capitalize">
+          {user.roles.join(", ")}
+        </span>
+      </span>
+      <ChevronsUpDown aria-hidden className="text-sidebar-muted hidden size-3.5 md:block" />
       <span className="sr-only">Signed in as {user.name}, account menu</span>
     </Button>
   );

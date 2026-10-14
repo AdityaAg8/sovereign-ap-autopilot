@@ -42,7 +42,7 @@ export function PdfPane({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-border flex items-center justify-between border-b px-4 py-2">
+      <div className="border-border bg-card flex items-center justify-between border-b px-4 py-2">
         <span className="text-muted-foreground text-xs">
           Page <span className="tabular-mono">{page + 1}</span> of{" "}
           <span className="tabular-mono">{effectivePageCount}</span>
@@ -68,7 +68,7 @@ export function PdfPane({
           </Button>
         </div>
       </div>
-      <div className="bg-muted/40 flex flex-1 items-center justify-center overflow-auto p-6">
+      <div className="bg-muted/60 dark:bg-background flex flex-1 items-center justify-center overflow-auto p-6">
         <div
           className="relative flex h-full w-full max-w-[560px] items-center justify-center"
           style={{ aspectRatio: "1 / 1.4142" }}
@@ -89,7 +89,7 @@ export function PdfPane({
             </PdfCanvas>
           ) : (
             <div
-              className="bg-card border-border relative h-full w-full rounded-sm border shadow-sm"
+              className="bg-card border-border relative h-full w-full rounded-[3px] border shadow-paper"
               data-testid="pdf-pane-placeholder"
             >
               <div className="text-muted-foreground/70 absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center">

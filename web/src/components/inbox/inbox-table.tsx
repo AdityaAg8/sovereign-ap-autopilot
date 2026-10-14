@@ -17,6 +17,7 @@ import {
   STATUS_LABEL,
 } from "@/components/inbox/status-badge";
 import { ConfidenceMeter } from "@/components/inbox/confidence-meter";
+import { Amount } from "@/components/inbox/amount";
 import { InboxFilters, type InboxFilterState } from "@/components/inbox/inbox-filters";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useRegisterShortcuts } from "@/lib/shortcuts/registry";
@@ -131,150 +132,163 @@ export function InboxTable({
   const activeId = rows[activeIndex]?.id;
 
   return (
-    <div className="inbox-table flex h-full min-h-0 flex-col">
-      <InboxFilters value={filters} onChange={setFilters} hideStatus={Boolean(lockStatus)} />
-      {/* Visual column labels only — the interactive rows below are an ARIA listbox (each row's
+    <div className="flex h-full min-h-0 flex-col p-3 sm:p-5">
+      <div className="inbox-table panel flex min-h-0 flex-1 flex-col overflow-hidden">
+        <InboxFilters
+          value={filters}
+          onChange={setFilters}
+          hideStatus={Boolean(lockStatus)}
+          shown={invoices === null ? null : rows.length}
+          total={invoices === null ? null : lockStatus ? rows.length : invoices.length}
+        />
+        {/* Visual column labels only: the interactive rows below are an ARIA listbox (each row's
           own accessible name carries its data), so this row stays out of the accessibility tree
           rather than presenting an orphaned `role="row"` with no table/grid ancestor. */}
-      <div
-        aria-hidden="true"
-        className="inbox-grid text-muted-foreground border-border border-y px-6 py-2 text-xs font-medium tracking-wide uppercase"
-        data-testid="inbox-header"
-      >
-        <span className="ic-num">Invoice no.</span>
-        <span className="ic-vendor">Vendor</span>
-        <span className="ic-status">Status</span>
-        <span className="ic-route">Route</span>
-        <span className="ic-amount text-right">Amount</span>
-        <span className="ic-conf">Confidence</span>
-        <span className="ic-flags text-center">Flags</span>
-        <span className="ic-received text-right">Received</span>
-      </div>
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-3"
-        data-testid="inbox-scroll"
-        aria-busy={invoices === null}
-      >
-        {invoices === null ? (
-          <div aria-hidden="true" className="space-y-2 py-2">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="text-muted-foreground py-12 text-center text-sm">
-            No invoices match these filters.
-          </p>
-        ) : (
-          <div
-            role="listbox"
-            aria-label="Invoices"
-            aria-activedescendant={activeId ? `inbox-row-${activeId}` : undefined}
-            tabIndex={0}
-            // No ring on the list itself (the scroll container would clip it): keyboard focus is
-            // shown on the active row instead, as a 2px ring drawn inside the row's padding.
-            className="group/list relative outline-none"
-            style={{ height: virtualizer.getTotalSize() }}
-          >
-            {virtualizer.getVirtualItems().map((item) => {
-              const row = rows[item.index];
-              if (!row) return null;
-              const active = item.index === activeIndex;
-              return (
-                <div
-                  key={row.id}
-                  id={`inbox-row-${row.id}`}
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => {
-                    setActiveIndex(item.index);
-                    router.push(`/invoices/${row.id}`);
-                  }}
-                  onMouseEnter={() => setActiveIndex(item.index)}
-                  className={cn(
-                    "inbox-grid border-border/70 cursor-pointer items-center border-b px-3 text-sm transition-colors",
-                    active
-                      ? "bg-accent/10 outline-ring outline-1 -outline-offset-1 outline-solid group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2"
-                      : "hover:bg-muted/60",
-                  )}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: item.size,
-                    transform: `translateY(${item.start}px)`,
-                  }}
-                >
-                  <span
-                    className="ic-num tabular-mono truncate text-xs"
-                    title={
-                      row.invoiceNumber
-                        ? `Invoice ID ${row.id}`
-                        : `No supplier invoice number yet; internal ID ${row.id}`
-                    }
-                    data-testid="inbox-invoice-number"
-                  >
-                    <InvoiceRef row={row} />
-                  </span>
-                  <span className="ic-vendor">
-                    <span className="block truncate font-medium">
-                      {row.vendorName ?? "Unknown vendor"}
-                    </span>
-                    {/* Only the number truncates: the received time is short, fixed-width and
-                        always shown whole, however long a supplier's invoice number is. */}
-                    <span
-                      className="ic-sub text-muted-foreground flex min-w-0 gap-1 text-2xs"
-                      data-testid="inbox-sub"
-                    >
-                      <span className="tabular-mono min-w-0 truncate">
-                        <InvoiceRef row={row} />
-                      </span>
-                      <span className="sr-only">, received</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="tabular-mono shrink-0" data-testid="inbox-sub-received">
-                        {formatReceivedCompact(row.receivedAt)}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="ic-status">
-                    <StatusBadge status={row.status} />
-                  </span>
-                  <span className="ic-route">
-                    <RouteBadge route={row.route} />
-                  </span>
-                  <span className="ic-amount text-right">
-                    <span
-                      className="tabular-mono block truncate"
-                      data-testid="inbox-amount"
-                      title={formatAed(row.total)}
-                    >
-                      {formatAed(row.total)}
-                    </span>
-                    <span className="ic-sub text-muted-foreground block truncate text-2xs">
-                      {STATUS_LABEL[row.status]}
-                      {row.flagCount > 0 &&
-                        ` · ${row.flagCount} flag${row.flagCount === 1 ? "" : "s"}`}
-                    </span>
-                  </span>
-                  <span className="ic-conf">
-                    <ConfidenceMeter value={row.confidence} />
-                  </span>
-                  <span className="ic-flags text-center">
-                    <FlagCountBadge count={row.flagCount} />
-                  </span>
-                  <span
-                    className="ic-received tabular-mono text-muted-foreground text-right text-xs"
-                    data-testid="inbox-received"
-                  >
-                    {formatReceivedCompact(row.receivedAt)}
-                  </span>
+        <div
+          aria-hidden="true"
+          className="inbox-grid text-muted-foreground border-border bg-muted/40 dark:bg-muted/30 border-y px-6 py-2 text-2xs font-medium"
+          data-testid="inbox-header"
+        >
+          <span className="ic-num">Invoice no.</span>
+          <span className="ic-vendor">Vendor</span>
+          <span className="ic-status">Status</span>
+          <span className="ic-route">Route</span>
+          <span className="ic-amount text-right">Amount</span>
+          <span className="ic-conf">Confidence</span>
+          <span className="ic-flags text-center">Flags</span>
+          <span className="ic-received text-right">Received</span>
+        </div>
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 overflow-y-auto"
+          data-testid="inbox-scroll"
+          aria-busy={invoices === null}
+        >
+          {invoices === null ? (
+            <div aria-hidden="true">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="border-border/60 flex h-11 items-center border-b px-6">
+                  <Skeleton className="h-3.5 w-full max-w-[60%]" />
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm font-medium">No invoices match these filters</p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Try a different number or vendor, or clear the filters.
+              </p>
+            </div>
+          ) : (
+            <div
+              role="listbox"
+              aria-label="Invoices"
+              aria-activedescendant={activeId ? `inbox-row-${activeId}` : undefined}
+              tabIndex={0}
+              // No ring on the list itself (the scroll container would clip it): keyboard focus is
+              // shown on the active row instead, as a 2px ring drawn inside the row's padding.
+              className="group/list relative outline-none"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = rows[item.index];
+                if (!row) return null;
+                const active = item.index === activeIndex;
+                return (
+                  <div
+                    key={row.id}
+                    id={`inbox-row-${row.id}`}
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => {
+                      setActiveIndex(item.index);
+                      router.push(`/invoices/${row.id}`);
+                    }}
+                    onMouseEnter={() => setActiveIndex(item.index)}
+                    className={cn(
+                      "inbox-grid border-border/60 cursor-pointer items-center border-b px-6 text-sm transition-colors duration-150",
+                      active
+                        ? "bg-accent/[0.07] dark:bg-accent/10 group-focus-visible/list:outline-ring group-focus-visible/list:outline-2 group-focus-visible/list:-outline-offset-2 group-focus-visible/list:outline-solid"
+                        : "hover:bg-muted/60",
+                    )}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: item.size,
+                      transform: `translateY(${item.start}px)`,
+                    }}
+                  >
+                    <span
+                      className="ic-num tabular-mono truncate text-xs"
+                      title={
+                        row.invoiceNumber
+                          ? `Invoice ID ${row.id}`
+                          : `No supplier invoice number yet; internal ID ${row.id}`
+                      }
+                      data-testid="inbox-invoice-number"
+                    >
+                      <InvoiceRef row={row} />
+                    </span>
+                    <span className="ic-vendor">
+                      <span className="block truncate font-medium">
+                        {row.vendorName ?? "Unknown vendor"}
+                      </span>
+                      {/* Only the number truncates: the received time is short, fixed-width and
+                        always shown whole, however long a supplier's invoice number is. */}
+                      <span
+                        className="ic-sub text-muted-foreground flex min-w-0 gap-1 text-2xs"
+                        data-testid="inbox-sub"
+                      >
+                        <span className="tabular-mono min-w-0 truncate">
+                          <InvoiceRef row={row} />
+                        </span>
+                        <span className="sr-only">, received</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="tabular-mono shrink-0" data-testid="inbox-sub-received">
+                          {formatReceivedCompact(row.receivedAt)}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="ic-status">
+                      <StatusBadge status={row.status} />
+                    </span>
+                    <span className="ic-route">
+                      <RouteBadge route={row.route} />
+                    </span>
+                    <span className="ic-amount text-right">
+                      <span
+                        className="tabular-mono block truncate"
+                        data-testid="inbox-amount"
+                        title={formatAed(row.total)}
+                      >
+                        <Amount text={formatAed(row.total)} />
+                      </span>
+                      <span className="ic-sub text-muted-foreground block truncate text-2xs">
+                        {STATUS_LABEL[row.status]}
+                        {row.flagCount > 0 &&
+                          ` · ${row.flagCount} flag${row.flagCount === 1 ? "" : "s"}`}
+                      </span>
+                    </span>
+                    <span className="ic-conf">
+                      <ConfidenceMeter value={row.confidence} />
+                    </span>
+                    <span className="ic-flags text-center">
+                      <FlagCountBadge count={row.flagCount} />
+                    </span>
+                    <span
+                      className="ic-received tabular-mono text-muted-foreground text-right text-xs"
+                      data-testid="inbox-received"
+                    >
+                      {formatReceivedCompact(row.receivedAt)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

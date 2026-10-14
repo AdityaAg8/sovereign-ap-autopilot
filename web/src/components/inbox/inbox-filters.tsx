@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FilterSelect, type FilterSelectOption } from "@/components/inbox/filter-select";
 import type { InvoiceStatus, RouteDecision } from "@/lib/api/types";
+import { formatCount } from "@/lib/format";
 
 export interface InboxFilterState {
   query: string;
@@ -48,17 +49,22 @@ export function InboxFilters({
   value,
   onChange,
   hideStatus = false,
+  shown = null,
+  total = null,
 }: {
   value: InboxFilterState;
   onChange: (next: InboxFilterState) => void;
   /** Review queue pre-filters to "awaiting_review"; the status selector would be redundant. */
   hideStatus?: boolean;
+  /** Rows left after filtering and rows loaded; `null` while the list is still loading. */
+  shown?: number | null;
+  total?: number | null;
 }) {
   const dirty =
     value.query !== "" || (!hideStatus && value.status !== "all") || value.route !== "all";
   return (
-    <div className="flex flex-wrap items-center gap-2 px-6 py-3">
-      <div className="relative min-w-56 flex-1">
+    <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
+      <div className="relative min-w-56 flex-1 sm:max-w-md">
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
         <Input
           value={value.query}
@@ -99,6 +105,21 @@ export function InboxFilters({
           <X /> Clear
         </Button>
       )}
+      {/* Fixed-width slot, filled once rows arrive, so nothing beside it moves. */}
+      <p className="text-muted-foreground ms-auto hidden min-w-28 text-right text-xs sm:block">
+        {shown !== null && total !== null && (
+          <>
+            <span className="tabular-mono text-foreground">{formatCount(shown)}</span>
+            {shown !== total && (
+              <>
+                {" "}
+                of <span className="tabular-mono">{formatCount(total)}</span>
+              </>
+            )}{" "}
+            {total === 1 ? "invoice" : "invoices"}
+          </>
+        )}
+      </p>
     </div>
   );
 }

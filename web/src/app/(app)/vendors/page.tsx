@@ -29,7 +29,7 @@ export default function VendorsPage() {
 
   if (!vendors) {
     return (
-      <div className="space-y-2 p-6">
+      <div className="space-y-2 p-3 sm:p-5">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
@@ -38,7 +38,7 @@ export default function VendorsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-5">
       <VendorTable vendors={vendors} />
     </div>
   );

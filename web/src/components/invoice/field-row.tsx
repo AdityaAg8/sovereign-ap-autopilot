@@ -159,26 +159,32 @@ export function FieldRow({
         // Rings are drawn inset: the list scrolls, so the global 2px-outside ring would be clipped
         // by its overflow edge and cut through the row's first and last lines. `outline-none`
         // sets Tailwind's outline style to none, so each ring re-states `outline-solid`.
-        "border-border/70 group flex flex-col gap-1.5 border-b px-4 py-2.5 outline-none",
+        "border-border/60 group flex cursor-pointer flex-col gap-1 border-b px-4 py-2.5 outline-none transition-colors duration-150",
         "focus-visible:outline-ring focus-visible:outline-solid focus-visible:outline-2 focus-visible:-outline-offset-2",
-        active && "bg-accent/10 outline-ring outline-1 -outline-offset-1 outline-solid",
-        unresolved && "border-s-destructive border-s-2",
+        !active && !unresolved && !field.accepted && "bg-warning/[0.05] dark:bg-warning/[0.06]",
+        !active && "hover:bg-muted/50",
+        active && "bg-accent/[0.08] outline-ring/60 outline-1 -outline-offset-1 outline-solid",
+        unresolved && !active && "bg-destructive/[0.05]",
       )}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground text-xs">{label}</span>
-        <div className="flex items-center gap-2">
-          {unresolved ? (
-            <span id={`${hintId}-req`} className="text-destructive text-[0.6875rem] font-medium">
-              Required
+        {unresolved ? (
+          <span
+            id={`${hintId}-req`}
+            className="text-destructive inline-flex items-center gap-1.5 text-2xs font-medium"
+          >
+            <span aria-hidden className="bg-destructive size-1.5 rounded-full" />
+            Required
+          </span>
+        ) : (
+          !field.accepted && (
+            <span className="text-warning inline-flex items-center gap-1.5 text-2xs font-medium">
+              <span aria-hidden className="bg-warning size-1.5 rounded-full" />
+              Needs review
             </span>
-          ) : (
-            !field.accepted && (
-              <span className="text-warning text-[0.6875rem] font-medium">Needs review</span>
-            )
-          )}
-          <ConfidenceMeter value={field.confidence} />
-        </div>
+          )
+        )}
       </div>
       {editing ? (
         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -246,7 +252,7 @@ export function FieldRow({
             <span className="text-destructive text-sm font-medium">Missing</span>
           ) : (
             <span
-              className={cn("truncate text-sm", mono && "tabular-mono")}
+              className={cn("truncate text-sm font-medium", mono && "tabular-mono font-normal")}
               dir={mono ? "ltr" : undefined}
               data-testid={`field-value-${field.name}`}
             >
@@ -260,18 +266,21 @@ export function FieldRow({
               e.stopPropagation();
               onStartEdit();
             }}
-            className="text-muted-foreground hover:text-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted -me-1 grid size-6 shrink-0 place-items-center rounded-md opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
           >
             <Pencil className="size-3.5" />
           </button>
         </div>
       )}
       {hint && (
-        <span id={hintId} className="text-muted-foreground text-[0.6875rem]">
+        <span id={hintId} className="text-muted-foreground text-2xs">
           {hint}
         </span>
       )}
-      <span className="text-muted-foreground text-[0.6875rem]">{SOURCE_LABEL[field.source]}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-2xs">{SOURCE_LABEL[field.source]}</span>
+        <ConfidenceMeter value={field.confidence} />
+      </div>
     </div>
   );
 }

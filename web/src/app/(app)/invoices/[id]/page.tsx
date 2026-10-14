@@ -14,6 +14,7 @@ import { FlagsPanel } from "@/components/invoice/flags-panel";
 import { ReviewActionBar, type ApproveError } from "@/components/invoice/review-action-bar";
 import { Button } from "@/components/ui/button";
 import { RouteBadge, StatusBadge } from "@/components/inbox/status-badge";
+import { Amount } from "@/components/inbox/amount";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getApiClient } from "@/lib/api/client";
@@ -25,6 +26,9 @@ import { useSetPageHeader } from "@/lib/shell/page-header-context";
 import type { FieldEdit, InvoiceDetail, InvoiceStatus } from "@/lib/api/types";
 
 type Decision = "approve" | "reject";
+
+// Underline tabs whose active rule sits on the tab bar's own bottom border.
+const TAB = "flex-none px-1 group-data-horizontal/tabs:after:bottom-0 after:bg-accent";
 
 // A decision the API recorded but whose workflow signal failed (503). Kept per invoice in
 // tab-scoped sessionStorage so a reload still offers "Resend"; the API re-sends
@@ -192,11 +196,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       // Mirrors the loaded layout below (status bar, then the same responsive grid) so the
       // document pane and field column do not jump when the invoice arrives (CLS budget).
       <div className="flex h-full min-h-0 flex-col" role="status" aria-busy="true">
-        <div className="border-border flex items-center gap-3 border-b px-6 py-3">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-5 w-20" />
+        <div className="border-border bg-card flex h-14 shrink-0 items-center gap-4 border-b px-4 sm:px-6">
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-44" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+          <Skeleton className="ms-auto h-4 w-36" />
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_380px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px]">
           {/* Both columns' contents are absolutely positioned so, like the loaded (scrolling)
               panes, they add no intrinsic height and the one-column mobile grid splits its rows
               exactly as it will once the invoice renders. */}
@@ -208,11 +215,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
           </div>
-          <div className="border-border relative min-h-0 border-t lg:border-t-0 lg:border-s">
-            <div className="absolute inset-0 space-y-3 overflow-hidden p-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
+          <div className="border-border bg-card relative min-h-0 border-t lg:border-t-0 lg:border-s">
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="border-border h-11 border-b" />
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -229,9 +239,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       ? Number(invoice.summary.total) > user.approvalLimitAed
       : false;
   const approveBlockedReason = !isApproverRole
-    ? "Approving requires the approver role — reviewers can fix and reject."
+    ? "Approving needs the approver role. Reviewers can fix and reject."
     : overLimit
-      ? `Above your ${formatAed(user!.approvalLimitAed!)} approval limit — needs a higher-limit approver.`
+      ? `Above your ${formatAed(user!.approvalLimitAed!)} approval limit. A higher-limit approver must approve it.`
       : null;
   // Approve and reject are offered only while the workflow waits for a reviewer: a decision on an
   // invoice still in flight would never reach it, and a settled one cannot be reopened (the API
@@ -246,23 +256,30 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-border flex items-center gap-3 border-b px-6 py-3">
-        <StatusBadge status={invoice.summary.status} />
-        <RouteBadge route={invoice.summary.route} />
-        <span
-          className="text-muted-foreground min-w-0 truncate text-sm"
-          title={invoice.summary.vendorName ?? undefined}
-        >
-          {invoice.summary.vendorName ?? "Unknown vendor"}
-        </span>
-        <span
-          className="tabular-mono ms-auto text-sm font-medium whitespace-nowrap"
-          data-testid="invoice-total"
-        >
-          {formatAed(invoice.summary.total)}
-        </span>
+      <div className="border-border bg-card flex h-14 shrink-0 items-center gap-4 border-b px-4 sm:px-6">
+        <div className="flex min-w-0 flex-col justify-center gap-0.5">
+          <span
+            className="min-w-0 truncate text-sm font-medium"
+            title={invoice.summary.vendorName ?? undefined}
+          >
+            {invoice.summary.vendorName ?? "Unknown vendor"}
+          </span>
+          <span className="flex items-center gap-3">
+            <StatusBadge status={invoice.summary.status} />
+            <RouteBadge route={invoice.summary.route} />
+          </span>
+        </div>
+        <div className="ms-auto flex shrink-0 items-baseline gap-2.5">
+          <span className="text-muted-foreground text-xs">Total</span>
+          <span
+            className="tabular-mono ledger-total text-base font-semibold whitespace-nowrap"
+            data-testid="invoice-total"
+          >
+            <Amount text={formatAed(invoice.summary.total)} />
+          </span>
+        </div>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_380px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px]">
         <PdfPane
           documentUrl={invoice.documentUrl}
           authToken={session?.token ?? null}
@@ -271,16 +288,22 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           activeField={activeField}
           onSelectField={setActiveField}
         />
-        <div className="border-border flex min-h-0 flex-col border-t lg:border-t-0 lg:border-s">
+        <div className="border-border bg-card flex min-h-0 flex-col border-t lg:border-t-0 lg:border-s">
           <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-            <TabsList className="mx-4 mt-3 self-start">
-              <TabsTrigger value="fields">Fields</TabsTrigger>
-              <TabsTrigger value="flags">
-                Flags{invoice.flags.length > 0 ? ` (${invoice.flags.length})` : ""}
-              </TabsTrigger>
-              <TabsTrigger value="audit">Audit</TabsTrigger>
-            </TabsList>
-            <TabsContent value="fields" className="mt-2 flex min-h-0 flex-1 flex-col">
+            <div className="border-border border-b px-3">
+              <TabsList variant="line" className="gap-4 p-0 group-data-horizontal/tabs:h-11">
+                <TabsTrigger value="fields" className={TAB}>
+                  Fields
+                </TabsTrigger>
+                <TabsTrigger value="flags" className={TAB}>
+                  Flags{invoice.flags.length > 0 ? ` (${invoice.flags.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="audit" className={TAB}>
+                  Audit
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="fields" className="flex min-h-0 flex-1 flex-col">
               <FieldList
                 ref={fieldListRef}
                 fields={invoice.fields}
@@ -290,10 +313,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 onEditField={handleEditField}
               />
             </TabsContent>
-            <TabsContent value="flags" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+            <TabsContent value="flags" className="min-h-0 flex-1 overflow-y-auto pt-2">
               <FlagsPanel flags={invoice.flags} />
             </TabsContent>
-            <TabsContent value="audit" className="mt-2 min-h-0 flex-1 overflow-y-auto">
+            <TabsContent value="audit" className="min-h-0 flex-1 overflow-y-auto pt-2">
               <AuditTrail invoiceId={id} focusId={focusEvent} />
             </TabsContent>
           </Tabs>

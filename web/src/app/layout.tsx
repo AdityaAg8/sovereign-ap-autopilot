@@ -1,31 +1,26 @@
-/** Root layout for the Sovereign AP Autopilot review UI: loads the Ledger direction's Latin/mono
- * fonts (IBM Plex Sans / Mono, web/DESIGN.md), theming and the auth session provider. The
- * paired Arabic face (IBM Plex Sans Arabic) is *not* loaded here: it only ever renders inside
- * the vendor screens' bilingual names (the only `lang="ar"` text in this app), so it is loaded
- * by `(app)/vendors/layout.tsx` instead — every other route, including /login and /inbox, never
- * downloads a font family it never displays (Lighthouse performance
- * budget). */
+/** Root layout for the Sovereign AP Autopilot review UI: loads the UI face (Instrument Sans) and
+ * the data face (Geist Mono) via next/font, theming and the auth session provider. The paired
+ * Arabic face is loaded only by `(app)/vendors/layout.tsx`, the one place `lang="ar"` text renders,
+ * so /login and /inbox never download a font family they never display. */
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist_Mono, Instrument_Sans } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
-  variable: "--font-plex-sans",
+const uiFace = Instrument_Sans({
+  variable: "--font-ui",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-plex-mono",
+const dataFace = Geist_Mono({
+  variable: "--font-data",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
   display: "swap",
-  // Not preloaded: mono only styles figures/IDs, never the LCP text, so its three files should
-  // not compete with the stylesheet and Plex Sans on the critical path. It still loads (and
-  // swaps in) as soon as a rendered element uses it.
+  // Not preloaded: mono only styles figures and IDs, never the LCP text, so its file should not
+  // compete with the stylesheet and the UI face on the critical path. It still loads (and swaps
+  // in) as soon as a rendered element uses it.
   preload: false,
 });
 
@@ -38,18 +33,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fdfdfc" },
-    { media: "(prefers-color-scheme: dark)", color: "#1c1f27" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f9f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#12171b" },
   ],
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${plexSans.variable} ${plexMono.variable}`}
-    >
+    <html lang="en" suppressHydrationWarning className={`${uiFace.variable} ${dataFace.variable}`}>
       {/* Font CSS variables are set here, not on <body>, so globals.css's `html { @apply
           font-sans }` rule (an ancestor of body) can actually see them — a variable defined on a
           descendant is invisible to its ancestors. */}
