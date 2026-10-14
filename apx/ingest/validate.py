@@ -35,7 +35,7 @@ __all__ = [
 MediaType = Literal["application/pdf", "image/png", "image/jpeg"]
 """Media types this validator can detect and accept. `apx.ingest.interfaces.IngestedDocument`
 also allows `image/tiff` for a future parser; sniffing for it is not implemented yet, so a TIFF
-upload is rejected as unsupported, consistent with the M5.3 limits this module started from."""
+upload is rejected as unsupported, consistent with the upload limits this module started from."""
 
 _PDF_MAGIC = b"%PDF-"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"

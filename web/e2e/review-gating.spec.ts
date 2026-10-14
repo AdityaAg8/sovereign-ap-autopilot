@@ -1,4 +1,4 @@
-/** REVIEW.md C-01: the review action bar offers Approve and Reject only while an invoice is
+/** The review action bar offers Approve and Reject only while an invoice is
  * awaiting review. An invoice still in the pipeline (here fraud-checked) shows them disabled, so a
  * reviewer can never record a decision the workflow would not hear. Runs on the fixture adapter. */
 import { test, expect, type Page } from "@playwright/test";

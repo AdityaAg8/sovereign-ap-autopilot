@@ -204,7 +204,7 @@ def _ms(value: float | None) -> str:
 def render_report(c: Comparison, before_path: Path, after_path: Path) -> str:
     verdict = "PASS" if not c.gate_failures else "FAIL: " + "; ".join(c.gate_failures)
     lines = [
-        "# Extractor A before/after the ADR-0012 contract (M3.3 comparability)",
+        "# Extractor A before/after the ADR-0012 contract (comparability)",
         "",
         f"Paired on {c.paired} documents by sha256 (before `{before_path.as_posix()}`, after "
         f"`{after_path.as_posix()}`; {c.only_before} only before, {c.only_after} only after, "

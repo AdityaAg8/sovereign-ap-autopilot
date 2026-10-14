@@ -1,4 +1,4 @@
-"""Tests for the M5.6 production adapters in `apx.workflows.components` and the pure parts of
+"""Tests for the production adapters in `apx.workflows.components` and the pure parts of
 `apx.workflows.sql`: grounded fields to `Invoice`, scan scoring, rules over a history snapshot,
 UBL paying only the verified IBAN, and the choice of that IBAN."""
 

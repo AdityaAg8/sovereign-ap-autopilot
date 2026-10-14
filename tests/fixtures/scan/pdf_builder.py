@@ -1,4 +1,4 @@
-"""Builds small PDFs in memory with reportlab for the M6.2 hidden-content scan tests: clean
+"""Builds small PDFs in memory with reportlab for the hidden-content scan tests: clean
 invoices, and one fixture per attack technique (A01-A06) plus an Arabic
 false-positive case. No network access and no bundled binaries -- everything is generated here.
 Zero-width and bidi control characters silently vanish through reportlab's base-14 fonts (they

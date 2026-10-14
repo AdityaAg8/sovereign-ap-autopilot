@@ -1,4 +1,4 @@
-"""Resumable per-case rows for the M6.6 attack run: one JSONL file of `snapshot`,
+"""Resumable per-case rows for the end-to-end attack run: one JSONL file of `snapshot`,
 `dropped`, `approved` and `outcome` events keyed by case id, attack sha256 and the run identity
 (defending code, running images, served models, variant, ERP, approve mode). A resumed run keeps
 only rows of its own identity; a changed attack or stack starts that case over."""

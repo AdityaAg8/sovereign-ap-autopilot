@@ -39,9 +39,9 @@ def fetch(data_root: Path) -> DatasetEntry:
             tag="dataset:docile",
             title="DocILE annotated-trainval+test needs a DOCILE_TOKEN",
             why=(
-                "DocILE is token-gated (PRD §5); DOCILE_TOKEN is not set, so the "
+                "DocILE is token-gated; DOCILE_TOKEN is not set, so the "
                 "annotated-trainval and test splits cannot be downloaded. Extractor B "
-                "training/eval degrades gracefully without it (PRD §9)."
+                "training/eval degrades gracefully without it."
             ),
             command=FETCH_COMMAND,
         )

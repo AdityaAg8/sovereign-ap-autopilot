@@ -1,4 +1,4 @@
-"""Integration tests for the M5.6 Postgres adapters in `apx.workflows.sql` against a real,
+"""Integration tests for the Postgres adapters in `apx.workflows.sql` against a real,
 migrated Postgres: vendor lookup by TRN and bank state, idempotent invoice/field persistence,
 route + confidence updates, fraud-flag replacement, and the fraud history snapshot."""
 

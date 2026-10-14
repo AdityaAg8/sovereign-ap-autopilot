@@ -1,4 +1,4 @@
-"""5-page VRAM probe of every M3.4 bake-off arm (C2, ADR-0013), run before any eval
+"""5-page VRAM probe of every bake-off arm (VRAM budget, ADR-0013), run before any eval
 hours: loads the arm alone from an empty llama-swap, sends its real extraction prompt for 5-page
 UAE test invoices at its served concurrency while sampling whole-card nvidia-smi, and records
 idle, peak and model (peak - idle) GiB; an arm over budget is disqualified in

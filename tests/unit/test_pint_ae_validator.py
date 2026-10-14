@@ -72,7 +72,7 @@ def test_mutated_sample_missing_tax_category_fails_expected_rule(
 ) -> None:
     """Removing the (mandatory) invoice line VAT category classification must fail schematron
     rule ibr-145-ae ("Each Invoice line (IBG-25) MUST be categorized with an Invoiced item VAT
-    category code (IBT-151)."), reproducing the PRD's "wrong VAT category / missing mandatory
+    category code (IBT-151)."), reproducing the spec's "wrong VAT category / missing mandatory
     element" acceptance case."""
     sample = _sample_dir("invoice") / "Standard tax invoice.xml"
     lines = sample.read_text(encoding="utf-8").splitlines(keepends=True)

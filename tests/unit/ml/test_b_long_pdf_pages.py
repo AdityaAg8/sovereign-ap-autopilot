@@ -1,4 +1,4 @@
-"""REVIEW.md P4-01 (ADR-0019 amendment 3): a UAE training row built from a real 5-page PDF must
+"""ADR-0019 amendment 3: a UAE training row built from a real 5-page PDF must
 show B the pages serving shows (first two and the last), since its target is masked to those
 pages. The parity test feeds pages through a lambda, so it never exercises the PDF loader."""
 
@@ -43,7 +43,7 @@ def test_training_row_of_a_long_pdf_shows_its_last_page(tmp_path: Path) -> None:
 
 
 def test_a_page_count_that_disagrees_with_the_labels_stops_the_row(tmp_path: Path) -> None:
-    """REVIEW.md P5-06: the target was masked to the pages B sees of `n_pages`; a PDF with a
+    """The target was masked to the pages B sees of `n_pages`; a PDF with a
     different count would pair those values with other pages."""
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(_five_page_pdf())

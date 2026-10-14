@@ -1,4 +1,4 @@
-/** M10.3 acceptance: the operations view shows every KPI, the pipeline rail with live counts,
+/** Acceptance: the operations view shows every KPI, the pipeline rail with live counts,
  * the GPU model strip with states spelled out in words, and refreshes on its own. The fixture
  * adapter advances synthetic in-flight invoices every tick, so "updated" must change. */
 import { test, expect } from "@playwright/test";

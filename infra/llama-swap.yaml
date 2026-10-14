@@ -36,7 +36,7 @@ macros:
 models:
   extractor-a:
     name: "Extractor A (Qwen3.5-9B)"
-    description: "PRD §4: extraction, exception agent and ops chat (extract/agent stages)."
+    description: "Extraction, exception agent and ops chat (extract/agent stages)."
     # ONE slot of 12288 tokens (ADR-0013 amendment 1): with 2 slots decoding at once this build
     # degraded A's output (every line quantity "" and a lost IBAN on an AR-first invoice that
     # one request alone reads correctly, 3/3 runs), so requests are served one at a time. Prompt
@@ -60,7 +60,7 @@ models:
 
   extractor-b:
     name: "Extractor B (Qwen3.5-4B + LoRA)"
-    description: "PRD §4: extraction stage, our LoRA lands in M3.2 as a --lora flag."
+    description: "Extraction stage, our LoRA lands as a --lora flag."
     # ADR-0013: an explicit --parallel is required. Unset, this llama.cpp build picks 4 slots
     # sharing ONE unified 8192-token cache (n_slots=4, kv_unified=true), so concurrent 3-page
     # prompts overflowed it ("Context size has been exceeded", "failed to process mtmd chunk").
@@ -130,7 +130,7 @@ models:
 
   arbiter:
     name: "Arbiter (Gemma 4 12B QAT)"
-    description: "PRD §4: arbitrates when Extractor A and B disagree."
+    description: "Arbitrates when Extractor A and B disagree."
     cmd: |
       ${llama-server}
       --model /models/google/gemma-4-12B-it-qat-q4_0-gguf/gemma-4-12b-it-qat-q4_0.gguf
@@ -141,7 +141,7 @@ models:
 
   redteam-uncensored:
     name: "Red-team agent (Qwen3.5-9B uncensored)"
-    description: "PRD §4: offline only (M6.3/M9.5 stock-vs-uncensored agent comparison), never in the runtime pipeline."
+    description: "Offline only (attack suite / chat evals stock-vs-uncensored agent comparison), never in the runtime pipeline."
     cmd: |
       ${llama-server}
       --model /models/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
@@ -151,13 +151,13 @@ models:
     checkEndpoint: /health
     ttl: 600
 
-  # M3.4 bake-off: offline challengers of extractor-a, never
+  # Extractor A bake-off: offline challengers of extractor-a, never
   # runtime aliases (apx.llm.client RUNTIME_MODEL_ALIASES), called only by `evals.bakeoff`. Each
   # runs one slot of 12288 tokens, the same per-slot context extractor-a gives one invoice, since
   # the bake-off is sequential. `make bakeoff-probe` measures each one before any eval hours.
   bakeoff-q38-27b:
     name: "Bake-off: Qwen3.8-27B UD-IQ2_XXS + mmproj"
-    description: "M3.4 challenger, text + page images like extractor-a. Offline only."
+    description: "Bake-off challenger, text + page images like extractor-a. Offline only."
     cmd: |
       ${llama-server}
       --model /models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-IQ2_XXS.gguf
@@ -171,7 +171,7 @@ models:
 
   bakeoff-q38-9b-distill:
     name: "Bake-off: empero-ai Qwen3.8-9B-Distill Q4_K_M"
-    description: "M3.4 challenger, text + parse only (the repo ships no mmproj). Offline only."
+    description: "Bake-off challenger, text + parse only (the repo ships no mmproj). Offline only."
     cmd: |
       ${llama-server}
       --model /models/empero-ai/Qwen3.8-9B-Distill-GGUF/Qwen3.8-9B-Q4_K_M.gguf
@@ -184,7 +184,7 @@ models:
 
   bakeoff-q35-9b-mtp:
     name: "Bake-off latency arm: Qwen3.5-9B UD-Q4_K_XL + MTP speculative decoding"
-    description: "M3.4 latency arm: extractor-a's quant with its MTP head drafting 3 tokens. Offline only."
+    description: "Bake-off latency arm: extractor-a's quant with its MTP head drafting 3 tokens. Offline only."
     # `--spec-type draft-mtp` is listed by `llama-server --help` in the pinned b11096 image; the
     # probe establishes whether it serves together with --mmproj (the report records either way).
     cmd: |
@@ -225,7 +225,7 @@ routing:
           swap: true
           exclusive: true
           members: [redteam-uncensored]
-        # M3.4: one challenger at a time, and loading one evicts every other group (extract
+        # Bake-off: one challenger at a time, and loading one evicts every other group (extract
         # included), so no challenger ever co-resides with extractor-a or another challenger.
         bakeoff:
           swap: true

@@ -1,4 +1,4 @@
-"""Start-up guards from the M11 review: the API and worker refuse to start without a readable
+"""Start-up guards: the API and worker refuse to start without a readable
 learning splits file and the image ships it, and both read one approval limit that a
 stale per-process setting cannot silently override. No database or network is used."""
 
@@ -22,7 +22,7 @@ from apx.workflows.main import startup_checks
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ------------------------------------------------------------------------------------------
-# H-04: the splits file
+# The splits file
 # ------------------------------------------------------------------------------------------
 
 
@@ -84,7 +84,7 @@ def test_the_app_image_ships_the_splits_file() -> None:
 
 
 # ------------------------------------------------------------------------------------------
-# L-03: one approval limit
+# One approval limit
 # ------------------------------------------------------------------------------------------
 
 

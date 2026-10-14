@@ -526,7 +526,7 @@ def test_draft_vendor_email_writes_exactly_one_proposal_and_never_sends(agent_en
     asyncio.run(_run())
 
 
-# -- M9.4: an MCP client against the real stack ----------------------------------------------
+# -- An MCP client against the real stack ----------------------------------------------------
 
 
 def test_mcp_client_reads_and_proposes_through_the_real_stack(agent_engine: Any) -> None:
@@ -581,11 +581,11 @@ def test_mcp_client_reads_and_proposes_through_the_real_stack(agent_engine: Any)
     asyncio.run(_run())
 
 
-# -- M9.3: ops chat over the real tools ----------------------------------------------------
+# -- Ops chat over the real tools ---------------------------------------------------------
 
 
 def test_ops_chat_cites_real_audit_ids_and_links_them_to_the_audit_tab(agent_engine: Any) -> None:
-    """PRD §10 M9.3: "why was X routed" is answered through the real dispatcher and toolbox;
+    """Asking "why was X routed" is answered through the real dispatcher and toolbox;
     the reply cites the audit id explain_decision returned, the link resolves to the invoice's
     audit tab, and a citation no tool returned is replaced by the fixed refusal."""
     from apx.agent.dispatch import PgToolDispatcher

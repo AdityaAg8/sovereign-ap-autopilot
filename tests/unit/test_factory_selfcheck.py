@@ -114,7 +114,7 @@ def test_wrapped_value_reconstructs_without_a_spurious_join_space(worker: Render
         # separate residual: a handful of Arabic labels a few CSS px off after that block's own
         # `.parties` section is pushed to a new page, tracked at the dataset level by
         # `factory.selfcheck`'s aggregate exact-match rate (99.85% measured on a representative
-        # 200-document sample, PRD §10 M2.4's >=99.5% gate), not by any single hand-picked fixture
+        # 200-document sample, against the >=99.5% gate), not by any single hand-picked fixture
         # demanding a perfect match on every field it happens to also contain.
         po_mismatches = [
             (

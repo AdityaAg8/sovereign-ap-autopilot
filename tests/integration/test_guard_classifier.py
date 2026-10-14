@@ -1,4 +1,4 @@
-"""Runs the real M6.4 ModernBERT injection guard checkpoint on CPU, as the worker does (ADR-0017):
+"""Runs the real ModernBERT injection guard checkpoint on CPU, as the worker does (ADR-0017):
 guard.json must carry both cal thresholds, an invoice-style injection must reach review, invoice
 hard negatives ("pay to the account on file") must stay below it, and a full `DetectorScanner`
 pass must flag an injected PDF line and leave a clean invoice alone. Needs torch + transformers
@@ -54,7 +54,7 @@ HARD_NEGATIVES = (
 
 @pytest.fixture(scope="module")
 def guard() -> InjectionGuard:
-    assert MODEL_DIR.is_dir(), f"guard checkpoint missing: {MODEL_DIR} (train it, M6.4)"
+    assert MODEL_DIR.is_dir(), f"guard checkpoint missing: {MODEL_DIR} (train it: make train-guard)"
     return InjectionGuard(
         ModernBertInjectionClassifier(MODEL_DIR),
         load_guard_thresholds(MODEL_DIR),

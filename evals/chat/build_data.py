@@ -1,4 +1,4 @@
-"""Deterministic generator for the versioned M9.5 chat-eval data: the fixture AP world
+"""Deterministic generator for the versioned chat-eval data: the fixture AP world
 (`world.v1.json`: vendors, invoices, audit events shaped like the `v_agent_*` views) and the 100
 scripted tasks with golden tool calls (`tasks.v1.jsonl`). Run it only to cut a new data version;
 the committed files are the eval inputs (`python -m evals.chat.build_data`)."""

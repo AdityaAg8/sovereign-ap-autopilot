@@ -1,7 +1,7 @@
 /** Wire types for the review UI's data layer. Mirrors apx/api/interfaces.py, apx/common/types.py,
  * apx/trust/interfaces.py and apx/policy/interfaces.py so the fixture
  * adapter and the future HTTP adapter share one contract with the FastAPI service. Fields marked
- * "UI extension" are not yet on the Python `Frozen` models above but are the values M5.3 will
+ * "UI extension" are not yet on the Python `Frozen` models above but are the values the API will
  * attach once the trust gate and policy engine are wired into the API responses; the fixture
  * adapter populates them today so the confidence/flag UI can be built ahead of the backend. */
 
@@ -40,7 +40,7 @@ export interface FieldValue {
   boxes: readonly BBox[];
   /** UI extension: apx.trust.interfaces.FieldDecision.p_correct, 0..1. Null when the backend
    * hasn't recorded a confidence for this field (apx.api.interfaces.InvoiceFieldView.confidence
-   * is `float | None` — M5.1's schema has no trust-decision table yet). */
+   * is `float | None` — the schema has no trust-decision table yet). */
   confidence: number | null;
   /** UI extension: apx.trust.interfaces.FieldDecision.accepted (auto-accepted by the trust gate). */
   accepted: boolean;

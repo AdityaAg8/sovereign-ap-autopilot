@@ -1,7 +1,7 @@
 # db/migrations
 
-Alembic migrations for the Postgres schema in `apx/db/models.py` (PRD §7 db/migrations,
-§10 M5.1). `env.py` resolves the connection URL from `DATABASE_URL` (falling back to
+Alembic migrations for the Postgres schema in `apx/db/models.py` (db/migrations).
+`env.py` resolves the connection URL from `DATABASE_URL` (falling back to
 `alembic.ini`'s `sqlalchemy.url`) and runs migrations through an `asyncpg` engine.
 
 ## Every schema change needs a new revision with explicit DDL

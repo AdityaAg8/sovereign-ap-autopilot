@@ -90,13 +90,11 @@ DocumentStoreDep = Annotated[FileDocumentStore, Depends(get_document_store)]
 
 class _UnconfiguredWorkflowStarter:
     """`WorkflowStarter` used while `API_TEMPORAL_ADDRESS` is unset. Raises
-    rather than silently no-opping, per PRD §8: a misconfigured deployment must fail
+    rather than silently no-opping: a misconfigured deployment must fail
     loudly, not pretend a workflow started."""
 
     async def start_invoice_workflow(self, document: IngestedDocument) -> str:
-        raise ConfigError(
-            "API_TEMPORAL_ADDRESS is not set; cannot start the invoice workflow (PRD §10 M5.2)"
-        )
+        raise ConfigError("API_TEMPORAL_ADDRESS is not set; cannot start the invoice workflow")
 
 
 @lru_cache(maxsize=4)

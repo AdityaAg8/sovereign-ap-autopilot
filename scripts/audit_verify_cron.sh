@@ -6,8 +6,8 @@
 # monitoring wrapper can alert on failure. Only depends on `uv` and `DATABASE_URL`/
 # `AUDIT_ANCHOR_FILE` already being set the way the running app is configured -- no Temporal
 # client exists yet in this repo (apx/workflows has only Protocol interfaces), so this host
-# cron entry is the fit-for-purpose "compose-friendly" scheduling path called out in PRD §10
-# M10.4; once a Temporal worker exists, wire the same `python -m apx.audit verify` command
+# cron entry is the fit-for-purpose "compose-friendly" scheduling path in the audit design;
+# once a Temporal worker exists, wire the same `python -m apx.audit verify` command
 # into a Temporal Schedule instead of cron without changing anything in apx/audit/.
 #
 # Suggested crontab entry (nightly at 02:00, matching "walks the chain nightly"):

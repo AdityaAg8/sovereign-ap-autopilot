@@ -1,4 +1,4 @@
-"""Unit tests for evals/scorers/extractbench.py: the PRD-spec fallback on
+"""Unit tests for evals/scorers/extractbench.py: the built-in fallback on
 hand-computed cases, the official-framework aggregation path against a hand-built fixture of the
 official scorer's own metric shape (`framework_available` made True by a tiny stub clone,
 `run_official_scorer` stubbed rather than the unit under test), and one `external`-marked
@@ -28,7 +28,7 @@ REAL_EXTERNAL_REPO = REPO_ROOT / "data" / "external" / "ExtractBench"
 SHORT_JSONL = REPO_ROOT / "data" / "extractbench" / "short.jsonl"
 
 
-# --- PRD-spec fallback (no official clone) ------------------------------------------------
+# --- Built-in fallback (no official clone) --------------------------------------------
 
 
 def test_score_extractbench_falls_back_when_no_official_framework(tmp_path: Path) -> None:

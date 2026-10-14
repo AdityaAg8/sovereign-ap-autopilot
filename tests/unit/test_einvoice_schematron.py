@@ -2,7 +2,7 @@
 and caches the pinned schematron rule sets, an official PINT AE sample validates cleanly, a
 mutated sample fails with the expected rule ID, and an XXE/DOCTYPE-bearing document is rejected
 before Saxon ever sees it -- never resolving a local file or expanding an entity bomb
-(ported to 's runtime path; security fix for XXE / entity expansion). All
+(ported to the e-invoice runtime path; security fix for XXE / entity expansion). All
 but the typed-error case need a real validator built from the pinned PINT AE data and are marked
 `artifacts`; the missing-artifacts case deliberately points at an empty `tmp_path` and needs no
 pinned data, so it stays unmarked and runs in the default suite."""

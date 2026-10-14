@@ -1,4 +1,4 @@
-"""Unit tests for M8.1's pgvector page index and its wiring, with fakes only (no database, no
+"""Unit tests for the pgvector page index and its wiring, with fakes only (no database, no
 model): vector validation and distance mapping, `PgPageVectorStore`'s SQL parameters and typed
 error wrapping, the per-assessment embedding cache, `RuleFraudEngine` raising the learned
 near-duplicate flag and storing pages after the lookup, and `HttpPageEmbedder.unload`."""

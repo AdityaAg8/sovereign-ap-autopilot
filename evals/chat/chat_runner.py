@@ -1,4 +1,4 @@
-"""Runs the M9.5 scripted chat tasks through the production ops-chat stack: `LlamaSwapClient` ->
+"""Runs the scripted chat tasks through the production ops-chat stack: `LlamaSwapClient` ->
 `ToolLoop` -> `PgToolDispatcher` -> `PgAgentToolbox`, with the fixture world as the SQL reader.
 A recording wrapper around the real dispatcher captures what each tool returned so the scorers can
 check citations against it. The model endpoint is configurable (base URL, alias, transport)."""

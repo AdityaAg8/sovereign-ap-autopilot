@@ -1,4 +1,4 @@
-"""Unit tests for the M3.4 report and decision rule (`evals.bakeoff.report`): the ≥ 1.0 F1 point /
+"""Unit tests for the bake-off report and rule (`evals.bakeoff.report`): the ≥ 1.0 F1 point /
 ≤ 1.5x p50 / budget edges, PENDING until every row exists, the latency arm never becoming
 champion, scoring from real row files through the real scorers, the ADR decision block and the
 reports/bakeoff.json twin the scoreboard reads."""

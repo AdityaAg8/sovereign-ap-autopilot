@@ -1,4 +1,4 @@
-"""Unit tests for the M7.4/M7.5 cal job (`evals.trust_gate`) on synthetic, recorded-style eval
+"""Unit tests for the trust cal job (`evals.trust_gate`) on synthetic, recorded-style eval
 rows: it fits and persists a calibrator, activates it and clears the ADR-0015 invalidation only
 for the served champions, scores UAE test with the persisted artifact, and reports a failed gate
 (never a smaller denominator) when test rows are missing or come from another build."""
@@ -153,7 +153,7 @@ def test_calibrate_fits_activates_and_passes_the_gate(
 def test_report_and_evidence_carry_the_gate(fitted: tuple[CalibrateResult, Path]) -> None:
     result, _ = fitted
     report = render_report(result)
-    for heading in ("## M7.5 gate", "## Reliability (M7.4)", "## STP and error curves", "ECE"):
+    for heading in ("## Test gate", "## Reliability", "## STP and error curves", "ECE"):
         assert heading in report
     assert "xychart-beta" in report and "UAE test" in report
     data = evidence(result)

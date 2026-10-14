@@ -38,7 +38,7 @@ class IdempotencyStore(Protocol):
 
 
 class SqlIdempotencyStore:
-    """`IdempotencyStore` over the M5.1 `idempotency_keys` table (`apx.db.models.
+    """`IdempotencyStore` over the `idempotency_keys` table (`apx.db.models.
     IdempotencyRecord`). `put` uses `INSERT ... ON CONFLICT DO NOTHING` on the unique `key`
     column so two concurrent attempts (a slow first try and a retried second one) never both
     believe they stored the result."""

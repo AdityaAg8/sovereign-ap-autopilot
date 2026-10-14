@@ -1,5 +1,5 @@
 """Unit tests for `factory.hooks`: the module-level fraud-typology registry stays empty until
-M8 registers into it (always renders a clean, hook-free dataset), the M6.3 attack registry
+the fraud suite registers into it (always renders a clean, hook-free dataset), the attack registry
 never carries anything beyond the categories `attacks.hooks` documents, and a local
 `HookRegistry` correctly registers, orders and no-ops context/HTML mutation hooks."""
 

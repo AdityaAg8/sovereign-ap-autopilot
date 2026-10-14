@@ -1,5 +1,5 @@
 """Fetches the public deepset/prompt-injections dataset (Apache-2.0) at a pinned Hub revision,
-verifying every parquet file's sha256, for the M6.4 injection-guard training/eval mix.
+verifying every parquet file's sha256, for the injection-guard training/eval mix.
 Runs on the host at fetch time only; nothing at runtime downloads it."""
 
 from __future__ import annotations

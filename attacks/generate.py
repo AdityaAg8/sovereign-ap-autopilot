@@ -1,4 +1,4 @@
-"""attacks/generate.py: `python -m attacks.generate` builds the M6.3 attack-suite manifests
+"""attacks/generate.py: `python -m attacks.generate` builds the attack-suite manifests
 deterministically from one suite seed and writes them to `attacks/manifests/<category>.json`.
 The default run uses only `attacks.textsource.TemplateTextSource` and never
 touches a GPU or the network; `--redteam` additionally asks the uncensored Qwen3.5-9B red-team

@@ -399,7 +399,7 @@ def baselines_for(set_: RealSet) -> list[Baseline]:
             Baseline(
                 name="Qwen3.5-9B one-shot value F1 (all 252)",
                 value=0.9231,
-                source="ExtractBench authors' published result (PRD §5)",
+                source="ExtractBench authors' published result",
                 comparable=False,
                 note=EXTRACTBENCH_NOTE,
             )
@@ -688,7 +688,7 @@ def render_report(report: RealEvalReport) -> str:
     gate = "PASS" if report.valid_json_rate.value >= VALID_JSON_GATE else "FAIL"
     lines += [
         "",
-        f"Valid-JSON gate (PRD ≥ 99%): {gate}. Failures: {report.n_failed} of {report.n_docs}"
+        f"Valid-JSON gate (≥ 99%): {gate}. Failures: {report.n_failed} of {report.n_docs}"
         + (
             " (" + ", ".join(f"{k} {v}" for k, v in report.failures_by_kind.items()) + ")"
             if report.failures_by_kind

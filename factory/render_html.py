@@ -1,4 +1,4 @@
-"""Jinja2 rendering environment for the M2 invoice factory: loads `factory/templates/*.html.j2`,
+"""Jinja2 rendering environment for the invoice factory: loads `factory/templates/*.html.j2`,
 inlines the Noto Sans / Naskh Arabic / Kufi Arabic subset fonts as base64 `data:` URIs so every
 rendered invoice is a single self-contained HTML file, and exposes the bidi-safe number/currency
 filters the Arabic-first and bilingual layouts use to keep TRNs, IBANs and amounts in reading

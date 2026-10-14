@@ -214,7 +214,7 @@ def test_every_row_records_identity_serving_and_client_concurrency(concurrency: 
 
 
 async def test_harness_refuses_to_resume_rows_served_with_other_args(tmp_path: Path) -> None:
-    """The M5.6 corruption case: rows of the right build and prompt, but written while llama-swap
+    """The e2e corruption case: rows of the right build and prompt, but written while llama-swap
     served A with other args (`--parallel 2`), must not be mixed into a `--parallel 1` run."""
     first = sorted(load_splits().sets["uae"]["test"])[0]
     (tmp_path / f"{first}.pdf").write_bytes(b"%PDF-1.4")

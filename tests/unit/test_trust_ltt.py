@@ -205,7 +205,7 @@ def test_k_min_is_the_named_constant_in_adr_0009() -> None:
 
 
 def test_untestable_top_block_is_skipped_and_the_walk_continues() -> None:
-    # The M7.5 defect: isotonic gives p = 1.0 to a tiny all-correct block. With k_min = 1 that
+    # The original defect: isotonic gives p = 1.0 to a tiny all-correct block. With k_min = 1 that
     # step is tested (k=10, m=0 -> 0.99**10 ~= 0.904 > delta), fails, and lambda-hat is None.
     p = [1.0] * 10 + [0.99] * 2000
     correct = [True] * 10 + [True] * 1995 + [False] * 5

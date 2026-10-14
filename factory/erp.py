@@ -145,14 +145,14 @@ _EPOCH = date(2026, 1, 1)
 class UserRecord(User):
     """A `User` plus an optional individual payment-approval limit. `apx.common.master.User`
     has no such field (the global limit lives in `apx.policy.interfaces.PolicyThresholds`); this
-    factory-local extension models per-approver limits without touching the owned M0 type."""
+    factory-local extension models per-approver limits without touching the shared base type."""
 
     approval_limit: Money | None = None
 
 
 class VendorRecord(Vendor):
     """A `Vendor` plus the Arabic name and UAE address fields the factory needs, which are not
-    yet in `apx.common.master.Vendor`. Extended locally rather than editing the owned M0 type."""
+    yet in `apx.common.master.Vendor`. Extended locally rather than editing the shared base type."""
 
     name_ar: str
     address_en: str

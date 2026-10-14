@@ -1,7 +1,7 @@
-/** Document pane: pdf.js canvas with the grounded field-box overlay in lockstep (PRD §10 M5.4,
- * web/DESIGN.md "synchronized grounding"). Reserves the A4 aspect ratio before anything loads so
+/** Document pane: pdf.js canvas with the grounded field-box overlay in lockstep
+ * (web/DESIGN.md "synchronized grounding"). Reserves the A4 aspect ratio before anything loads so
  * there is zero layout shift; when `documentUrl` is null (the http adapter's honest answer until
- * apx/api grows a document endpoint — PRD §10 M5.3 follow-up, no such route exists today) it falls
+ * apx/api grows a document endpoint — an API follow-up, no such route exists today) it falls
  * back to the reserved frame with an explicit "not available" state instead of pretending to have
  * a document. */
 

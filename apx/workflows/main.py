@@ -154,7 +154,7 @@ class WorkerSettings(BaseSettings):
     attack_block: float = Field(default=0.9, ge=0, le=1)
     sod_cooldown_days: int = Field(default=30, ge=0)
     guard_model_dir: Path = Path("/models/guard-modernbert")
-    """The M6.4 injection guard checkpoint and its guard.json thresholds (read-only mount,
+    """The injection guard checkpoint and its guard.json thresholds (read-only mount,
     ADR-0017). Loaded at startup on CPU; a missing or invalid checkpoint stops the worker, so
     no invoice is ever scanned without the classifier."""
     buyer_trn: str
@@ -349,7 +349,7 @@ def trust_gate(settings: WorkerSettings, prompts: dict[ExtractorId, PromptBuilde
 
 
 def _injection_guard(settings: WorkerSettings) -> InjectionGuard:
-    """The M6.4 guard on CPU (ADR-0017), mapped onto the same P4 thresholds the policy engine
+    """The injection guard on CPU (ADR-0017), mapped onto the same P4 thresholds the policy engine
     routes with. Raises `ScanError` (the worker does not start) if the checkpoint or its
     guard.json thresholds are missing or invalid."""
     thresholds = load_guard_thresholds(settings.guard_model_dir)

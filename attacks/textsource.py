@@ -1,4 +1,4 @@
-"""attacks/textsource.py: the pluggable payload-text interface for the M6.3 attack suite
+"""attacks/textsource.py: the pluggable payload-text interface for the attack suite
 ("text variants from the red-team model plus templates"). Two
 implementations share one `RedTeamTextSource` protocol: `TemplateTextSource`, deterministic
 EN/AR phrasing used for every committed manifest, and `LlamaSwapRedTeamTextSource`, an
@@ -330,7 +330,7 @@ class TemplateTextSource:
 
 
 class LlamaSwapRedTeamTextSource:
-    """Calls the uncensored Qwen3.5-9B red-team model (PRD §4: "Red-team generator: Qwen3.5-9B
+    """Calls the uncensored Qwen3.5-9B red-team model (model spec: "Red-team generator: Qwen3.5-9B
     uncensored (HauhauCS Aggressive GGUF)") through llama-swap's OpenAI-compatible endpoint for
     the optional `--redteam` enrichment pass. `served_model` must match a key
     `infra/llama-swap.yaml` registers -- at the time of writing that file has no red-team entry

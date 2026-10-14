@@ -684,7 +684,7 @@ def test_row_files_must_carry_the_expected_identity(tmp_path: Path) -> None:
 
 
 def test_a_b_and_p2_must_read_one_parse_snapshot(tmp_path: Path) -> None:
-    """REVIEW.md P5-02: rows parsed by another build than the P2 run's snapshot are refused."""
+    """Rows parsed by another build than the P2 run's snapshot are refused."""
     shas = [sha("d1"), sha("d2")]
     data = _gold_dir(tmp_path, shas)
     a_id = RowIdentity(model="extractor-a", gguf_sha256=sha("a"), prompt_version="pa")

@@ -1,4 +1,4 @@
-"""Shared builders for the M10.2 promotion tests (ADR-0015): `ShadowEval`s whose F1 numbers come
+"""Shared builders for the promotion tests (ADR-0015): `ShadowEval`s whose F1 numbers come
 from the real fatura and UAE scorers run on a small gold set and a predictor, with docile and uae
 set outcomes produced by `evals.run` itself, so a degraded challenger is degraded by its
 predictions rather than by a hand-typed number."""

@@ -1,4 +1,4 @@
-"""Parse cache for the M3.4 bake-off: a thin shim over the shared `evals.parse_cache` so every
+"""Parse cache for the bake-off: a thin shim over the shared `evals.parse_cache` so every
 bake-off document is parsed once per parser build, before any model loads, and every arm reads
 the same parse. A missing entry is a `BakeoffError`, as the bake-off runner expects."""
 

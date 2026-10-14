@@ -1,4 +1,4 @@
-"""Shared fixtures for the M7.4/M7.5 trust tests: synthetic, seeded per-field features whose
+"""Shared fixtures for the trust tests: synthetic, seeded per-field features whose
 correctness the logprobs and OCR support predict, a calibrator fitted on them, and a persisted
 calibrator artifact with its A/B build identities."""
 

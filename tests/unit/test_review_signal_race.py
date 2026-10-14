@@ -1,4 +1,4 @@
-"""M11.3 audit pass 2: the `route` activity commits AWAITING_REVIEW to Postgres
+"""The `route` activity commits AWAITING_REVIEW to Postgres
 before the workflow's in-memory status says so (it changes only after `route` and `review_hold`
 complete), and the `review` signal handler drops any signal that arrives before that. A reviewer
 (or a scripted approver) acting in that window gets a 204, the approval row is written, and the

@@ -1,4 +1,4 @@
-"""Scorers for the M9.5 scripted chat tasks: tool-call accuracy (name and args against the golden
+"""Scorers for the scripted chat tasks: tool-call accuracy (name and args against the golden
 calls, with defaults normalised through the real ADR-0010 params models), citation faithfulness
 (every cited `[source:ref]` must be a ref some tool call returned and appear in that tool's
 output) and refusal correctness. Pure functions over a `TaskRun`; no model or I/O here."""

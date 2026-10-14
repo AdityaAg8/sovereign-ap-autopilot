@@ -1,7 +1,8 @@
 """Extraction prompt builder: turns a `ParsedDocument` into a tool-free
 `StructuredRequest` holding the parse text in reading order plus downscaled page images, under
-the §4 call settings (thinking off, schema-constrained JSON, temperature 0, fixed seed, logprobs
-on). Document content is fenced as data: the system prompt says it never carries instructions."""
+the extraction call settings (thinking off, schema-constrained JSON, temperature 0, fixed seed,
+logprobs on). Document content is fenced as data: the system prompt says it never carries
+instructions."""
 
 from __future__ import annotations
 
@@ -185,8 +186,8 @@ def document_text(document: ParsedDocument, max_tokens: int) -> str:
     if total <= max_tokens:
         return text
     # The first cut is proportional in characters; text denser at its ends than in the middle
-    # (digit tables around prose) still estimates over budget, so shrink until it fits (REVIEW.md
-    # P4-02). Each pass scales by the measured overshoot, so a few passes suffice.
+    # (digit tables around prose) still estimates over budget, so shrink until it fits.
+    # Each pass scales by the measured overshoot, so a few passes suffice.
     keep = int(len(text) * max_tokens / total)
     while True:
         head = int(keep * 0.6)

@@ -1,4 +1,4 @@
-"""Unit tests for the M10.2 promotion decider (`ml.promotion.decide`, ADR-0015 Proof): one REJECT
+"""Unit tests for the promotion decider (`ml.promotion.decide`, ADR-0015 Proof): one REJECT
 per gate G1-G11, the 0.5-point tie bar, the per-set deferral policy, every comparability mismatch,
 non-finite evidence, and a hypothesis property that PROMOTE implies every rule held."""
 

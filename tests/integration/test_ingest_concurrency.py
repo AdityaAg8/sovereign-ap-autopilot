@@ -206,7 +206,7 @@ class _FakeStore:
 
 class _CountingWorkflowStarter:
     """Records every call and returns a deterministic id derived from the sha256 -- the
-    idempotency key M5.5 requires (`f"invoice-{document.sha256}"`)."""
+    idempotency key ingest requires (`f"invoice-{document.sha256}"`)."""
 
     def __init__(self) -> None:
         self.started: list[IngestedDocument] = []

@@ -2,7 +2,7 @@
    margins and zebra-striped rows built to stay legible at up to 40 line items across several
    printed pages; the line index column is the signature element, set in accent blue tabular
    figures so a long invoice still reads as an ordered sequence. Logical properties keep one
-   stylesheet correct in both directions (PRD §10 M2.2). #}
+   stylesheet correct in both directions. #}
 <style>
 :root {
   --ink: #242B33;
@@ -13,11 +13,11 @@
 }
 body { font-family: "Noto Sans", "Noto Naskh Arabic", sans-serif; color: var(--ink); font-size: 9pt; line-height: 1.4; }
 [lang="ar"], .ar { font-family: "Noto Naskh Arabic", "Noto Sans", sans-serif; }
-{# M2.4 label self-check fix: must equal the printable content width (A4 210mm minus the two
+{# Label self-check fix: must equal the printable content width (A4 210mm minus the two
    14mm `@page` margins `factory/render.py` prints with) so this layout's on-screen box -- what
    `factory.render`'s `getClientRects()` measures for every `data-field` label -- lines up with
    where Chromium's print engine actually places it in the PDF; 190mm made every label on this
-   layout land ~4mm left of and ~2mm above its true PDF position (PRD §10 M2.4). #}
+   layout land ~4mm left of and ~2mm above its true PDF position. #}
 .sheet { max-width: 182mm; margin: 0 auto; padding-block: 5mm; }
 header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; padding-block-end: 3mm; border-block-end: 2px solid var(--accent); }
 .supplier-name { font-size: 12pt; font-weight: 700; color: var(--accent); }

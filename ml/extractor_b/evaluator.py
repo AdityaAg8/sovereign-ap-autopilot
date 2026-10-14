@@ -1,5 +1,5 @@
 """Dev-holdout evaluation for Extractor B checkpoint selection (ADR-0011 §2): teacher-forced dev
-loss and greedy generation scored as micro field F1 over the 14 header fields with the M1.3
+loss and greedy generation scored as micro field F1 over the 14 header fields with the shared
 scorer (`evals.scorers.field_f1`, which uses `apx.common.compare`). Invalid JSON fails every
 field. Generation is batched (longest target first, left padding, OOM backoff) with progress lines,
 and each eval's raw generations are persisted atomically to `<run>/dev_outputs/step-NNNNNN.jsonl`
@@ -38,7 +38,7 @@ the 27% of dev targets longer than that (up to ~2.9k tokens) and scored them as 
 """Rows per generate call. Dev prompts are ~2.2-3.1k tokens and Qwen3.5-4B's hybrid attention keeps
 the KV cache small, so 8 rows may fit beside the training state under the VRAM cap; an OOM shrinks
 the batch to three quarters for the rest of the eval (and later evals), and it is the first
-(longest) batch that would hit it. The M7.1 evals ran at batch 4."""
+(longest) batch that would hit it. The Extractor B evals ran at batch 4."""
 
 
 DEV_OUTPUTS_DIR: Final[str] = "dev_outputs"

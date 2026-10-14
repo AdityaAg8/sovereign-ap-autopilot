@@ -1,8 +1,8 @@
-"""Integration proof for M3.1's parse pipeline (I1): the pdfplumber
+"""Integration proof for the parse pipeline (I1): the pdfplumber
 born-digital fast path's boxes are scored at IoU>=0.5 against every labeled field in the UAE
 test split, gated at >=98% overall (reported for EN and AR separately too); the PaddleOCR-VL
 service is smoke-tested against a small sample of scanned pages for latency/VRAM, informational
-only per the PRD. Writes reports/parse.md. Needs data/uae/test (factory output) for the gate
+only. Writes reports/parse.md. Needs data/uae/test (factory output) for the gate
 and, for the service sample, a live `make up` stack with `parse` running; marked `integration`,
 so it never runs in CI or the default `pytest`/`make test` invocation."""
 
@@ -43,7 +43,7 @@ class FieldScore:
     language: str  # "ar" | "en"
     iou: float
     multi_page: bool
-    """Whether the source document has more than one page -- tracked to surface the M2 label
+    """Whether the source document has more than one page -- tracked to surface the factory label
     pagination gap (see `_write_report`'s "Known gap" section) separately from single-page
     accuracy, since it is not something apx.parse can fix."""
 
@@ -98,7 +98,7 @@ def _percentile(sorted_values: list[float], q: float) -> float:
 def _require_test_data() -> list[Path]:
     if not TEST_DATA_DIR.is_dir():
         pytest.fail(
-            f"{TEST_DATA_DIR} not found -- generate the UAE test split (M2 factory) before "
+            f"{TEST_DATA_DIR} not found -- generate the UAE test split (invoice factory) before "
             "running this test",
             pytrace=False,
         )
@@ -152,7 +152,7 @@ def _run_digital_gate() -> tuple[list[FieldScore], int, list[float]]:
             }
             labels_doc = json.loads(labels_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            # data/uae/test is M2 factory output regenerated out-of-band; a document
+            # data/uae/test is factory output regenerated out-of-band; a document
             # can be deleted or rewritten between the is_file() check above and the read on a
             # shared checkout, so a transient race here is skipped rather than failing the gate.
             continue
@@ -181,7 +181,7 @@ def _sample_scan_pages(limit: int) -> list[Path]:
 
 
 def _run_scan_sample() -> dict[str, float | int] | None:
-    """Best-effort, never fails the test: PRD §10 M3.1 reports scans as informational only.
+    """Best-effort, never fails the test: the parse gate reports scans as informational only.
     Returns None if the live stack or the sample images aren't available."""
     if not TEST_DATA_DIR.is_dir() or shutil.which("docker") is None:
         return None
@@ -245,14 +245,14 @@ def _write_report(
     latencies_ms = sorted(latencies_ms)
 
     lines = [
-        "# Parse service report (PRD §10 M3.1)",
+        "# Parse service report",
         "",
         f"Generated: {datetime.now(UTC).isoformat()}",
         "",
         "Born-digital PDFs are parsed host-side by `apx.parse.digital` (pdfplumber): word/line "
         "boxes come straight from the PDF's own text layer, no model call (I1). This is the "
         "path the IoU gate below runs against. Scans go through the PaddleOCR-VL service "
-        "(`apx.parse.client`) and are reported separately as informational only, per the PRD.",
+        "(`apx.parse.client`) and are reported separately as informational only.",
         "",
         "## Digital-path IoU gate",
         "",
@@ -284,7 +284,7 @@ def _write_report(
                 "`apx/parse`'s extraction -- so this should not be worked around here by "
                 "loosening the match, weakening the gate, or filtering out affected labels.",
                 "",
-                "1. Pagination-unaware labels (multi-page documents; much reduced by the M2.4 "
+                "1. Pagination-unaware labels (multi-page documents; much reduced by the factory "
                 "label-generation fix, not eliminated). When a long line-item table overflows "
                 "onto a second PDF page, real content reflows there, but some affected labels "
                 "still carry their original single-page `page`/`bbox` -- the parser correctly "
@@ -359,7 +359,7 @@ def test_digital_path_iou_gate_and_report() -> None:
     overall = _pass_rate(all_scores)
     assert overall >= PASS_RATE_GATE, (
         f"digital-path IoU>=0.5 pass rate {overall:.4f} on {len(all_scores)} labeled fields is "
-        f"below the {PASS_RATE_GATE:.0%} gate (PRD §10 M3.1); see {REPORT_PATH}"
+        f"below the {PASS_RATE_GATE:.0%} gate; see {REPORT_PATH}"
     )
 
 

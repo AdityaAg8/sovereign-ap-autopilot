@@ -1,4 +1,4 @@
-/** M5.4a: public/pdfjs/es-polyfills.mjs (the ES2026 built-ins pdf.js 6 needs) follows the
+/** public/pdfjs/es-polyfills.mjs (the ES2026 built-ins pdf.js 6 needs) follows the
  * proposals where it matters to callers: argument validation, exact summation and upsert
  * semantics. The polyfill is evaluated fresh in a page whose native versions (if any) were
  * removed, so the polyfill itself is under test, not the browser's built-in. */

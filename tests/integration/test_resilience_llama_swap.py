@@ -1,4 +1,4 @@
-"""PRD §11.2 "llama-swap restart": the model server dies while `extract` is waiting on it and comes
+"""Restart test (llama-swap): the model server dies while `extract` is waiting on it and comes
 back on the same port; the activity's retry policy must carry the invoice through, and the
 invoice must still be sent and archived exactly once (one ASP receipt, one archive record).
 The first test needs Docker only (a fake llama-swap process over the real `LlamaSwapClient`);

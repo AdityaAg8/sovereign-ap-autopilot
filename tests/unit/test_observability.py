@@ -1,4 +1,4 @@
-"""Unit tests for M10.3 telemetry: `RecordingLlmClient` records one `llm_calls` row per call
+"""Unit tests for LLM telemetry: `RecordingLlmClient` records one `llm_calls` row per call
 inside a real trace, never lets a telemetry failure break the model call, and the trace id
 helper reports the active span. No database, no network."""
 

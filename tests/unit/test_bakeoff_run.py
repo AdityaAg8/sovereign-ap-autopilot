@@ -1,4 +1,4 @@
-"""Unit tests for the M3.4 bake-off runner and its ExtractBench arm (`evals.bakeoff.run`,
+"""Unit tests for the bake-off runner and its ExtractBench arm (`evals.bakeoff.run`,
 `evals.bakeoff.extractbench`, `evals.bakeoff.parsed`) with a fake llama-swap and scripted
 nvidia-smi: identity-stamped resumable rows, per-document rejections vs run-ending failures, the
 VRAM session log, the probe gate, the parse cache and the schema-constrained prompt."""

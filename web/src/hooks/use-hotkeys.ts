@@ -1,4 +1,4 @@
-/** Binds keyboard shortcuts for the keyboard-first review flows (PRD §10 M5.4: j/k/enter in the
+/** Binds keyboard shortcuts for the keyboard-first review flows (j/k/enter in the
  * inbox, a/f/r in the review queue, ⌘K/? globally). Skips keys a component already consumed, keys
  * typed into inputs or pressed inside open popups (unless a binding opts in), and Enter/Space on
  * controls that own them; "mod" is Cmd on macOS / Ctrl elsewhere. Letter shortcuts also work on

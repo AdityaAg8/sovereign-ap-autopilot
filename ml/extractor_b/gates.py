@@ -45,7 +45,7 @@ from ml.promotion.errors import PromotionError
 from ml.promotion.evidence import ExtractorGateReport, Fraction
 
 LATENCY_SUBSET_SIZE: Final[int] = BAKEOFF_SUBSET_SIZE
-"""ADR-0009 P2: the 200-document M3.4 subset, defined once in `evals.bakeoff.subset` (first 200
+"""ADR-0009 P2: the 200-document bake-off subset, defined once in `evals.bakeoff.subset` (first 200
 UAE test sha256s in sorted order, i.e. a hash-random sample); the digest is recorded with every
 run."""
 A_ALIAS: Final[str] = "extractor-a"
@@ -392,7 +392,7 @@ def render_markdown(evidence: GateEvidence) -> str:
     r = evidence.report
     verdict = "PASS: all five gates hold" if evidence.all_passed else "FAIL"
     lines = [
-        "# Extractor B promotion gates (M7.1, ADR-0009 §1.8)",
+        "# Extractor B promotion gates (ADR-0009 §1.8)",
         "",
         f"Registered model `{evidence.registered_model}` version {evidence.model_version} "
         f"(run `{evidence.run_id}`, MLflow run `{evidence.mlflow_run_id}`), served as "

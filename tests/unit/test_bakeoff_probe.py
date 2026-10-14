@@ -1,4 +1,4 @@
-"""Unit tests for the M3.4 VRAM probe (`evals.bakeoff.probe`) with a scripted nvidia-smi and a fake
+"""Unit tests for the VRAM probe (`evals.bakeoff.probe`) with a scripted nvidia-smi and a fake
 llama-swap: budget verdicts at the 11.8 / 9.5 GB edges, a model that never serves, a failed burst,
 fail-closed sampling gaps, the text-only arm's prompt and the merged probe file."""
 

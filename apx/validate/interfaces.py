@@ -30,7 +30,7 @@ class ViolationCode(StrEnum):
     CURRENCY_INVALID = "currency_invalid"
     PO_NOT_FOUND = "po_not_found"
     THREE_WAY_MISMATCH = "three_way_mismatch"
-    # --- M4.2: 3-way match (apx.validate.match), additive to the M4.1 codes above -----------
+    # --- 3-way match (apx.validate.match), additive to the field-level codes above ----------
     GRN_NOT_FOUND = "grn_not_found"
     UNKNOWN_LINE = "unknown_line"
     DUPLICATE_LINE = "duplicate_line"
@@ -537,7 +537,7 @@ def check_buyer_trn(invoice: Invoice, buyer_trn: str) -> list[Violation]:
 def validate_invoice(
     invoice: Invoice, *, today: date | None = None, buyer_trn: str | None = None
 ) -> ValidationReport:
-    """Runs every M4.1 field-level check and merges the violations. 3-way match
+    """Runs every field-level check and merges the violations. 3-way match
      is layered on separately via `three_way_match`, once a `PurchasingLookup` is wired
     in. `buyer_trn` is our organisation's configured TRN (`WorkerSettings.buyer_trn`); without
     it the document's own buyer TRN is required instead."""
@@ -556,7 +556,7 @@ def validate_invoice(
 
 class InvoiceValidator:
     """Concrete `Validator`: field-level checks only. 3-way match needs a `PurchasingLookup`
-    that M4.2 wires in separately. The worker passes `buyer_trn` (our own organisation's TRN,
+    that `three_way_match` adds. The worker passes `buyer_trn` (our own organisation's TRN,
     required config); None keeps the document-only checks (evals, fixtures)."""
 
     def __init__(self, *, buyer_trn: str | None = None) -> None:

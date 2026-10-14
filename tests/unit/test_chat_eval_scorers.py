@@ -1,4 +1,4 @@
-"""Unit tests for the M9.5 chat-eval scorers and task data: golden calls match the
+"""Unit tests for the chat-eval scorers and task data: golden calls match the
 real ADR-0010 registry, arg matching normalises defaults and honours matchers, citation
 faithfulness rejects refs no tool returned, and refusal scoring catches proposals."""
 

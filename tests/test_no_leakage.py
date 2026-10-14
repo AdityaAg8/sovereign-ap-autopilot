@@ -1,4 +1,4 @@
-"""Leakage gate for PRD §6.2 I5 ("eval, cal and test data never reach training") and ADR-0005:
+"""Leakage gate for I5 ("eval, cal and test data never reach training") and ADR-0005:
 validates the committed evals/splits.json has no cross-pool sha256 overlap and no duplicate
 within a split, checks no real hold-out (CORD, DocILE val, ExtractBench; ADR-0019 §4.5) sits in an
 ml/ training manifest, greps apx/ to confirm only apx/trust references the cal split (quoted "cal"
@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 APX_ROOT = REPO_ROOT / "apx"
 
 # A "cal" split name used as a literal string (e.g. `split == "cal"` or a dict key), not the
-# substring inside a longer word like "calibrator" or "calendar" (PRD §5: "Only apx/trust
+# substring inside a longer word like "calibrator" or "calendar" ("Only apx/trust
 # uses the cal split").
 _QUOTED_CAL_RE = re.compile(r"""(['"])cal\1""")
 # Referencing the split through an enum member (e.g. `LabelSplit.CAL`) is a use too.

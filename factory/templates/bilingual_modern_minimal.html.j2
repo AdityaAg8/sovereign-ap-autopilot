@@ -77,16 +77,16 @@
       <div>
         <div class="eyebrow ar">فاتورة ضريبية</div>
         <div class="supplier-name">{{ s.field('supplier_name', supplier_name_ar) }}</div>
-        {# M2.4/M3.1 label self-check fix: `supplier_address`, `supplier_trn`, `invoice_number`,
+        {# Label self-check fix: `supplier_address`, `supplier_trn`, `invoice_number`,
            `issue_date`, `due_date`, `po_number`, `currency`, `buyer_trn` and every line/totals
            amount below carry no language variant -- this block re-renders the exact same value
            the English block above already tagged. Wrapping it in a second `data-field` of the
            same name here produced two ground-truth boxes for one extraction-schema field
-           (confirmed against M3.1's parse report: 13 `currency` labels scored a low IoU because
+           (confirmed against the parse report: 13 `currency` labels scored a low IoU because
            whichever of the two boxes a downstream consumer picked did not always match the one
            `apx.parse` found). Every other bilingual layout tags a language-invariant field once;
            only `supplier_name`/`buyer_name`/`description`, which genuinely differ between the
-           English and Arabic blocks, are tagged in both (PRD §10 M2.4/M3.1). #}
+           English and Arabic blocks, are tagged in both. #}
         <div class="supplier-sub">{{ s.field_ltr_shadow(supplier_address_en) }}</div>
         <div class="supplier-sub">الرقم الضريبي {{ s.field_ltr_shadow(supplier_trn) }}</div>
       </div>

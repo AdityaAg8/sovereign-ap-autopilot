@@ -1,4 +1,4 @@
-"""M9.4 acceptance: an MCP client (the SDK's in-memory `Client`) lists and calls the tools of
+"""An MCP client (the SDK's in-memory `Client`) lists and calls the tools of
 `ApxMcpServer` (ADR-0010 D8): exactly MCP_TOOL_NAMES with the D8 annotations, calls routed
 through the real `PgToolDispatcher` as origin mcp, reads audited as `mcp.read`, refusals as
 `mcp.refusal`, and the token checked at start-up and on every call."""

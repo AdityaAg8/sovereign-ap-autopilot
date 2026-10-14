@@ -17,7 +17,7 @@ class ParseClientConfig(BaseSettings):
     base_url: str = Field(
         default="http://parse:8000",
         description=(
-            "Parse service base URL. Reachable only on the internal `app` network (PRD C1); "
+            "Parse service base URL. Reachable only on the internal `app` network; "
             "never a host or public address."
         ),
     )
@@ -42,7 +42,7 @@ class ParseClientConfig(BaseSettings):
     service_token: SecretStr | None = Field(
         default=None,
         description=(
-            "Shared secret sent as `Authorization: Bearer <token>` on every call (REVIEW N-06); "
+            "Shared secret sent as `Authorization: Bearer <token>` on every call; "
             "the service refuses /parse and /unload without it. Generated into `.env` as "
             "PARSE_SERVICE_TOKEN by `make env`."
         ),

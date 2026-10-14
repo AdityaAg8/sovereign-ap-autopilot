@@ -1,4 +1,4 @@
-/** M5.4a: the invoice viewer ends in its explicit error state, not an endless "Loading document…",
+/** The invoice viewer ends in its explicit error state, not an endless "Loading document…",
  * when pdf.js's parser worker script cannot be loaded (pdf-render-worker.ts listens for the nested
  * worker's `error`). Runs against the production build via playwright.config.ts's webServer. */
 import { test, expect } from "@playwright/test";

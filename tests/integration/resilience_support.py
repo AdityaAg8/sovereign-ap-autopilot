@@ -1,6 +1,6 @@
 """Shared harness for the resilience tests (`test_resilience_llama_swap.py`,
 `test_resilience_postgres.py`): a throwaway, migrated pgvector Postgres container the test can
-stop, start and restart mid-workflow, the `InvoiceActivityDeps` wiring over the M5.2 crash-test
+stop, start and restart mid-workflow, the `InvoiceActivityDeps` wiring over the workflow crash-test
 fakes, and helpers that read the exactly-once evidence (history attempts, idempotency rows)."""
 
 from __future__ import annotations
@@ -209,7 +209,7 @@ def activity_deps(
     audit: FakeAuditLog,
 ) -> InvoiceActivityDeps:
     """Real Postgres-backed records and idempotency store; the named collaborators are the
-    test's own, every other pipeline stage is an M5.2 crash-test fake."""
+    test's own, every other pipeline stage is a crash-test fake."""
     return InvoiceActivityDeps(
         documents=FakeDocumentStore(),
         scanner=FakeScanner(),

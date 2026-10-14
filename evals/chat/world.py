@@ -1,4 +1,4 @@
-"""In-memory `SqlReader` over the M9.5 fixture world (`world.v1.json`). It answers the same
+"""In-memory `SqlReader` over the chat-eval fixture world (`world.v1.json`). It answers the same
 registered `SQL_*` statements as `PgSqlReader`, applying each statement's filters, ordering and
 limit to the fixture rows, so the chat eval runs the real toolbox, dispatcher and tool loop
 without Postgres. Unknown statements raise, exactly like the production reader."""

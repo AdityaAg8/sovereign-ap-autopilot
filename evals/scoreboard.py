@@ -343,7 +343,7 @@ def _schematron(inputs: Inputs) -> Cell:
 def _trust_error(inputs: Inputs) -> Cell:
     loaded = inputs.trust_gate()
     if loaded is None:
-        return pending("trust gate not calibrated yet (M7.5 LTT calibration on the cal split)")
+        return pending("trust gate not calibrated yet (LTT calibration on the cal split)")
     trust, stamp = loaded
     if trust.test is None:
         return pending(
@@ -365,7 +365,7 @@ def _trust_error(inputs: Inputs) -> Cell:
 def _stp(inputs: Inputs) -> Cell:
     loaded = inputs.trust_gate()
     if loaded is None:
-        return pending("needs the calibrated trust gate (M7.5); no alpha sweep run yet")
+        return pending("needs the calibrated trust gate; no alpha sweep run yet")
     trust, stamp = loaded
     if trust.test is None:
         return pending("trust gate calibrated but not evaluated on UAE test", stamp)
@@ -523,7 +523,7 @@ class ScoreboardRow:
     resolve: Callable[[Inputs], Cell]
 
 
-# Verbatim from PRD §5's scoreboard table -- do not add, remove or reorder rows without an ADR.
+# The fixed headline scoreboard table -- do not add, remove or reorder rows without an ADR.
 ROWS: tuple[ScoreboardRow, ...] = (
     ScoreboardRow("Field F1, KILE and LIR", "DocILE val", "Report", _docile),
     ScoreboardRow("Field F1, EN and AR separately", "UAE test", "Report", _uae_f1),
@@ -538,7 +538,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
     ScoreboardRow(
         "Error among auto-accepted fields",
         "UAE test",
-        "≤ α (α = 1%, δ = 5%, §6.1)",  # noqa: RUF001 -- PRD §5/§6.1 wording
+        "≤ α (α = 1%, δ = 5%)",  # noqa: RUF001 -- the gate's own wording
         _trust_error,
     ),
     ScoreboardRow(
@@ -576,7 +576,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
 
 
 def supplementary_rows(inputs: Inputs) -> list[list[str]]:
-    """Measured gates from earlier milestones that back the §5 rows but are not §5 rows."""
+    """Measured gates from earlier stages that back the headline rows but are not headline rows."""
     rows: list[list[str]] = []
     parse = inputs.parse()
     if parse is not None:
@@ -662,7 +662,7 @@ def _extractor_b_gates_row(inputs: Inputs) -> list[str]:
 
 
 def _bakeoff_row(inputs: Inputs) -> list[str]:
-    name = "Extractor A bake-off decision (M3.4)"
+    name = "Extractor A bake-off decision"
     loaded = inputs.bakeoff()
     if loaded is None:
         return [
@@ -857,11 +857,11 @@ def render_scoreboard(
         "",
         f"- Generated at: {generated_at}",
         (
-            f"- PRD §5 rows: {counts['PASS']} PASS, {counts['FAIL']} FAIL, "
+            f"- Headline rows: {counts['PASS']} PASS, {counts['FAIL']} FAIL, "
             f"{counts['REPORTED']} REPORTED, {n_pending} PENDING"
         ),
         "",
-        "## PRD §5 metrics",
+        "## Headline metrics",
         "",
         render_table(
             ["Metric", "Set", "Gate", "Measured", "Status", "Source"],
@@ -878,7 +878,7 @@ def render_scoreboard(
             ],
         ),
         "",
-        "## Other measured gates (not PRD §5 rows)",
+        "## Other measured gates (not headline rows)",
         "",
         render_table(
             ["Measurement", "Value", "Gate", "Status", "Source"], supplementary_rows(inputs)
@@ -893,7 +893,7 @@ def render_scoreboard(
         render_table(["Measurement", "Value", "Gate", "Status", "Source"], real_rows(inputs)),
         "",
         *_harness_section(harness_runs),
-        "_PASS/FAIL judge a measured value against its PRD §5 gate; REPORTED rows have no",
+        "_PASS/FAIL judge a measured value against its gate; REPORTED rows have no",
         "threshold; PENDING means not measured yet, with the reason and any partial evidence.",
         "Source times are the report's own `generated` stamp when it prints one, else its last",
         "git commit. Numbers are never invented (ADR-0005)._",

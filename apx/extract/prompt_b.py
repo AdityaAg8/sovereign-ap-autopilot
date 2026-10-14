@@ -1,6 +1,6 @@
 """Extractor B's image-only prompt (ADR-0009 §1.1-1.2, ADR-0019 amendment 3): up to 3 page
 images (a longer document's first pages and its last), resized by the one shared function below,
-plus a system prompt without the parse-text rules. Serving and the M7.1 fine-tune
+plus a system prompt without the parse-text rules. Serving and the Extractor B fine-tune
 (`ml.extractor_b`) both build messages here, so train and serve match exactly.
 `SERVING_RUNG` is the one source of B's image budget for serving, data prep and training."""
 

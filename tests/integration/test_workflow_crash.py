@@ -604,7 +604,7 @@ def _failure_activities(
 async def test_mark_failed_before_the_invoice_row_records_the_failure_on_the_document(
     session_factory: SessionFactory,
 ) -> None:
-    # The live M5.6 case: `build_invoice` failed, so only the ingest row exists.
+    # The live end-to-end case: `build_invoice` failed, so only the ingest row exists.
     sha = hashlib.sha256(b"failed-before-invoice").hexdigest()
     async with session_factory() as session:
         session.add(

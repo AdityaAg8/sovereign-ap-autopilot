@@ -1,4 +1,4 @@
-"""Unit tests for M8.2: the as-of invoice history, anomaly features and the isolation-forest
+"""Unit tests for fraud anomalies: as-of invoice history, anomaly features and the isolation-forest
 detector, the factory's labelled typology stream, and the eval's FPR-budget threshold and
 case-level recall. A small end-to-end stream checks the rule typologies are all caught."""
 

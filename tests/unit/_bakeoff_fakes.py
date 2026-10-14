@@ -1,4 +1,4 @@
-"""Fakes for the M3.4 bake-off unit tests: a scripted `LlmClient`, a one-line parsed document,
+"""Fakes for the bake-off unit tests: a scripted `LlmClient`, a one-line parsed document,
 factory label/truth files for a UAE document and a scripted nvidia-smi reading source. No GPU,
 no llama-swap, no parse service."""
 

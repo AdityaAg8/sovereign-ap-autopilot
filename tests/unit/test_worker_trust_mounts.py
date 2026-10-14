@@ -1,4 +1,4 @@
-"""Compose contract for the M7.5 trust gate: the worker container must be able to read everything
+"""Compose contract for the trust gate: the worker container must be able to read everything
 `apx.extract.identity.served_gguf_sha256` reads (llama-swap config, models.lock, Extractor B
 export manifests) through read-only mounts, and its WORKER_* path settings must point there.
 Otherwise every invoice would be refused as `served_identity_unknown` in the Docker stack."""

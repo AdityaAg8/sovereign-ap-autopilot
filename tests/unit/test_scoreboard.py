@@ -129,7 +129,7 @@ def test_partially_measured_rows_stay_pending_with_evidence(tmp_path: Path) -> N
     for metric in ("Error among auto-accepted fields", "Straight-through rate"):
         assert "PENDING: " in _row_line(markdown, metric)
     assert "DOCILE_TOKEN" in _row_line(markdown, "Field F1, KILE and LIR")
-    assert "- PRD §5 rows: 2 PASS, 1 FAIL, 2 REPORTED, 8 PENDING" in markdown
+    assert "- Headline rows: 2 PASS, 1 FAIL, 2 REPORTED, 8 PENDING" in markdown
 
 
 def test_our_guard_fine_tune_fills_the_row_once_measured(tmp_path: Path) -> None:
@@ -230,7 +230,7 @@ def test_main_writes_the_scoreboard(tmp_path: Path) -> None:
         ["--runs-dir", str(tmp_path / "runs"), "--reports-dir", str(reports_dir), "--out", str(out)]
     )
     assert code == 0
-    assert "## PRD §5 metrics" in out.read_text(encoding="utf-8")
+    assert "## Headline metrics" in out.read_text(encoding="utf-8")
 
 
 def test_split_runs_separates_harness_predictors() -> None:
@@ -253,7 +253,7 @@ def test_merge_latest_outcomes_prefers_the_more_recent_run() -> None:
 
 def test_merge_latest_outcomes_keeps_a_set_from_an_older_run_if_a_newer_run_omits_it() -> None:
     fatura_outcome = SetOutcome(set_name="fatura", status="scored", split="test", n=1, metrics={})
-    uae_outcome = SetOutcome(set_name="uae", status="deferred", reason="M2")
+    uae_outcome = SetOutcome(set_name="uae", status="deferred", reason="factory")
     report_a = _report("a", "2026-09-20T00:00:00+00:00", fatura_outcome, predictor="m")
     report_b = _report("b", "2026-09-21T00:00:00+00:00", uae_outcome, predictor="m")
 
@@ -324,7 +324,7 @@ def test_missing_json_evidence_renders_pending_never_zero(tmp_path: Path) -> Non
     gates = _row_line(markdown, "Extractor B promotion gates P1-P5 (UAE test)")
     assert "| pending " in gates
     assert "PENDING: `make gates-b` not run yet" in gates
-    bakeoff = _row_line(markdown, "Extractor A bake-off decision (M3.4)")
+    bakeoff = _row_line(markdown, "Extractor A bake-off decision")
     assert "| pending " in bakeoff
     assert "PENDING: reports/bakeoff.json not written yet" in bakeoff
     for metric in ("Error among auto-accepted fields", "Straight-through rate"):
@@ -404,7 +404,7 @@ def test_extractor_b_gates_fill_language_f1_latency_and_gate_rows(tmp_path: Path
 
 def test_bakeoff_fills_its_row_and_informs_extractbench(tmp_path: Path) -> None:
     markdown = _render(tmp_path, _with())
-    row = _row_line(markdown, "Extractor A bake-off decision (M3.4)")
+    row = _row_line(markdown, "Extractor A bake-off decision")
     assert (
         "KEEP `a`, UAE subset pooled F1 95.30% (n=200); 1/2 arms complete, 1 stopped for futility"
         in row
@@ -417,7 +417,7 @@ def test_bakeoff_fills_its_row_and_informs_extractbench(tmp_path: Path) -> None:
     undecided = fx.BAKEOFF_DATA | {"decision": {"status": "PENDING", "champion": "a"}}
     markdown = _render(tmp_path / "b", _with(bakeoff=undecided))
     assert "PENDING: no decision yet; 1/2 arms complete, 1 stopped" in _row_line(
-        markdown, "Extractor A bake-off decision (M3.4)"
+        markdown, "Extractor A bake-off decision"
     )
 
 
@@ -433,7 +433,7 @@ def test_guard_row_names_the_best_baseline_next_to_ours(tmp_path: Path) -> None:
 
 def test_all_evidence_counts_and_tables_stay_aligned(tmp_path: Path) -> None:
     markdown = _render(tmp_path, _with())
-    assert "- PRD §5 rows: 4 PASS, 1 FAIL, 4 REPORTED, 4 PENDING" in markdown
+    assert "- Headline rows: 4 PASS, 1 FAIL, 4 REPORTED, 4 PENDING" in markdown
     tables = _tables(markdown)
     assert len(tables) == 3
     for table in tables:

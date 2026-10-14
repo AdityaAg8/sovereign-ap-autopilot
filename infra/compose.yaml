@@ -11,7 +11,7 @@ name: sovereign-ap-autopilot
 
 networks:
   # Runtime services only. `internal: true` means containers on this network cannot reach
-  # the internet ('s automated test proves that) -- and, as a side effect, Docker never
+  # the internet (an automated test proves that) -- and, as a side effect, Docker never
   # sets up host port publishing for a container whose only network is internal. `gateway` is
   # the sole container that bridges this to the host, via `edge` below.
   app:
@@ -55,8 +55,8 @@ services:
       retries: 30
 
   temporal:
-    # Bundles the `temporal` CLI's dev server (frontend gRPC on 7233, Web UI on 8233) -- PRD
-    # §3 calls for "Temporal dev server", not a production cluster with its own Postgres
+    # Bundles the `temporal` CLI's dev server (frontend gRPC on 7233, Web UI on 8233) --
+    # the design calls for "Temporal dev server", not a production cluster with its own Postgres
     # schema. Its SQLite store is a file on a named volume, not in-memory: an in-memory store
     # dropped every in-flight workflow on `make down` or a reboot, and ingest dedupes by
     # sha256, so those documents were never processed again. The volume is mounted on the
@@ -151,8 +151,8 @@ services:
   llama-swap:
     # CUDA build; models/ is downloaded and checksum-verified on the host by `make models`
     # (never inside this network) and mounted read-only. See infra/llama-swap.yaml.
-    # Pinned by digest ('s "next verified build" rule): v93-cuda-b4879 (llama.cpp
-    # b4879, ~early 2025) predates the Qwen3.5/Gemma-4 architectures §4 pins, and failed every
+    # Pinned by digest (the "next verified build" rule): v93-cuda-b4879 (llama.cpp
+    # b4879, ~early 2025) predates the Qwen3.5/Gemma-4 architectures the model plan pins, and failed every
     # chat-completions request with "unable to start process: can not start(), upstream proxy
     # missing". Re-resolved 2026-09-22 to the newest tagged CUDA build, v257-cuda-b11096 (same
     # digest as the floating `cuda` tag then); re-run `make smoke` before bumping this further.
@@ -185,7 +185,7 @@ services:
       start_period: 20s
 
   parse:
-    # Real PaddleOCR-VL-1.6 GPU service, replacing the M0.4 placeholder.
+    # Real PaddleOCR-VL-1.6 GPU service, replacing the early placeholder.
     # Serves the scan path only: born-digital PDFs are parsed host-side by apx.parse.digital
     # (pdfplumber), so the ≥98% IoU gate never depends on this container being up. GPU memory
     # is capped in-process (PADDLE_GPU_MEM_FRACTION, default 0.35 of the card, ~4.3 GB on 12 GB
@@ -379,7 +379,7 @@ services:
       - ../infra:/repo/infra:ro
       # Only B's export manifests (export.json); Hub GGUF sha256s come from models.lock.
       - ../models/extractor_b:/repo/models/extractor_b:ro
-      # M6.4 injection guard checkpoint + guard.json thresholds, run on CPU in this container
+      # Injection guard checkpoint + guard.json thresholds, run on CPU in this container
       # (ADR-0017; WORKER_GUARD_MODEL_DIR default). Missing or invalid: the worker won't start.
       - ../data/guard/checkpoints/guard-modernbert:/models/guard-modernbert:ro
     networks: [app]
@@ -387,7 +387,7 @@ services:
       resources:
         reservations:
           devices:
-            # M5.6a preflight: nvidia-smi/NVML only (free VRAM before a stage switch), no compute.
+            # GPU preflight: nvidia-smi/NVML only (free VRAM before a stage switch), no compute.
             - driver: nvidia
               count: all
               capabilities: [utility]

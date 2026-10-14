@@ -1,4 +1,4 @@
-"""Typed loader for the M9.5 scripted chat tasks (`evals/chat/data/tasks.v1.jsonl`). Every golden
+"""Typed loader for the scripted chat tasks (`evals/chat/data/tasks.v1.jsonl`). Every golden
 call is checked against the real ADR-0010 tool registry (`TOOL_CONTRACTS`): the tool must exist
 and its concrete args must validate against the tool's params model, so the goldens cannot
 drift from the tools the agent is actually offered."""

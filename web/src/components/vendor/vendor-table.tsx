@@ -1,4 +1,4 @@
-/** Vendor list: EN/AR name, TRN, verified bank status and invoice volume (PRD §10 M5.4 "vendor
+/** Vendor list: EN/AR name, TRN, verified bank status and invoice volume ("vendor
  * view"). Small, fixed dataset — a plain (non-virtualized) table reads better here than the
  * inbox's virtualized one. */
 

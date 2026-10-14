@@ -1,4 +1,4 @@
-# Linux CUDA toolbox for `make smoke`, evals and training (PRD §10 M0.4/M0.5; docs/adr/0006
+# Linux CUDA toolbox for `make smoke`, evals and training (docs/adr/0006
 # addendum): Python 3.12 via uv plus CUDA torch/transformers, run in Docker because Windows
 # Smart App Control blocks native DLLs from these wheels on the host. Opt-in (`--profile
 # dev`); never part of `make up`. The repo is bind-mounted at /repo at container start, so
@@ -21,7 +21,7 @@ RUN uv python install 3.12 \
 
 # scripts/smoke.py's own runtime deps (httpx, Pillow -- versions kept in sync with
 # pyproject.toml by hand, since this image installs the extra GPU stack directly instead of
-# running `uv sync` for the whole project) plus the CUDA ML stack PRD §4's parse, guard and
+# running `uv sync` for the whole project) plus the CUDA ML stack the parse, guard and
 # embedding models need. `ml/` pins these properly in pyproject.toml in a later milestone.
 # Split into separate layers (rather than one chained RUN) so bumping the transformers pin
 # below doesn't force re-downloading the much larger torch/CUDA layer.
@@ -36,7 +36,7 @@ RUN uv pip install --python /opt/venv/bin/python torch torchvision \
 # sub-configs populate `rope_parameters`, and PaddleOCRVisionConfig never gets one, so model
 # construction raises `AttributeError: 'PaddleOCRVisionConfig' object has no attribute
 # 'rope_parameters'`. Revisit this pin (and re-run `make smoke`) whenever PaddleOCR-VL ships
-# an updated modeling file, per PRD §10 M0.5's "next verified build" rule.
+# an updated modeling file, per the "next verified build" rule.
 RUN uv pip install --python /opt/venv/bin/python \
     "transformers==5.0.0" "sentence-transformers>=3.3" "accelerate>=1.0"
 

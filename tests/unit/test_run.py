@@ -326,7 +326,7 @@ def test_score_uae_set_deferred_until_m2() -> None:
     manifest = Manifest(generated_at=empty_splits().generated_at, datasets={})
     outcome = _score_uae_set(manifest)
     assert outcome.status == "deferred"
-    assert "M2" in (outcome.reason or "")
+    assert "factory" in (outcome.reason or "")
 
 
 @pytest.mark.filterwarnings("ignore")

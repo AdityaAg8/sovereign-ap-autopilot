@@ -49,5 +49,5 @@ def test_unreadable_splits_file_fails_closed_to_unassigned(tmp_path: Path) -> No
 
 def test_the_committed_splits_file_is_readable() -> None:
     """The default path must resolve in the repo, or every production correction would be left
-    unassigned and M10.1's "corrections appear in the next manifest" would silently fail."""
+    unassigned and "corrections appear in the next manifest" would silently fail."""
     assert split_for_document("0" * 64) is LabelSplit.TRAIN

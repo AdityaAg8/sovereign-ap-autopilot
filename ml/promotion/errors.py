@@ -1,4 +1,4 @@
-"""Typed errors for the M10.2 promotion pipeline: any shadow eval that cannot prove "no gate
+"""Typed errors for the promotion pipeline: any shadow eval that cannot prove "no gate
 regressed" raises one of these instead of promoting (no silent fallbacks)."""
 
 from __future__ import annotations

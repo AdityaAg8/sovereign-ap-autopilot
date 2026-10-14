@@ -12,7 +12,7 @@
       "revision_sha": "c5630abae1d940eafe0697512a0325494b02ab42",
       "license": "apache-2.0",
       "vram_gb_est": 2.0,
-      "notes": "PRD \u00a74: official PaddleOCR 3.x doc-parser pipeline (0.9B).",
+      "notes": "Official PaddleOCR 3.x doc-parser pipeline (0.9B).",
       "files": [
         {
           "filename": ".eval_results/real5_omnidocbench.yaml",
@@ -119,7 +119,7 @@
     },
     {
       "intent": "injection_guard_base",
-      "role": "Scan: injection guard base checkpoint, fine-tuned into our guard in M6.4",
+      "role": "Scan: injection guard base checkpoint, fine-tuned into our injection guard",
       "stage": "scan",
       "runtime": true,
       "repo_id": "answerdotai/ModernBERT-base",
@@ -127,7 +127,7 @@
       "revision_sha": "8949b909ec900327062f0ebf497f51aef5e6f0c8",
       "license": "apache-2.0",
       "vram_gb_est": 0.9,
-      "notes": "PRD \u00a74 lists \"ModernBERT-base fine-tune (ours)\"; the fine-tuned weights are produced in M6 and are not a Hub download. This entry pins the base checkpoint we fine-tune.",
+      "notes": "The model plan lists \"ModernBERT-base fine-tune (ours)\"; the fine-tuned weights are produced by ml/guard and are not a Hub download. This entry pins the base checkpoint we fine-tune.",
       "files": [
         {
           "filename": "config.json",
@@ -167,7 +167,7 @@
       "revision_sha": "3885219b6810b007914f3a7950a8d1b469d598a5",
       "license": "apache-2.0",
       "vram_gb_est": 7.0,
-      "notes": "PRD \u00a74 exact spec: Qwen3.5-9B GGUF UD-Q4_K_XL + mmproj.",
+      "notes": "Exact spec: Qwen3.5-9B GGUF UD-Q4_K_XL + mmproj.",
       "files": [
         {
           "filename": "Qwen3.5-9B-UD-Q4_K_XL.gguf",
@@ -184,7 +184,7 @@
     },
     {
       "intent": "extractor_b_base",
-      "role": "Extract: Extractor B base (our LoRA is trained on top from M3.2)",
+      "role": "Extract: Extractor B base (our LoRA is trained on top)",
       "stage": "extract",
       "runtime": true,
       "repo_id": "unsloth/Qwen3.5-4B-GGUF",
@@ -192,7 +192,7 @@
       "revision_sha": "e87f176479d0855a907a41277aca2f8ee7a09523",
       "license": "apache-2.0",
       "vram_gb_est": 3.0,
-      "notes": "PRD \u00a74: Qwen3.5-4B GGUF Q4 + mmproj; \"our LoRA\" is trained later (M3.2+) and is not a Hub download.",
+      "notes": "Qwen3.5-4B GGUF Q4 + mmproj; \"our LoRA\" is trained on top later and is not a Hub download.",
       "files": [
         {
           "filename": "Qwen3.5-4B-Q4_K_M.gguf",
@@ -209,7 +209,7 @@
     },
     {
       "intent": "extractor_b_train_base",
-      "role": "Offline: Extractor B training base (bf16 safetensors the M7.1 LoRA trains on)",
+      "role": "Offline: Extractor B training base (bf16 safetensors the Extractor B LoRA trains on)",
       "stage": "offline",
       "runtime": false,
       "repo_id": "Qwen/Qwen3.5-4B",
@@ -302,7 +302,7 @@
       "revision_sha": "29d097773436b69ff9feafd636ab4cf873786537",
       "license": "apache-2.0",
       "vram_gb_est": 7.5,
-      "notes": "PRD \u00a74: Gemma 4 12B, Google QAT Q4_0 GGUF + mmproj.",
+      "notes": "Gemma 4 12B, Google QAT Q4_0 GGUF + mmproj.",
       "files": [
         {
           "filename": "gemma-4-12b-it-qat-q4_0.gguf",
@@ -402,7 +402,7 @@
       "revision_sha": "9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda",
       "license": "apache-2.0",
       "vram_gb_est": 4.5,
-      "notes": "PRD \u00a74: loaded alone in the fraud stage, not shared with other models.",
+      "notes": "Loaded alone in the fraud stage, not shared with other models.",
       "files": [
         {
           "filename": ".gitattributes",
@@ -499,7 +499,7 @@
     },
     {
       "intent": "bakeoff_challenger_unsloth",
-      "role": "Offline bake-off challenger (M3.4)",
+      "role": "Offline Extractor A bake-off challenger",
       "stage": "offline",
       "runtime": false,
       "repo_id": "unsloth/Qwen3.8-27B-GGUF",
@@ -507,7 +507,7 @@
       "revision_sha": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
       "license": "apache-2.0",
       "vram_gb_est": null,
-      "notes": "PRD \u00a74 offline table: Qwen3.8-27B UD-IQ2_XXS + mmproj.",
+      "notes": "Offline model table: Qwen3.8-27B UD-IQ2_XXS + mmproj.",
       "files": [
         {
           "filename": "Qwen3.8-27B-UD-IQ2_XXS.gguf",
@@ -524,7 +524,7 @@
     },
     {
       "intent": "bakeoff_challenger_empero",
-      "role": "Offline bake-off challenger (M3.4)",
+      "role": "Offline Extractor A bake-off challenger",
       "stage": "offline",
       "runtime": false,
       "repo_id": "empero-ai/Qwen3.8-9B-Distill-GGUF",
@@ -532,7 +532,7 @@
       "revision_sha": "760121cd70bb4c36b2b5ec58eb765e0df5987efe",
       "license": "apache-2.0",
       "vram_gb_est": null,
-      "notes": "PRD \u00a74 offline table: empero-ai Qwen3.8-9B-Distill Q4.",
+      "notes": "Offline model table: empero-ai Qwen3.8-9B-Distill Q4.",
       "files": [
         {
           "filename": "Qwen3.8-9B-Q4_K_M.gguf",
@@ -544,7 +544,7 @@
     },
     {
       "intent": "bakeoff_latency_mtp",
-      "role": "Offline bake-off latency arm (M3.4): Qwen3.5-9B with MTP speculative decoding",
+      "role": "Offline Extractor A bake-off latency arm: Qwen3.5-9B with MTP speculative decoding",
       "stage": "offline",
       "runtime": false,
       "repo_id": "unsloth/Qwen3.5-9B-MTP-GGUF",
@@ -552,7 +552,7 @@
       "revision_sha": "9716a636ee4bddc3fed678220b7a33dd2a4160ae",
       "license": "apache-2.0",
       "vram_gb_est": null,
-      "notes": "PRD \u00a74 offline table / \u00a710 M3.4 latency arm: the same UD-Q4_K_XL quant as extractor_a, exported with its multi-token-prediction head so llama-server can draft with `--spec-type draft-mtp` (present in the pinned llama.cpp b11096). Never served at runtime.",
+      "notes": "Offline model table, bake-off latency arm: the same UD-Q4_K_XL quant as extractor_a, exported with its multi-token-prediction head so llama-server can draft with `--spec-type draft-mtp` (present in the pinned llama.cpp b11096). Never served at runtime.",
       "files": [
         {
           "filename": "Qwen3.5-9B-UD-Q4_K_XL.gguf",
@@ -569,7 +569,7 @@
     },
     {
       "intent": "teacher",
-      "role": "Optional overnight teacher (M7.2, host RAM >= 32 GB only)",
+      "role": "Optional overnight teacher for Extractor B (host RAM >= 32 GB only)",
       "stage": "offline",
       "runtime": false,
       "repo_id": "unsloth/Qwen3.8-27B-GGUF",
@@ -577,7 +577,7 @@
       "revision_sha": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
       "license": "apache-2.0",
       "vram_gb_est": null,
-      "notes": "PRD \u00a74 offline table: Qwen3.8-27B UD-Q4_K_XL with CPU offload; same repo as bakeoff_challenger_unsloth, a larger quant.",
+      "notes": "Offline model table: Qwen3.8-27B UD-Q4_K_XL with CPU offload; same repo as bakeoff_challenger_unsloth, a larger quant.",
       "files": [
         {
           "filename": "Qwen3.8-27B-UD-Q4_K_XL.gguf",
@@ -594,7 +594,7 @@
     },
     {
       "intent": "redteam_generator",
-      "role": "Adversarial invoice / attack generator (M6.3, M9.5)",
+      "role": "Adversarial invoice / attack generator (attack suite, chat evals)",
       "stage": "offline",
       "runtime": false,
       "repo_id": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
@@ -602,7 +602,7 @@
       "revision_sha": "0a41c68809d375475f954be12ba7c40efa56c2a9",
       "license": "apache-2.0",
       "vram_gb_est": null,
-      "notes": "PRD \u00a74 offline table. Generates adversarial training/eval data offline only; never served at runtime.",
+      "notes": "Offline model table. Generates adversarial training/eval data offline only; never served at runtime.",
       "files": [
         {
           "filename": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
@@ -619,7 +619,7 @@
     },
     {
       "intent": "guard_baseline_promptguard",
-      "role": "Guard baseline for the M6.4 comparison",
+      "role": "Baseline for the injection guard comparison",
       "stage": "offline",
       "runtime": false,
       "repo_id": "meta-llama/Llama-Prompt-Guard-2-86M",
@@ -627,7 +627,7 @@
       "revision_sha": "a8ded8e697ce7c355e395a0df51f94adb4a2fd27",
       "license": "other",
       "vram_gb_est": null,
-      "notes": "PRD C4: license is Meta's own \"Llama 4 community\"-style license (Hub tag license:other), not Apache/MIT/BSD, so it is allowed only offline/eval (never runtime) and must be listed in docs/licenses.md.",
+      "notes": "Licensing rule: Meta's own \"Llama 4 community\"-style license (Hub tag license:other), not Apache/MIT/BSD, so it is allowed only offline/eval (never runtime) and must be listed in docs/licenses.md.",
       "files": [
         {
           "filename": ".gitattributes",
@@ -684,7 +684,7 @@
     },
     {
       "intent": "guard_baseline_modernbert",
-      "role": "Guard baseline for the M6.4 comparison",
+      "role": "Baseline for the injection guard comparison",
       "stage": "offline",
       "runtime": false,
       "repo_id": "siberiancat/modernbert-prompt-injection",
@@ -692,7 +692,7 @@
       "revision_sha": "fd9d17421e2e6bbe2eeea1874269fddc64e95e03",
       "license": "apache-2.0",
       "vram_gb_est": null,
-      "notes": "PRD \u00a74 offline table.",
+      "notes": "Offline model table.",
       "files": [
         {
           "filename": ".gitattributes",

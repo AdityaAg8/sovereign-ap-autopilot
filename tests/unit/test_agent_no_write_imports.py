@@ -1,7 +1,7 @@
 """AST scan proving `apx.agent` never imports a payment-state writer, a policy grant or a policy
 guard: `apx.agent`'s only write dependency is `ProposalSink`
 (ADR-0008 K3, ADR-0010 D2/SEC-12). This is `agent/test_no_write_imports.py` from ADR-0008's own
-M6.5 proof list, deferred to M9.2 because `apx.agent` had no implementation to scan until now
+proof list, deferred to the agent work because `apx.agent` had no implementation to scan until now
 (`docs/security.md` SEC-12)."""
 
 from __future__ import annotations

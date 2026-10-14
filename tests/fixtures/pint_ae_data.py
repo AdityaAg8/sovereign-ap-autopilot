@@ -18,7 +18,7 @@ touches the filesystem."""
 
 MISSING_PINT_AE_DATA = (
     "data/pint_ae missing: run `uv run python -m evals.pint_ae.fetch` first, then re-run with "
-    "`uv run pytest -m artifacts` (PRD §10 M1.3/M4.3)"
+    "`uv run pytest -m artifacts`"
 )
 
 

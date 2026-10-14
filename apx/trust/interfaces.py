@@ -209,7 +209,7 @@ class ReliabilityBin(Frozen):
 
 
 class ReliabilityReport(Frozen):
-    """Equal-mass reliability diagram and ECE for M7.4 (ADR-0009 §5)."""
+    """Equal-mass reliability diagram and ECE for trust calibration (ADR-0009 §5)."""
 
     bins: tuple[ReliabilityBin, ...]
     ece: Probability

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a queue of GPU make targets back to back while holding data/ml/gpu.lock (the lock
 # ml.extractor_b.gpu takes for training and export), so no trainer can start mid-queue and no
-# idle gap waits on an orchestrator poll. Each item logs to logs/<item>.log, the first failure
+# idle gap waits on someone polling. Each item logs to logs/<item>.log, the first failure
 # stops the queue, and a rerun skips items whose done-marker under logs/gpu_queue/ exists.
 # An item prefixed with '+' is one whose non-zero exit is a verdict, not a broken stack (a gate
 # that fails, e.g. "+gates-b"): its failure is recorded (<item>.failed marker, no done-marker, so

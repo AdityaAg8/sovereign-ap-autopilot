@@ -1,4 +1,4 @@
-"""Unit and property tests for the M8.1 learned page similarity: the cosine math, the
+"""Unit and property tests for the learned page similarity: the cosine math, the
 embedder-backed `InMemoryPageSimilarityIndex` driven through the existing
 `DuplicateInvoiceRule.evaluate_similarity`, typed provider errors, and the HTTP page-embedding
 client driven through an in-process transport (no server, no model)."""

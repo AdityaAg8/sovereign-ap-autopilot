@@ -207,7 +207,7 @@ class ReviewGuardActivities:
     async def _corrections_refusal(
         self, session: AsyncSession, invoice_id: str, corrections: ReviewCorrections | None
     ) -> str | StaleVerdict | None:
-        """N-03: why an otherwise backed approval signal must not be acted on because of its
+        """Why an otherwise backed approval signal must not be acted on because of its
         corrections, else None. Runs after `_refusal` found a digest-matched approval."""
         recorded = await session.scalar(
             select(ApprovalRow.corrections_digest)
@@ -226,7 +226,7 @@ class ReviewGuardActivities:
 def corrections_refusal(
     recorded: str | None, rows: Sequence[FieldRow], signalled: ReviewCorrections | None
 ) -> str | StaleVerdict | None:
-    """N-03 (KI-02), over data already read: `recorded` is the newest approval's
+    """KI-02, over data already read: `recorded` is the newest approval's
     `corrections_digest`, `rows` the invoice's `fields` rows in id order, `signalled` the
     corrections the `review` signal carries (which `apply_review` would apply next). None when
     the signal carries exactly the approved corrections and the rows still derive them; a

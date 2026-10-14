@@ -333,7 +333,9 @@ def test_realistic_erp_purchase_orders_match_their_own_receipts() -> None:
         if any(received.get(pl.line_ref, Decimal(0)) < pl.quantity for pl in po.lines):
             checked_a_partial_delivery = True
 
-    assert checked_a_partial_delivery, "seed produced no partial delivery to exercise M2.1's mode"
+    assert checked_a_partial_delivery, (
+        "seed produced no partial delivery to exercise the ERP partial-delivery mode"
+    )
 
 
 # --- hypothesis: tolerance boundary exactness -----------------------------------------------------

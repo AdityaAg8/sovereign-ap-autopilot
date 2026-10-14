@@ -171,10 +171,10 @@ def test_bilingual_modern_minimal_labels_language_variant_fields_twice(
     whose text genuinely differs by language (`supplier_name`) is tagged in both blocks -- but a
     field with no language variant at all (`quantity`, the same digits either way) is tagged only
     once, in the English block; the Arabic block's own copy is a visual echo, not a second
-    physical occurrence of the field. Tagging it a second time gave the M2.3 extraction schema two
-    ground-truth boxes for one field, which is what M3.1's IoU gate caught downstream (13
+    physical occurrence of the field. Tagging it a second time gave the extraction schema two
+    ground-truth boxes for one field, which is what the parse IoU gate caught downstream (13
     `currency` labels scored a low IoU because a consumer picked whichever of the two boxes did
-    not match the one `apx.parse` found) -- PRD §10 M2.4/M3.1."""
+    not match the one `apx.parse` found)."""
     result, n_lines = rendered["bilingual_duplicated"]
     supplier_name_labels = [
         label for label in result.labels.labels if label.field == "supplier_name"

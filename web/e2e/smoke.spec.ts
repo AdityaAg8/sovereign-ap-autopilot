@@ -1,4 +1,4 @@
-/** M5.4 acceptance smoke test: login, land on the inbox, open an invoice and approve it with the
+/** Review UI acceptance smoke test: login, land on the inbox, open an invoice and approve it with the
  * keyboard — all against the dev fixture adapter. Runs against a production build
  * via playwright.config.ts's webServer. */
 import { test, expect } from "@playwright/test";

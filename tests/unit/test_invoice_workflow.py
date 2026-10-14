@@ -435,7 +435,7 @@ async def test_review_route_waits_then_approved_completes(
 
     assert result.status is InvoiceStatus.ARCHIVED
     assert fake.calls.index("review_note") == fake.calls.index("review_hold") + 1
-    # C-03: the approval is checked against the database before anything is built.
+    # The approval is checked against the database before anything is built.
     assert fake.confirmed == [True]
     assert fake.calls.index("confirm_review") < fake.calls.index("build_einvoice")
 
@@ -527,7 +527,7 @@ def _confirm_count(fake: FakeInvoiceActivities, n: int) -> Callable[[], Awaitabl
 async def test_an_unbacked_review_signal_is_ignored_and_the_invoice_keeps_waiting(
     temporal_env: WorkflowEnvironment, approved: bool
 ) -> None:
-    """C-03: a `review` signal sent straight to Temporal (the Web UI, tctl) with no approval row
+    """A `review` signal sent straight to Temporal (the Web UI, tctl) with no approval row
     or recorded rejection behind it never builds or sends the e-invoice. The workflow stays
     awaiting review, and a later decision the database backs still goes through."""
     fake = FakeInvoiceActivities(
@@ -585,7 +585,7 @@ async def test_unbacked_signals_alone_never_reach_payment(
 async def test_a_pre_route_send_to_review_hold_turns_auto_into_review(
     temporal_env: WorkflowEnvironment,
 ) -> None:
-    """H-02: a reviewer sent the invoice to review before it was routed, and the policy then
+    """A reviewer sent the invoice to review before it was routed, and the policy then
     said AUTO. `review_hold` honours the hold: the invoice waits for a human instead of paying."""
     fake = FakeInvoiceActivities(
         route_decision=RoutingDecision(route=Route.AUTO, reasons=()), held_for_review=True
@@ -726,7 +726,7 @@ async def test_a_failing_mark_failed_never_masks_the_original_failure(
 async def test_a_failure_before_the_invoice_row_exists_is_still_recorded(
     temporal_env: WorkflowEnvironment,
 ) -> None:
-    """The live M5.6 case: `build_invoice` refused an extraction without totals, so no invoice
+    """The live end-to-end case: `build_invoice` refused an extraction without totals, so no invoice
     row was ever written. `mark_failed` still runs with the document's id (its sha256) and the
     typed cause; the concrete activity records it on `ingested_documents`."""
     error = ModelOutputError("subtotal, vat_total, total missing")

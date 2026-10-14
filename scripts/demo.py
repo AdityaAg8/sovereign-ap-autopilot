@@ -275,7 +275,7 @@ def pick_attacks(
 
 
 def rule_scan_score(pdf: bytes) -> float:
-    """Max attack-kind score from the M6.2 rule-based detector (no model, CPU only)."""
+    """Max attack-kind score from the rule-based hidden-content detector (no model, CPU only)."""
     from apx.scan.detector import PdfHiddenContentDetector
     from apx.workflows.components import DetectorScanner
 

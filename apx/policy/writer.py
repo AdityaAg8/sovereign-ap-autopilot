@@ -1,4 +1,4 @@
-"""`SqlPaymentStateWriter`: the concrete, only mutator of payment state on the M5.1 Postgres
+"""`SqlPaymentStateWriter`: the concrete, only mutator of payment state on the Postgres
 schema (approvals, bank details, proposal execution). Every method re-derives the current
 subject from the database inside its own transaction and compares it against `grant.
 subject_digest`, raising `PolicyDeniedError` (rule STALE_GRANT) if reality moved since the
@@ -226,7 +226,7 @@ class SqlPaymentStateWriter:
             .limit(1)
         )
         if rejected is not None:
-            # H-01: a reviewer's rejection is final; no later approval may override it.
+            # A reviewer's rejection is final; no later approval may override it.
             raise PolicyDeniedError(f"invoice {invoice_id} was rejected; cannot approve")
         if row.status is not DbInvoiceStatus.AWAITING_REVIEW:
             raise PolicyDeniedError(

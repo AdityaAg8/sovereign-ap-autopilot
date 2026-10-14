@@ -35,7 +35,7 @@ SET_SPLIT_NAMES: dict[SetName, tuple[str, ...]] = {
     "cord": ("train", "val", "test"),
 }
 
-# Which (set, split) pairs pool into each leakage-check bucket (PRD §6.2 I5: eval, cal and
+# Which (set, split) pairs pool into each leakage-check bucket (I5: eval, cal and
 # test data must never reach training). Every named split feeds exactly one pool.
 POOL_MEMBERS: dict[str, tuple[tuple[SetName, str], ...]] = {
     "train": (("uae", "train"), ("docile", "train"), ("fatura", "train"), ("cord", "train")),
@@ -124,7 +124,7 @@ def _extractbench_groups(manifest: Manifest) -> SplitGroups:
 
 
 def _docile_groups(manifest: Manifest) -> SplitGroups:
-    """DocILE is deferred until M1.1's fetch has a DOCILE_TOKEN and is extracted per-document;
+    """DocILE is deferred until the DocILE fetch has a DOCILE_TOKEN and is extracted per-document;
     until then this always returns empty train/val lists."""
     groups: SplitGroups = {split: [] for split in SET_SPLIT_NAMES["docile"]}
     entry = manifest.datasets.get("docile")

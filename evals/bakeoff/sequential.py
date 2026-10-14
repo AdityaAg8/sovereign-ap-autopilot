@@ -1,4 +1,4 @@
-"""Pre-registered group-sequential futility rule of the M3.4 bake-off (ADR-0016 amendment 1): at
+"""Pre-registered group-sequential futility rule of the bake-off (ADR-0016 amendment 1): at
 1/4, 2/4 and 3/4 of the UAE subset a challenger is compared with the baseline on the same
 documents (paired bootstrap of pooled micro field F1 and p50 latency, O'Brien-Fleming bounds) and
 stops only when it can no longer meet the win criteria; an arm that could still win runs in full."""

@@ -589,7 +589,7 @@ class HttpApiClient implements ApiClient {
   async listVendors(): Promise<readonly Vendor[]> {
     // GET /vendors (apx.api.routers.vendors) is paginated the same way GET /invoices is —
     // walk every page the same way listInvoices does above, since the vendor list UI (a small,
-    // fixed dataset per PRD §10 M5.4) expects the whole set at once.
+    // fixed dataset) expects the whole set at once.
     const items: VendorSummaryDto[] = [];
     let offset = 0;
     for (;;) {

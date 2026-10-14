@@ -1,4 +1,4 @@
-"""Unit tests for the M9.5 chat-eval harness with a scripted fake of the model endpoint (never a
+"""Unit tests for the chat-eval harness with a scripted fake of the model endpoint (never a
 fake of the scorers): the chat runner drives the real tool loop, dispatcher and toolbox over the
 fixture world; the AgentDojo adapter converts messages and runs the pinned banking suite; the
 CLI dry run writes a report stamped "DRY RUN (fake model)"."""

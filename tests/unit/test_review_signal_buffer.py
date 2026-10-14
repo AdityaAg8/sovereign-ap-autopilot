@@ -1,4 +1,4 @@
-"""M11.3: `InvoiceWorkflow` buffers a `review` signal that lands before
+"""`InvoiceWorkflow` buffers a `review` signal that lands before
 its review wait (the API may approve as soon as `route` commits AWAITING_REVIEW), still acts on it
 only once `confirm_review` backs it, and ends FAILED when a recorded approval went stale. The
 `workflow.patched` guard keeps histories recorded before the fix replaying deterministically:
@@ -37,7 +37,7 @@ from tests.unit.test_invoice_workflow import (
 
 @workflow.defn(name="InvoiceWorkflow")
 class _PreBufferInvoiceWorkflow(InvoiceWorkflow):
-    """`InvoiceWorkflow` as deployed before M11.3: identical except that the `review` handler
+    """`InvoiceWorkflow` before the signal buffer: identical except that the `review` handler
     drops any signal that arrives before the in-memory status is AWAITING_REVIEW. Used only to
     record a history the way a running pre-fix execution recorded it."""
 
@@ -115,7 +115,7 @@ async def test_an_approval_signalled_before_fraud_completes_is_buffered_for_the_
 async def test_an_early_unbacked_signal_is_checked_and_the_invoice_keeps_waiting(
     temporal_env: WorkflowEnvironment,  # noqa: F811
 ) -> None:
-    """C-03 still holds for a buffered signal: unbacked, it is dropped and a later backed
+    """The DB-backing check holds for a buffered signal: unbacked, it is dropped and a later backed
     decision is what completes the invoice."""
     fake = _SignalDuring(
         route_decision=_review_route(), client=temporal_env.client, unbacked_signals=1
@@ -174,7 +174,7 @@ class _StaleApproval(FakeInvoiceActivities):
 async def test_a_stale_recorded_approval_fails_the_invoice_with_its_reason(
     temporal_env: WorkflowEnvironment,  # noqa: F811
 ) -> None:
-    """N-13: not APPROVED forever. One attempt (non-retryable), then FAILED with the reason."""
+    """Not APPROVED forever. One attempt (non-retryable), then FAILED with the reason."""
     fake = _StaleApproval(route_decision=_review_route())
     async with Worker(
         temporal_env.client,
@@ -251,7 +251,7 @@ def _has_marker(history: WorkflowHistory, patch_id: str) -> bool:
 async def test_a_pre_fix_history_with_a_dropped_early_signal_replays_deterministically(
     temporal_env: WorkflowEnvironment,  # noqa: F811
 ) -> None:
-    """A running execution recorded by the pre-M11.3 worker dropped an early approval, then
+    """A running execution recorded by the pre-buffer worker dropped an early approval, then
     was rejected once it waited. Today's workflow must replay that history identically (the
     `workflow.patched` guard returns False for it); acting on the early approval instead would
     go on to build the e-invoice where the history ends BLOCKED, a nondeterminism error. With

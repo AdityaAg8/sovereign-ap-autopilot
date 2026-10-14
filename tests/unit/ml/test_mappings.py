@@ -141,7 +141,7 @@ def test_docile_target_drops_extractions_on_unseen_pages() -> None:
      ("designated_zone", "O")],
 )  # fmt: skip
 def test_uae_classification_matches_the_gold_xml_mapping(tax_case: str, category: str) -> None:
-    """Training labels and the M2.5 gold XML agree on every factory tax case (one truth)."""
+    """Training labels and the gold XML agree on every factory tax case (one truth)."""
     from factory.gold_xml import TAX_CASE_VAT_CATEGORY as GOLD
 
     type_code, got = uae_classification(tax_case)

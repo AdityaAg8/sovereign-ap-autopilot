@@ -39,7 +39,7 @@ class ExtractBenchExample:
     schema-aware comparators expect; a plain string that happens to parse as JSON (e.g. a
     numeric-looking ID) is the one known, accepted ambiguity of this round trip.
 
-    `grounding` is free-text evidence (e.g. the first evidence quote) for the PRD-spec fallback's
+    `grounding` is free-text evidence (e.g. the first evidence quote) for the built-in fallback's
     citation-text F1, used only when the official framework is unavailable. `page`/`bbox` are the
     field's real grounding location (1-indexed page, normalized COCO [x, y, w, h]) for the
     official framework's bbox-based grounding metric: gold gets these from ExtractBench's own
@@ -223,7 +223,7 @@ def score_extractbench(
     if framework_available(external_repo):
         return _score_official(gold, predicted, external_repo)
     logger.warning(
-        "ExtractBench official framework not found at %s; using PRD §5-spec fallback scorer "
+        "ExtractBench official framework not found at %s; using the built-in fallback scorer "
         "instead (value F1 + grounding F1 by normalized exact match)",
         external_repo,
     )

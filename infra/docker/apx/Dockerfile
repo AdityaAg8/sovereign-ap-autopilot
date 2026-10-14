@@ -17,7 +17,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# The M6.4 injection guard runs on CPU in the worker (docs/adr/0017-injection-guard-runtime.md):
+# The injection guard runs on CPU in the worker (docs/adr/0017-injection-guard-runtime.md):
 # CPU-only torch at the toolbox's version (the checkpoint was trained and scored with 2.6.0)
 # and the transformers release its config.json was saved with (5.0.0). Outside uv.lock on
 # purpose: the Windows host venv never installs torch (Smart App Control, ADR-0006), so these

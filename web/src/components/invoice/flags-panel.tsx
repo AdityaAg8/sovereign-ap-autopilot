@@ -1,6 +1,5 @@
-/** Fraud/validation flags for the current invoice, each with a plain-language explanation (PRD
- * §10 M5.4 "flags panel"; PRD §10 M8.3 requires the explanation itself, surfaced here ahead of
- * apx/fraud landing). Severity pairs an icon and a word with color, never color alone. */
+/** Fraud/validation flags for the current invoice, each with a plain-language explanation
+ * (the explanation itself is required, surfaced here ahead of apx/fraud landing). Severity pairs an icon and a word with color, never color alone. */
 import { AlertOctagon, AlertTriangle, Info } from "lucide-react";
 import type { Flag } from "@/lib/api/types";
 import { cn } from "@/lib/utils";

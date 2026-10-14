@@ -11,7 +11,7 @@ export { ApiError } from "@/lib/api/contract";
 
 export type ApiMode = "fixture" | "http";
 
-/** Dev and Playwright e2e ('s acceptance criteria) default to "fixture"; set
+/** Dev and Playwright e2e (the review UI's acceptance criteria) default to "fixture"; set
  * NEXT_PUBLIC_API_MODE=http once apx/api is reachable to run the same UI against the real
  * service. Exported separately from `getApiClient` so screens (e.g. the login form's demo-account
  * list) can branch on the mode without pulling in either adapter. */

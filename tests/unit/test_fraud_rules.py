@@ -1,5 +1,5 @@
-"""Unit and property tests for the M8.1 fraud rules: one test per rule, hypothesis coverage
-for the split-invoice date window, and the duplicate-detection edge cases from PRD §3/§10."""
+"""Unit and property tests for the fraud rules: one test per rule, hypothesis coverage
+for the split-invoice date window, and the duplicate-detection edge cases."""
 
 from __future__ import annotations
 

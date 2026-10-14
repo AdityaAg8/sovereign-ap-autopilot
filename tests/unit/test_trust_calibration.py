@@ -1,6 +1,6 @@
 """Unit tests for ADR-0009 §5 calibration: the label-independent FIT/LTT partition, the
 `IsotonicCalibrator` (fallback trigger, single-class/empty errors, determinism), and the
-equal-mass reliability diagram used for the M7.4 ECE report."""
+equal-mass reliability diagram used for the calibration ECE report."""
 
 from __future__ import annotations
 
@@ -198,7 +198,7 @@ def test_calibrator_version_is_12_hex_chars() -> None:
 
 
 def test_fit_encoded_and_fit_agree_with_predict_encoded_and_predict() -> None:
-    """The array fast path used by the M7.5 simulation must agree bit-for-bit with the
+    """The array fast path used by the trust-gate simulation must agree bit-for-bit with the
     CalRecord/FieldFeatures path used elsewhere (see IsotonicCalibrator's docstring)."""
     records = _synthetic_records(600, n_groups=120, wrong_share=0.3, seed=7)
     usable = records  # none are hard-rejected by construction

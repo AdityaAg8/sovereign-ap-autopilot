@@ -1,4 +1,4 @@
-"""Integration tests for the M10.1 corrections store, active-learning selection and
+"""Integration tests for the corrections store, active-learning selection and
 retraining export against a real, throwaway Postgres container (I5):
 
 - `apx.api.service.DbInvoiceService.edit_field` (the existing fix path) records the before

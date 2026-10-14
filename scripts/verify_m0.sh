@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Verifies M0 (Foundations) is done: lint, typecheck, unit tests, header check, web
-# lint/typecheck/build all green, and every M0 artifact exists.
+# Verifies the project foundations: lint, typecheck, unit tests, header check, web
+# lint/typecheck/build all green, and every foundation artifact exists.
 # Prints a PASS/FAIL table and exits nonzero if any gate fails; wired to `make verify-m0`.
 set +e
 set +u
@@ -83,7 +83,7 @@ else
   record "web build" "FAIL" "web/ directory not found"
 fi
 
-echo "==> M0 artifacts present"
+echo "==> Foundation artifacts present"
 check_file_exists "reports/env.md" "$REPO_ROOT/reports/env.md"
 check_file_exists "docs/architecture.md" "$REPO_ROOT/docs/architecture.md"
 check_glob_exists "docs/adr/0001-*" "$REPO_ROOT/docs/adr/0001-*"
@@ -96,7 +96,7 @@ check_file_exists "infra/models.lock.json" "$REPO_ROOT/infra/models.lock.json"
 check_file_exists "reports/smoke.md" "$REPO_ROOT/reports/smoke.md"
 
 echo
-echo "M0 verification results:"
+echo "Foundation verification results:"
 printf '%-28s %-6s %s\n' "GATE" "STATUS" "DETAIL"
 overall=0
 for row in "${RESULTS[@]}"; do
@@ -109,8 +109,8 @@ done
 
 echo
 if [ "$overall" -eq 0 ]; then
-  echo "PASS: all M0 gates green."
+  echo "PASS: all foundation gates green."
 else
-  echo "FAIL: one or more M0 gates failed (see table above)."
+  echo "FAIL: one or more foundation gates failed (see table above)."
 fi
 exit "$overall"

@@ -1,4 +1,4 @@
-"""AgentDojo (pinned 0.1.35) banking adapter for M9.5: `LocalEndpointLLM` is an AgentDojo pipeline
+"""AgentDojo (pinned 0.1.35) banking adapter (chat evals): `LocalEndpointLLM` is a pipeline
 element that talks to the local OpenAI-compatible endpoint (llama-swap through the gateway) over
 httpx, and `run_banking` runs the banking suite with and without the important-instructions
 prompt-injection attack, returning utility and targeted attack success rate."""

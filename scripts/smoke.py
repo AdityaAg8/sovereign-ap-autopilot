@@ -595,10 +595,10 @@ def render_report(
 ) -> str:
     generated_at = generated_at or datetime.now(UTC).isoformat()
     lines = [
-        "# Smoke test report (PRD §10 M0.5)",
+        "# Smoke test report",
         "",
         f"Generated: {generated_at}",
-        f"VRAM budget per stage: {budget_gb} GB (PRD C2)",
+        f"VRAM budget per stage: {budget_gb} GB",
         "",
         "| Model | Stage | Reachable | Peak VRAM (GB) | Latency (ms) | Checks | Result |",
         "|---|---|---|---|---|---|---|",
@@ -628,7 +628,7 @@ def render_report(
         lines += ["| Stage | Peak VRAM (GB) | Within budget |", "|---|---|---|"]
         for stage, peak in sorted(stage_peaks.items()):
             within = peak <= budget_gb
-            verdict = "yes" if within else "no -- switch to sequential groups (PRD §4)"
+            verdict = "yes" if within else "no -- switch to sequential groups"
             lines.append(f"| {stage} | {peak:.2f} | {verdict} |")
     else:
         lines.append("No VRAM samples collected (nvidia-smi unavailable or no model reachable).")

@@ -1,4 +1,4 @@
-"""Maps `factory.erp`-generated ERP-truth (`<sha>.truth.json`) files from the M2.3 UAE invoice
+"""Maps `factory.erp`-generated ERP-truth (`<sha>.truth.json`) files from the UAE invoice
 factory to `apx.extract.schema.InvoiceFields` plus each vendor's admin-verified payment IBAN
 (never the invoice's own claimed IBAN, P1), builds PINT AE gold XML through `apx.einvoice`,
 validates every file against the runtime schematron validator in parallel processes, and reports
@@ -350,7 +350,7 @@ def render_report(results: Sequence[GoldXmlResult], *, erp_seed: int) -> str:
         failures_by_rule.update(r.failure_rule_ids)
 
     lines: list[str] = [
-        "# Gold PINT AE XML (M2.5)",
+        "# Gold PINT AE XML",
         "",
         f"ERP snapshot: seed `{erp_seed}`. Documents validated: **{total}**. Schematron pass "
         f"rate: **{passed}/{total} ({_rate(passed, total)})**.",
@@ -383,7 +383,7 @@ def render_report(results: Sequence[GoldXmlResult], *, erp_seed: int) -> str:
         "",
         "## Credit notes",
         "",
-        f"0 of {total} documents are credit notes. The M2 factory (`factory/build.py`, "
+        f"0 of {total} documents are credit notes. The factory (`factory/build.py`, "
         "`factory/layouts.py`'s `TaxCase`) generates invoices only -- every gold document here "
         'is a PINT AE `Invoice` (`DocumentTypeCode.INVOICE`, type code "380").',
         "",
@@ -410,8 +410,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m factory.gold_xml",
         description=(
-            "Build and schematron-validate gold PINT AE XML for every UAE factory invoice "
-            "(PRD §10 M2.5)."
+            "Build and schematron-validate gold PINT AE XML for every UAE factory invoice."
         ),
     )
     parser.add_argument("--uae-root", type=Path, default=None, help="default: data/uae")

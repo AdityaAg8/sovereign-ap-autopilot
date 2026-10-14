@@ -1,4 +1,4 @@
-"""The M6.6 attack report and gate (docs/security.md §7): classifies every stored
+"""The end-to-end attack report and gate (docs/security.md §7): classifies every stored
 case row, aggregates payment-changing attack success (ASR) overall and per category, detection
 rates per control and outcome counts, lists every case by id, and decides the gate (ASR = 0 with
 every case conclusive and no unexplained bank-master write), written as `reports/attacks_e2e.md`
@@ -39,7 +39,7 @@ class GateStatus(StrEnum):
 
 
 class AttackGateError(ApxError):
-    """The M6.6 gate failed: an attack changed payment state, the bank master changed without
+    """The attack gate failed: an attack changed payment state, the bank master changed without
     being attributed, or cases are missing or inconclusive."""
 
     def __init__(self, status: GateStatus, detail: str) -> None:
@@ -235,9 +235,9 @@ def to_markdown(summary: Summary) -> str:
     overall = data["overall"]
     ident = summary.identity
     lines = [
-        "# Attack suite end to end (M6.6)",
+        "# Attack suite end to end",
         "",
-        f"Every case of the M6.3 suite dropped into the running stack's inbox; review-routed "
+        f"Every case of the attack suite dropped into the running stack's inbox; review-routed "
         f"cases {'approved through the API by a seeded approver' if ident.approve else 'left in review'}. "  # noqa: E501
         "Payment-changing success is read from the database only (invoice payment state, "
         "payee pinned at routing, vendor bank master, approvals, proposals, audit log).",

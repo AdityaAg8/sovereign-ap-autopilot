@@ -1,4 +1,4 @@
-"""The M3.4 bake-off arms and budget (ADR-0013): the served extractor-a baseline, the
+"""The bake-off arms and budget (ADR-0013): the served extractor-a baseline, the
 two challengers and the MTP latency arm, each a llama-swap alias with its prompt mode, plus the
 decision constants (≥ 1.0 F1 point at ≤ 1.5x latency, whole-card ≤ 11.8 GB, models ≤ 9.5 GB)."""
 
@@ -16,16 +16,16 @@ from apx.common.errors import ApxError
 from apx.extract.prompt import InvoicePromptBuilder, PromptSettings
 
 WHOLE_CARD_BUDGET_GB: Final[float] = 11.8
-"""PRD C2 / ADR-0013: whole-card nvidia-smi peak of a stage, Windows desktop included (GiB)."""
+"""VRAM budget (ADR-0013): whole-card nvidia-smi peak of a stage, Windows desktop included (GiB)."""
 MODEL_BUDGET_GB: Final[float] = 9.5
-"""PRD C2 / ADR-0013: a stage's models with their working context, i.e. peak minus the idle
+"""VRAM budget (ADR-0013): a stage's models with their working context, i.e. peak minus the idle
 desktop reading taken right before the model loads (GiB)."""
 F1_MARGIN_POINTS: Final[float] = 1.0
-"""PRD M3.4: a challenger must beat the baseline's UAE field F1 by at least 1.0 point."""
+"""Bake-off rule: a challenger must beat the baseline's UAE field F1 by at least 1.0 point."""
 LATENCY_RATIO_MAX: Final[float] = 1.5
-"""PRD M3.4: ... at a p50 latency of at most 1.5x the baseline's."""
+"""Bake-off rule: ... at a p50 latency of at most 1.5x the baseline's."""
 VALID_JSON_MIN: Final[float] = 0.99
-"""The M3.3 Extractor A valid-JSON gate: a champion A must keep it (ADR-0016)."""
+"""The Extractor A valid-JSON gate: a champion A must keep it (ADR-0016)."""
 PROBE_PAGES: Final[int] = 5
 
 

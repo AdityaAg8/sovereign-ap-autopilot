@@ -1,4 +1,4 @@
-"""GPU check of Qwen3-VL-Embedding-2B page-vector quality for the M8.1 near-duplicate rule
+"""GPU check of Qwen3-VL-Embedding-2B page-vector quality for the near-duplicate fraud rule
 (`DuplicateInvoiceRule.evaluate_similarity`, threshold 0.9) against the live `page-embed`
 service: a factory invoice's page and its re-rendered, re-scanned twin (`factory.scan`, at a
 different resolution) must meet the threshold, and pages of different vendors' invoices must
