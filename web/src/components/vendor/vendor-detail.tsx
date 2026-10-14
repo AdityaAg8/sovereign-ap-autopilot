@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge, RouteBadge } from "@/components/inbox/status-badge";
+import { Amount } from "@/components/inbox/amount";
 import { formatAed, formatCount, formatReceivedAt } from "@/lib/format";
 import type { InvoiceSummary, Vendor } from "@/lib/api/types";
 
@@ -18,12 +19,12 @@ export function VendorDetail({
   invoices: readonly InvoiceSummary[];
 }) {
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-6">
+    <div className="mx-auto max-w-4xl space-y-8 p-3 sm:p-5">
       <div>
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">{vendor.nameEn}</h2>
           {vendor.isNew && (
-            <Badge variant="secondary" className="bg-warning/20 text-warning border-transparent">
+            <Badge variant="secondary" className="bg-warning/10 text-warning border-transparent">
               New vendor
             </Badge>
           )}
@@ -35,23 +36,25 @@ export function VendorDetail({
         )}
         <dl className="mt-4 grid grid-cols-3 gap-4 text-sm">
           <div>
-            <dt className="text-muted-foreground text-xs uppercase">TRN</dt>
+            <dt className="text-muted-foreground text-xs">TRN</dt>
             <dd className="tabular-mono">{vendor.trn ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground text-xs uppercase">Invoices</dt>
+            <dt className="text-muted-foreground text-xs">Invoices</dt>
             <dd className="tabular-mono">{formatCount(vendor.invoiceCount)}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground text-xs uppercase">Total (AED)</dt>
-            <dd className="tabular-mono">{formatAed(vendor.totalAed)}</dd>
+            <dt className="text-muted-foreground text-xs">Total (AED)</dt>
+            <dd className="tabular-mono">
+              <Amount text={formatAed(vendor.totalAed)} />
+            </dd>
           </div>
         </dl>
       </div>
 
       <section>
         <h3 className="mb-2 text-sm font-semibold">Bank details</h3>
-        <ul className="divide-border border-border divide-y rounded-md border">
+        <ul className="panel divide-border/60 divide-y overflow-hidden">
           {vendor.bankDetails.map((bank) => (
             <li key={bank.id} className="flex items-center justify-between px-4 py-3">
               <div>
@@ -86,7 +89,7 @@ export function VendorDetail({
 
       <section>
         <h3 className="mb-2 text-sm font-semibold">Recent invoices</h3>
-        <ul className="divide-border border-border divide-y rounded-md border">
+        <ul className="panel divide-border/60 divide-y overflow-hidden">
           {invoices.slice(0, 20).map((inv) => (
             <li key={inv.id}>
               <Link
@@ -96,7 +99,9 @@ export function VendorDetail({
                 <span className="tabular-mono">{inv.id}</span>
                 <StatusBadge status={inv.status} />
                 <RouteBadge route={inv.route} />
-                <span className="tabular-mono ms-auto">{formatAed(inv.total)}</span>
+                <span className="tabular-mono ms-auto">
+                  <Amount text={formatAed(inv.total)} />
+                </span>
               </Link>
             </li>
           ))}

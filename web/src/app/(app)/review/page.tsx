@@ -29,8 +29,11 @@ export default function ReviewQueuePage() {
   // skeleton rows, so the page's real layout paints before the data arrives.
   if (invoices?.length === 0) {
     return (
-      <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-        Nothing waiting on you — the queue is clear.
+      <div className="flex h-full flex-col items-center justify-center gap-1 p-6 text-center">
+        <p className="text-sm font-medium">The review queue is clear</p>
+        <p className="text-muted-foreground text-sm">
+          New invoices that need a person will show up here.
+        </p>
       </div>
     );
   }
