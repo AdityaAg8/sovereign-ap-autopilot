@@ -1,6 +1,6 @@
 """Unit tests for scripts/check_headers.py: header detection per language, the skip
 rules for lockfiles/generated output/markdown/json/migrations, and the paths/--all
-CLI (PRD §8, §10 M0.2, M0.6)."""
+CLI."""
 
 import importlib.util
 import subprocess

@@ -1,4 +1,4 @@
-"""Tests for the CORD data guards (ADR-0019 amendment 1, §9.3a): CORD amounts read with the frozen
+"""Tests for the CORD data guards (ADR-0019 amendment 1): CORD amounts read with the frozen
 real-track rule, the CORD "not empty" rule (total + a line item), the receipt identity on the raw
 `gt_parse` (tax-inclusive, discount already netted), and UAE/FATURA/DocILE guard results that are
 byte-identical with or without the CORD trees."""

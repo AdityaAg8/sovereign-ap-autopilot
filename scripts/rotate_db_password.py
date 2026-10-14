@@ -1,6 +1,6 @@
 """Sets the Postgres passwords of the schema owner (`POSTGRES_USER`) and the read-only
 `apx_agent_ro` role to the values in `.env`, for installs whose volume was initialised with an
-old default (REVIEW C-02, L-01). Run as `make rotate-db-password` (after `make env`); idempotent,
+old default. Run as `make rotate-db-password` (after `make env`); idempotent,
 and it never prints or passes a password on a command line."""
 
 from __future__ import annotations

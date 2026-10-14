@@ -1,5 +1,5 @@
 """`POST /proposals/{id}/accept`: executes a pending agent/chat proposal if the actor holds
-`EXECUTE_PROPOSAL` plus the capability its kind requires (P5, ADR-0008 K4, PRD §10 M5.3)."""
+`EXECUTE_PROPOSAL` plus the capability its kind requires (P5, ADR-0008 K4)."""
 
 from __future__ import annotations
 

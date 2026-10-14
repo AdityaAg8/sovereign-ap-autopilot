@@ -1,7 +1,7 @@
 /** Factory that picks the API adapter for this environment. The UI only ever imports `ApiClient`
  * and `getApiClient` from this module — never a concrete adapter directly — so swapping the
- * fixture adapter for the HTTP adapter once apx/api (M5.3) lands is a one-line change here, not a
- * page-by-page rewrite (PRD §10 M5.4). The fixture adapter (and its generated data) is imported
+ * fixture adapter for the HTTP adapter once apx/api lands is a one-line change here, not a
+ * page-by-page rewrite. The fixture adapter (and its generated data) is imported
  * on first use and only in fixture mode, so it never ships on the critical path of any route. */
 import { httpApiClient } from "@/lib/api/http-adapter";
 import type { ApiClient } from "@/lib/api/contract";
@@ -11,7 +11,7 @@ export { ApiError } from "@/lib/api/contract";
 
 export type ApiMode = "fixture" | "http";
 
-/** Dev and Playwright e2e (per M5.4's acceptance criteria) default to "fixture"; set
+/** Dev and Playwright e2e ('s acceptance criteria) default to "fixture"; set
  * NEXT_PUBLIC_API_MODE=http once apx/api is reachable to run the same UI against the real
  * service. Exported separately from `getApiClient` so screens (e.g. the login form's demo-account
  * list) can branch on the mode without pulling in either adapter. */

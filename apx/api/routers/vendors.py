@@ -1,5 +1,5 @@
 """Vendor endpoints: list with search/paging and detail with masked bank details, the G-3
-verified flag and recent invoices (PRD §10 M5.4 vendor view)."""
+verified flag and recent invoices."""
 
 from __future__ import annotations
 

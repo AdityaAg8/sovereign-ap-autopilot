@@ -1,4 +1,4 @@
-/** Inline citation markers in assistant text (PRD §10 M9.3, ADR-0010 CITATION_PATTERN): splits a
+/** Inline citation markers in assistant text (ADR-0010 CITATION_PATTERN): splits a
  * reply into plain text and `[source:ref]` markers so the panel can render each marker as a link
  * to the record it cites. The pattern mirrors apx.agent.interfaces.CITATION_PATTERN exactly. */
 import type { ChatCitation, CitationSource } from "@/lib/api/types";

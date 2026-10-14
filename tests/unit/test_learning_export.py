@@ -1,9 +1,8 @@
-"""Unit tests for `apx.learning.export`'s split guard (PRD §10 M10.1, §6.2 I5): the export
+"""Unit tests for `apx.learning.export`'s split guard (I5): the export
 must refuse a non-training-split row on its own, independent of the database query's `WHERE`
 clause, and must build a correct manifest row for a genuine training-split correction. No
 database is used here (constructs `apx.db.models.Label` rows directly, never flushed); the
-end-to-end query + file write is covered by `tests/integration/test_corrections.py`.
-"""
+end-to-end query + file write is covered by `tests/integration/test_corrections.py`."""
 
 from __future__ import annotations
 

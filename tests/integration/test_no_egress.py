@@ -1,12 +1,11 @@
-"""Integration proof for ADR-0001 (PRD C1, §10 M0.4/M0.5): from inside the `app`-network
+"""Integration proof for ADR-0001: from inside the `app`-network
 containers this milestone owns (llama-swap, toolbox), DNS resolution and a TCP connect to a
 public host must fail; `gateway` (the one container that also joins the non-internal `edge`
 network) is checked differently -- it does have outbound routing, so this proves its nginx
 config only ever reaches its declared proxy targets, never an arbitrary host. Needs a live
 `make up` stack and a working Docker CLI; marked `integration` so it never runs in CI or the
 default `pytest`/`make test` invocation. Per PRD §8, a Docker/stack problem is a test
-failure with a clear message, never a silent skip.
-"""
+failure with a clear message, never a silent skip."""
 
 from __future__ import annotations
 
@@ -21,7 +20,7 @@ pytestmark = pytest.mark.integration
 
 INFRA_DIR = Path(__file__).resolve().parents[2] / "infra"
 
-# Hosts the runtime must never reach (PRD C1): a public IP (proves no route, not just no
+# Hosts the runtime must never reach: a public IP (proves no route, not just no
 # DNS) and the Hugging Face Hub (the one external service this project's own tooling talks
 # to, and precisely the one a runtime container must never reach on its own).
 BLOCKED_TARGETS = ["1.1.1.1:443", "huggingface.co:443"]
@@ -76,7 +75,7 @@ def _require_running(service: str) -> None:
 
 def _probe_script(host_port: str) -> str:
     """Bash one-liner: prints BLOCKED_AS_EXPECTED and exits 0 if the TCP connect to
-    `host_port` fails or times out within 5s (the outcome PRD C1 requires); prints
+    `host_port` fails or times out within 5s (the outcome requires); prints
     UNEXPECTED_CONNECT_OK and exits 1 if it unexpectedly succeeds."""
     host, port = host_port.rsplit(":", 1)
     return (

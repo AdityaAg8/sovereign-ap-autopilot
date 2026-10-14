@@ -1,6 +1,5 @@
 """Unit tests for evals/datasets/common.py: sha256 hashing, resumable range-request downloads
-(against httpx.MockTransport, no real network) and BLOCKED.md entry appending (PRD §10 M1.1).
-"""
+(against httpx.MockTransport, no real network) and BLOCKED.md entry appending."""
 
 from __future__ import annotations
 

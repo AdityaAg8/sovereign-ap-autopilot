@@ -1,4 +1,4 @@
-"""CLI for the Extractor B fine-tune (design §4): `--new-run`, `--resume auto|<step>` and
+"""CLI for the Extractor B fine-tune: `--new-run`, `--resume auto|<step>` and
 `--probe`, with guards, GPU lock, fingerprinted resume and exit codes 0 (done or paused),
 2 (typed TrainingError) and 3 (no ladder rung fits). Heavy deps load only on the GPU path."""
 

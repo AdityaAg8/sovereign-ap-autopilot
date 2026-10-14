@@ -1,8 +1,7 @@
 """DB-only string enums persisted as Postgres native enum types. Kept local to `apx.db` (which
 imports only `apx.common`, matching the leaf-module import direction in `docs/architecture.md`)
 rather than importing the heavier `apx.workflows`/`apx.extract`/`apx.policy` packages; the
-`test_db_models.py` unit tests assert these values stay in sync with those interfaces
-(PRD §7 apx/db, §10 M5.1)."""
+`test_db_models.py` unit tests assert these values stay in sync with those interfaces."""
 
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ class DbInvoiceStatus(StrEnum):
 
 
 class FieldSource(StrEnum):
-    """Provenance of a `fields` row value (PRD §10 M5.1 row)."""
+    """Provenance of a `fields` row value."""
 
     EXTRACTOR_A = "extractor_a"
     EXTRACTOR_B = "extractor_b"
@@ -73,8 +72,9 @@ class DecisionAction(StrEnum):
 
 
 class LabelSplit(StrEnum):
-    """Dataset split a label belongs to (PRD §6.2 I5: eval/cal/test data never reach
-    training); `None` means the label is not yet assigned to a split."""
+    """Dataset split a label belongs to
+    (I5: eval/cal/test data never reach training); `None` means the label is not yet assigned to a
+    split."""
 
     TRAIN = "train"
     CAL = "cal"

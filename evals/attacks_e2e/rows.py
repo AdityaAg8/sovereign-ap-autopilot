@@ -1,4 +1,4 @@
-"""Resumable per-case rows for the M6.6 attack run (PRD §10 M6.6): one JSONL file of `snapshot`,
+"""Resumable per-case rows for the M6.6 attack run: one JSONL file of `snapshot`,
 `dropped`, `approved` and `outcome` events keyed by case id, attack sha256 and the run identity
 (defending code, running images, served models, variant, ERP, approve mode). A resumed run keeps
 only rows of its own identity; a changed attack or stack starts that case over."""
@@ -49,7 +49,7 @@ class RunIdentity(Frozen):
     models: dict[str, str]
     """llama-swap alias -> served GGUF sha256."""
     variant: str
-    """Operator label for the stack configuration, e.g. `guard-on` / `guard-off` (§7)."""
+    """Operator label for the stack configuration, e.g. `guard-on` / `guard-off`."""
     erp: str
     """`seed/vendors/users` of the ERP the cases were rendered against."""
     approve: bool

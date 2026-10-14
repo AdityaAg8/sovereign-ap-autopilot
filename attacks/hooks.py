@@ -1,6 +1,6 @@
 """attacks/hooks.py: registers the 8 M6.3 attack categories that fit `factory.hooks`'s
-context/HTML mutation model into the shared `factory.hooks.ATTACK_HOOKS` registry (PRD §10
-M6.3). The remaining four categories mutate PDF bytes or the output filename after
+context/HTML mutation model into the shared `factory.hooks.ATTACK_HOOKS` registry.
+The remaining four categories mutate PDF bytes or the output filename after
 `factory.render.RenderWorker` has already run, so they have no place in that registry and are
 applied directly by `attacks.render` instead: `pdf_metadata_injection` and
 `filename_email_injection` by original design, plus `zero_width` and `bidi_override` because
@@ -76,7 +76,7 @@ def _inject_before_body_close(html: str, snippet: str) -> str:
 @lru_cache(maxsize=1)
 def _behind_image_data_uri() -> str:
     """A tiny opaque gray PNG, stretched over the hidden text via CSS, used by
-    `behind_image` (M6.3 A04). Built at runtime rather than checked in as a binary asset --
+    `behind_image` (A04). Built at runtime rather than checked in as a binary asset --
     one solid pixel is enough to fully occlude the text underneath it."""
     buffer = BytesIO()
     Image.new("RGB", (1, 1), (196, 196, 196)).save(buffer, format="PNG")

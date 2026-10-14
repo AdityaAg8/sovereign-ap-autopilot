@@ -1,6 +1,6 @@
 """`scripts/init_env.py`: first run copies `.env.example` and generates the empty secrets; later
 runs append only missing keys, fill only empty ones, never touch a value that is already set and
-never print a value (PRD §10 M5.6, REVIEW C-02/L-01)."""
+never print a value."""
 
 from __future__ import annotations
 

@@ -1,9 +1,8 @@
 """The one `Ingestor.ingest` function shared by the `data/inbox/` watcher and the API upload
-path (PRD §10 M5.5): validates and stores the document, dedupes it by sha256 through the
+path: validates and stores the document, dedupes it by sha256 through the
 `ingested_documents` table's unique primary key, and starts `InvoiceWorkflow` through the
 `WorkflowStarter` interface with idempotency key = sha256 -- exactly once, even when the same
-document arrives twice, from either path, concurrently.
-"""
+document arrives twice, from either path, concurrently."""
 
 from __future__ import annotations
 
@@ -62,10 +61,9 @@ class Ingestor:
         self, data: bytes, filename: str, source: Literal["watch", "upload"]
     ) -> IngestResult:
         """Dedupe by sha256, store, start the workflow. Raises `apx.common.errors.IngestError`
-        subclasses: `apx.ingest.validate` errors for bad input, `apx.ingest.errors
-        .WorkflowStartError` if the workflow-starter interface fails (the dedupe row is then
-        rolled back, so the same bytes can be retried).
-        """
+        subclasses: `apx.ingest.validate` errors for bad input, `apx.ingest.errors.
+        WorkflowStartError` if the workflow-starter interface fails (the dedupe row is then
+        rolled back, so the same bytes can be retried)."""
         document = self._store.put(data, filename, source)
         async with get_session() as session:
             won = await _insert_dedupe_row(session, document)

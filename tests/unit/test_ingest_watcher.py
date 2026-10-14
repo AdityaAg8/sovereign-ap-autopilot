@@ -1,8 +1,7 @@
 """Unit tests for `apx.ingest.watcher`: the `data/inbox/` watcher reads a dropped file only once
 its size has settled, ingests it through the injected `Ingestor` with `source="watch"`, and
-never crashes the watch loop on a hardening rejection (PRD §10 M5.5). No database is used: the
-`Ingestor` collaborator is a fake that only records calls.
-"""
+never crashes the watch loop on a hardening rejection. No database is used: the
+`Ingestor` collaborator is a fake that only records calls."""
 
 from __future__ import annotations
 

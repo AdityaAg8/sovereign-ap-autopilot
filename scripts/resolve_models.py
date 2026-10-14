@@ -1,8 +1,7 @@
 """Resolves every model in infra/models.yaml against the live Hugging Face Hub API into
 infra/models.lock.json: exact revision commit sha, per-file sha256/size and license, so
-`make models` (scripts/download_models.py) never fetches an unverified blob (PRD §4, §10
-M0.4: "never guess an id").
-"""
+`make models` (scripts/download_models.py) never fetches an unverified blob
+("never guess an id")."""
 
 from __future__ import annotations
 

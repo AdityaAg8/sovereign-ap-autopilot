@@ -1,4 +1,4 @@
-"""The agent tool loop and its two callers (PRD §10 M9.3, ADR-0010): the exception agent, which
+"""The agent tool loop and its two callers (ADR-0010): the exception agent, which
 writes a cited review note for a review-routed invoice, and ops chat, which answers staff
 questions. Both run the same bounded loop over the tool dispatcher and return only replies whose
 citations trace back to this turn's tool results; anything else becomes the fixed refusal."""

@@ -1,10 +1,9 @@
-"""Unit tests for the document-serving digest guard in `apx.api.service.DbInvoiceService
-.get_document` (PRD §10 M5.3/M5.4, docs/security.md B1): the sha256-shape check that stops a
+"""Unit tests for the document-serving digest guard in `apx.api.service.DbInvoiceService.
+get_document` (docs/security.md B1): the sha256-shape check that stops a
 corrupted or otherwise-unexpected `document_sha256` from ever reaching `FileDocumentStore.get`
 with a value that is not exactly 64 lowercase hex characters -- the only shape it turns into an
 on-disk path. No database is needed for this part; the full route (including a real invoice row
-and a real stored file) is covered end to end in `tests/integration/test_api_authz.py`.
-"""
+and a real stored file) is covered end to end in `tests/integration/test_api_authz.py`."""
 
 from __future__ import annotations
 

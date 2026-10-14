@@ -1,4 +1,4 @@
-"""M3.4 bake-off runner (PRD §10 M3.4): parses every bake-off document not yet in the shared parse
+"""M3.4 bake-off runner: parses every bake-off document not yet in the shared parse
 cache (`make parse-cache` already holds the UAE subset), then runs each probed, in-budget arm
 strictly sequentially over the fixed 200-document UAE subset (a scanned document as its
 image-only scan PDF, as the runtime receives it) and ExtractBench short, appending
@@ -115,7 +115,7 @@ def arm_identities(
 
 
 def require_probe_ok(probe: Mapping[str, ProbeResult], arm: Arm) -> None:
-    """No eval hours for an arm that was not probed or did not fit the budget (PRD M3.4)."""
+    """No eval hours for an arm that was not probed or did not fit the budget."""
     result = probe.get(arm.key)
     if result is None:
         raise BakeoffError(f"{arm.key}: no VRAM probe on record; run `make bakeoff-probe` first")

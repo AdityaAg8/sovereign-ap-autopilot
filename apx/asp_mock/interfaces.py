@@ -1,5 +1,5 @@
 """Interfaces for the mock Access Service Provider: exactly-once submission receipts and archive
-records keyed by idempotency key (PRD §3, §6.4)."""
+records keyed by idempotency key."""
 
 from __future__ import annotations
 

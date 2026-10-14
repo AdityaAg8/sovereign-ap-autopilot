@@ -1,12 +1,11 @@
 """Typed fraud rules: duplicate/near-duplicate invoices, split invoices, recent bank-detail
-change, new vendor with a high amount, shared IBAN across vendors and PO price variance (PRD
-§3 apx/fraud, §10 M8.1). Each rule returns `FraudFlag`s carrying a plain-language explanation.
+change, new vendor with a high amount, shared IBAN across vendors and PO price variance.
+Each rule returns `FraudFlag`s carrying a plain-language explanation.
 
 Credit notes are `Invoice`s with `kind is InvoiceKind.CREDIT_NOTE` and amounts as printed
 (ADR-0012), never a negative total. The duplicate and split rules compare only documents of the
 same kind, so a credit note is never a duplicate of, or a split part of, the invoice it reverses.
-A None kind (unresolved, already routed to review) compares with either kind.
-"""
+A None kind (unresolved, already routed to review) compares with either kind."""
 
 from __future__ import annotations
 
@@ -58,10 +57,10 @@ def _recency_score(days_since: int, window_days: int) -> Score:
 @dataclass(frozen=True, slots=True)
 class DuplicateInvoiceRule:
     """Exact-key duplicate detection, plus perceptual-hash and (optional) learned-embedding
-    near-duplicate detection over page images (PRD §3: "duplicates ... perceptual hash ...
-    Qwen3-VL-Embedding-2B page similarity"). The embedding-backed index lives in
-    `apx/fraud/page_similarity.py`; this rule only depends on the `PageSimilarityIndex` Protocol.
-    """
+    near-duplicate detection over page images
+    ("duplicates ... perceptual hash ... Qwen3-VL-Embedding-2B page similarity"). The
+    embedding-backed index lives in
+    `apx/fraud/page_similarity.py`; this rule only depends on the `PageSimilarityIndex` Protocol."""
 
     window_days: int = 14
     max_hamming_distance: int = 6
@@ -73,8 +72,7 @@ class DuplicateInvoiceRule:
         """Flag an exact match on normalized number + vendor + amount within the date window.
 
         A different vendor using the same invoice number is not a duplicate (the vendor check
-        below is explicit, independent of what `history.recent_for_vendor` happens to return).
-        """
+        below is explicit, independent of what `history.recent_for_vendor` happens to return)."""
         if invoice.vendor_id is None:
             return []
         key_number = normalize_invoice_number(invoice.number)
@@ -122,8 +120,7 @@ class DuplicateInvoiceRule:
         """Flag near-duplicate pages by perceptual hash against candidate invoices' pages.
 
         `candidates` is supplied by the caller (typically recent invoices, any vendor) since
-        page images are not part of `InvoiceHistory`.
-        """
+        page images are not part of `InvoiceHistory`."""
         if not page_images:
             return []
         our_hashes = _page_hashes(page_images)
@@ -167,8 +164,7 @@ class DuplicateInvoiceRule:
         k: int = 5,
     ) -> list[FraudFlag]:
         """Flag near-duplicate pages using the learned page-embedding index, when one is wired
-        in. Optional: callers without a `PageSimilarityIndex` simply never call this method.
-        """
+        in. Optional: callers without a `PageSimilarityIndex` simply never call this method."""
         flags: list[FraudFlag] = []
         for page_num, page_png in enumerate(page_images):
             for neighbour in await similarity_index.nearest(page_png, k):
@@ -216,8 +212,8 @@ def _min_hamming_distance(
 @dataclass(frozen=True, slots=True)
 class SplitInvoiceRule:
     """Flags several invoices from one vendor, each individually under the approval limit,
-    whose sum within a short window reaches or exceeds it (PRD §3: "split invoices under the
-    approval limit within N days")."""
+    whose sum within a short window reaches or exceeds it
+    ("split invoices under the approval limit within N days")."""
 
     approval_limit: Money
     window_days: int = 7
@@ -270,7 +266,7 @@ class SplitInvoiceRule:
 @dataclass(frozen=True, slots=True)
 class BankDetailChangeRule:
     """Flags an invoice paid to an IBAN that was changed for this vendor shortly before it was
-    issued (PRD §3: "recent bank-detail change")."""
+    issued ("recent bank-detail change")."""
 
     window_days: int = 30
     rule_id: str = "bank_detail_change"
@@ -317,7 +313,7 @@ class BankDetailChangeRule:
 @dataclass(frozen=True, slots=True)
 class NewVendorHighAmountRule:
     """Flags a high-value invoice from a vendor with no invoice history in the lookback window
-    (PRD §3: "new vendor with a high amount")."""
+    ("new vendor with a high amount")."""
 
     high_amount_threshold: Money
     new_vendor_window_days: int = 180
@@ -371,8 +367,8 @@ class NewVendorHighAmountRule:
 
 @dataclass(frozen=True, slots=True)
 class SharedIbanRule:
-    """Flags an IBAN also used to pay a different vendor (PRD §3: "the same IBAN shared by
-    different vendors"), a common shell-vendor / impersonation pattern."""
+    """Flags an IBAN also used to pay a different vendor
+    ("the same IBAN shared by different vendors"), a common shell-vendor / impersonation pattern."""
 
     rule_id: str = "shared_iban"
     typology: FraudTypology = FraudTypology.VENDOR_IMPERSONATION
@@ -410,7 +406,7 @@ class SharedIbanRule:
 @dataclass(frozen=True, slots=True)
 class PriceVarianceRule:
     """Flags invoice lines whose unit price differs from the PO line they bill by more than a
-    tolerance (PRD §3: "price variance against the PO"). Lines are attributed to PO lines only by
+    tolerance ("price variance against the PO"). Lines are attributed to PO lines only by
     `attribute_po_line` (stated reference, else unique description + quantity), never by
     position. Lines that cannot be attributed get one low-severity `po_line_unmatched` flag
     scored below the review threshold: the reviewer sees them, but they are not a variance."""

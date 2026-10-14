@@ -1,5 +1,5 @@
 """Fails loudly if the pinned transformers/TRL move the private Trainer methods and callback
-hooks that `GuardedSFTTrainer` and `LoopCallback` override (ADR-0011 consequences, design §7).
+hooks that `GuardedSFTTrainer` and `LoopCallback` override (ADR-0011 consequences).
 Needs the trainer image's torch stack, so it carries the `trainer` marker; it runs on CPU there."""
 
 from __future__ import annotations

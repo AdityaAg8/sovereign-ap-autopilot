@@ -1,4 +1,4 @@
-"""Database credentials without defaults (REVIEW C-02, L-01): `scripts/rotate_db_password.py`
+"""Database credentials without defaults: `scripts/rotate_db_password.py`
 sets both roles from `.env` without a secret on any command line or in its output, migration
 0013 sets `apx_agent_ro`'s password from `AGENT_RO_PASSWORD`, and `apx.agent.sql` builds the
 agent URL from the environment with no built-in password."""

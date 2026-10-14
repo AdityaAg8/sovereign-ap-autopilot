@@ -2,7 +2,7 @@
 Extractor A/B and the arbiter into one `ExtractionResult`, building the canonical `Invoice`
 from grounded fields, and resolving a vendor's current bank state for policy routing. Concrete
 implementations land with the extract/validate/fraud modules; `apx.workflows` only calls them
-through an injected registry (PRD §3, §10 M5.2)."""
+through an injected registry."""
 
 from __future__ import annotations
 

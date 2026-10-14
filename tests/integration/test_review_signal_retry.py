@@ -1,4 +1,4 @@
-"""M11.3 audit pass 2 (REVIEW.md N-01): a review decision whose Temporal signal fails (503) must
+"""M11.3 audit pass 2: a review decision whose Temporal signal fails (503) must
 stay recoverable by re-sending the same decision, as `apx.api.signals.WorkflowSignalError`
 promises. The pass-1 fix made reject write a terminal BLOCKED status before signalling, so a retried
 reject now answers 409 and the waiting workflow is never told. Runs against a throwaway Postgres

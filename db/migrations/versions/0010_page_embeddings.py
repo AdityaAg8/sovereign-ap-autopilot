@@ -1,5 +1,5 @@
 """add `page_embeddings`: one Qwen3-VL-Embedding-2B vector per invoice page, scoped to the
-invoice's vendor, for learned near-duplicate detection (PRD §3 apx/fraud, §10 M8.1). Enables
+invoice's vendor, for learned near-duplicate detection. Enables
 pgvector's `vector` extension (the Compose image is pgvector/pgvector:pg16). No ANN index: an
 HNSW/IVFFlat index on `vector` stops at 2000 dimensions, and the vendor-scoped exact scan over
 one vendor's pages is small. Shape kept in sync with `apx.db.models.PageEmbedding` by the

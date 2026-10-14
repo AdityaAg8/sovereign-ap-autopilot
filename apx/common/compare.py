@@ -3,8 +3,7 @@ and the plain-string `FIELD_KIND_BY_NAME` lookup. `apx.trust.features` (trust la
 gate) and `evals.scorers.field_f1` (the F1 scoreboard, including Extractor B's promotion gate) both
 delegate to this module, so "correct" means the same thing on both sides of ADR-0009 §4.1's
 equivalence requirement; it has no dependency on `apx.trust`, so `evals` never imports trust/cal
-code.
-"""
+code."""
 
 from __future__ import annotations
 
@@ -211,7 +210,7 @@ def normalize_for_compare(kind: FieldKind, raw: str | None) -> str | None:
     def or_tilde_fallback(candidate: str) -> str:
         # A non-blank `raw` must never canonicalise to "": that would make it indistinguishable,
         # on a second pass through this same function, from a genuinely blank/None value (the
-        # `if not common: return None` check above), breaking idempotency (M7.4 proof). The
+        # `if not common: return None` check above), breaking idempotency (proof). The
         # leading "~" guarantees a non-empty result even when `_text_canonical(common)` is also
         # empty (an all-punctuation value), and it can never equal a validly-parsed canonical form.
         return candidate if candidate else "~" + _text_canonical(common)

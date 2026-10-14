@@ -1,4 +1,4 @@
-"""M7.4/M7.5 cal job and gate (PRD §6.1, §10; ADR-0009 §5-§8; ADR-0015): fits the trust
+"""M7.4/M7.5 cal job and gate (ADR-0009 §5-§8; ADR-0015): fits the trust
 calibrator on UAE cal rows of A and B, picks λ̂ by Learn-then-Test for alpha in {0.5, 1, 2}% at
 delta = 5%, saves the versioned artifact under data/trust/, measures the error among
 auto-accepted fields on UAE test rows, and only when that M7.5 gate passes and the artifact was
@@ -248,7 +248,7 @@ def fit_calibration(
         calibrator=state,
         extractor_a=a,
         extractor_b=b,
-        arbiter=None,  # no arbiter served yet (M7.3): disputed fields are H2-rejected
+        arbiter=None,  # no arbiter served yet: disputed fields are H2-rejected
         thresholds=tuple(thresholds),
         ltt_min_accepted=LTT_MIN_ACCEPTED,
         fitted_at=now,
@@ -732,7 +732,7 @@ def _champions(args: argparse.Namespace) -> Champions:
             "models_lock": args.models_lock,
             "models_root": args.models_root,
         }
-        # No arbiter is served yet (M7.3); the runtime composition root serves none either.
+        # No arbiter is served yet; the runtime composition root serves none either.
         return ServedBuilds(
             served_identity(args.champion_a, prompt_builder_for(ExtractorId.A), **paths),
             served_identity(args.champion_b, prompt_builder_for(ExtractorId.B), **paths),

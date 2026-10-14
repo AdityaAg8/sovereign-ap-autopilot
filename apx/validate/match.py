@@ -1,6 +1,6 @@
 """3-way match: reconciles invoice lines against a purchase order and its goods receipts,
 enforcing exact quantity against cumulative receipts (minus quantities already invoiced),
-configurable unit-price tolerance and per-line currency consistency (PRD §10 M4.2)."""
+configurable unit-price tolerance and per-line currency consistency."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from apx.validate.interfaces import (
 )
 
 DEFAULT_MATCH_TOLERANCE = MatchTolerance(quantity=Decimal("0"), price_pct=Decimal("0.005"))
-"""Quantity must match received exactly; unit price may differ by up to ±0.5% (PRD §10 M4.2)."""
+"""Quantity must match received exactly; unit price may differ by up to ±0.5%."""
 
 
 class LineMatch(Frozen):
@@ -91,7 +91,7 @@ def match_invoice(
 
     `previously_invoiced` maps a PO line ref to the quantity already billed by other invoices
     against that same line; it is subtracted from cumulative receipts to get the quantity still
-    available to this invoice. Quantity tolerance is exact by default (PRD §10 M4.2)."""
+    available to this invoice. Quantity tolerance is exact by default."""
     prior = previously_invoiced or {}
 
     if po is None:

@@ -1,8 +1,7 @@
 """Content-addressed `DocumentStore` on local disk: validates a document against every upload
 hardening rule (`apx.ingest.validate`), then writes it under its sha256 exactly once, so a byte
 -identical document dropped in the watch folder or uploaded through the API is stored a single
-time (PRD §10 M5.5).
-"""
+time."""
 
 from __future__ import annotations
 

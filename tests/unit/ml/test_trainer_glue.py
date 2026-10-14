@@ -1,4 +1,4 @@
-"""CPU tests for the torch-free parts of the Extractor B trainer glue (design §4): the skippable
+"""CPU tests for the torch-free parts of the Extractor B trainer glue: the skippable
 optimizer class mixin and the private-hook checker, against fakes here (the real Trainer check is
 the `trainer`-marked `tests/trainer/test_private_api_pins.py`). Importing needs no torch."""
 

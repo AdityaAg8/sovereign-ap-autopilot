@@ -1,4 +1,4 @@
-"""M10.2 `make retrain` orchestration (PRD §10 M10.2, ADR-0015 §5): corrections export, LoRA
+"""M10.2 `make retrain` orchestration (ADR-0015 §5): corrections export, LoRA
 training, shadow eval of champion and challenger, the decision, then on PROMOTE the ordered side
 effects (audit, calibrator invalidation, models.lock entry, alias move, audit) through injected
 protocols. `main()` stops with exit 2 and `RetrainPrerequisiteError` until the adapters exist."""

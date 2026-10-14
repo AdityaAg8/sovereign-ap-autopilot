@@ -1,4 +1,4 @@
-"""Read-only database facts for the M6.6 attack run (PRD §10 M6.6): the vendor bank-master
+"""Read-only database facts for the M6.6 attack run: the vendor bank-master
 snapshot taken when the run starts, the status/route of in-flight invoices (and `failed` for a
 document whose workflow gave up before its invoice existed), every bank-master write
 since the snapshot, and one settled invoice's full `CaseState` (payee pinned at routing, reasons,

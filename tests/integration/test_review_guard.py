@@ -1,12 +1,12 @@
-"""M11.2 (REVIEW.md C-01, C-03, H-01, H-02, M-06, L-04) against a throwaway Postgres: every review
+"""M11.2 against a throwaway Postgres: every review
 transition through the API (reject only while awaiting review, send-to-review only before routing,
 both 409 otherwise), the workflow's `review_hold` and `confirm_review` activities over the real
 rows (a signal with no digest-matched approval is never backed), proposal acceptance that either
 acts or is refused, and the role an approval is recorded under. M11.3: a stale recorded approval
-raises `StaleApprovalError` (N-13), a retried hold never reopens an approval (N-09), a repeated
-reject re-sends its signal (N-02), and decisions, edits and accepted proposals commit with their
-audit entry (N-07). M11.4: an approval signal's corrections must match the ones recorded with the
-approval, and an edit after the approval makes it stale (N-03). Reuses `test_api_authz.py`'s
+raises `StaleApprovalError`, a retried hold never reopens an approval, a repeated
+reject re-sends its signal, and decisions, edits and accepted proposals commit with their
+audit entry. M11.4: an approval signal's corrections must match the ones recorded with the
+approval, and an edit after the approval makes it stale. Reuses `test_api_authz.py`'s
 helpers on its own container name and port."""
 
 from __future__ import annotations
@@ -218,7 +218,7 @@ async def _transitions_scenario() -> None:
         assert await _status(review) is DbInvoiceStatus.BLOCKED
         assert (await _audit_actions(f"invoice:{review}")).count("decision.reject") == 2
 
-        # In flight: reject is refused (C-01); send_to_review is a durable hold only.
+        # In flight: reject is refused; send_to_review is a durable hold only.
         assert await decide(in_flight, "reject") == 409
         assert await decide(in_flight, "send_to_review") == 204
         assert await _status(in_flight) is DbInvoiceStatus.FRAUD_CHECKED

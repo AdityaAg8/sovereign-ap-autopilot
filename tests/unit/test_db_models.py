@@ -1,9 +1,8 @@
 """Unit tests on `apx.db` model metadata: no float money columns, the G-3 bank-verification
 CHECK/generated-column pair, the audit-log hash chain shape, idempotency-key uniqueness, and
-that every `apx.db.enums` mirror stays in sync with the interface it copies (PRD §6.3, §6.4,
-§10 M5.1). No database connection is used here -- see `tests/integration/test_migrations.py`
-for the real-Postgres round trip.
-"""
+that every `apx.db.enums` mirror stays in sync with the interface it copies.
+No database connection is used here -- see `tests/integration/test_migrations.py`
+for the real-Postgres round trip."""
 
 from __future__ import annotations
 
@@ -55,7 +54,7 @@ EXPECTED_TABLES = {
     "fraud_flags",
 }
 
-# Columns that are legitimately `float` (probabilities/measurements, never money, §6.3).
+# Columns that are legitimately `float` (probabilities/measurements, never money).
 ALLOWED_FLOAT_COLUMNS = {("fields", "confidence"), ("fraud_flags", "score")}
 
 

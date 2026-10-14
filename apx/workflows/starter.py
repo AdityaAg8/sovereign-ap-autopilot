@@ -1,7 +1,7 @@
 """Temporal-backed `apx.ingest.interfaces.WorkflowStarter` and the lazily-connected client
 shared with the API's review signaller: one `InvoiceWorkflow` per ingested document, with the
-workflow id (= invoice id) set to the document's sha256 (PRD §3, §10 M5.2). The id is never
-reused, even after its workflow has closed (REVIEW L-06), so exactly-once does not rest on the
+workflow id (= invoice id) set to the document's sha256. The id is never
+reused, even after its workflow has closed, so exactly-once does not rest on the
 idempotency keys alone."""
 
 from __future__ import annotations

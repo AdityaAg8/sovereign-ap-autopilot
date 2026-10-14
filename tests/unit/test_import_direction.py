@@ -1,8 +1,8 @@
 """Static import-direction check for docs/architecture.md: the "common-only" apx packages
 (llm, parse, scan, validate, fraud, audit, einvoice) must never import each other -- only
 apx.common and the apx.db infrastructure layer their persistence adapters need -- and
-apx.common must not import any other apx package (PRD §8, M8.1 F2 regression: apx.fraud once
-imported apx.validate.interfaces)."""
+apx.common must not import any other apx package
+(regression: apx.fraud once imported apx.validate.interfaces)."""
 
 from __future__ import annotations
 

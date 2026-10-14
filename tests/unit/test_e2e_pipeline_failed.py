@@ -1,7 +1,7 @@
 """`scripts/e2e_pipeline.py` with documents whose workflow failed before their invoice row
 existed: the API now answers FAILED with the recorded error (not a 404 forever), the driver
 settles them, and the report counts a failed factory invoice as a miss and a failed-before-routing
-attack as held (never paid), separately from attacks a defence decided (PRD §10 M5.6)."""
+attack as held (never paid), separately from attacks a defence decided."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-/** Login screen: brand mark, one sentence of context and the sign-in form (PRD §10 M5.4). Kept
+/** Login screen: brand mark, one sentence of context and the sign-in form. Kept
  * minimal — no imagery, no client JS beyond the form — to hold Lighthouse performance at ≥95. */
 import { FileStack } from "lucide-react";
 import { LoginForm } from "@/components/login/login-form";

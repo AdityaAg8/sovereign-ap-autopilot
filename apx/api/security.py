@@ -1,7 +1,6 @@
 """Password hashing (argon2) and JWT access tokens (PyJWT, HS256): issues short-lived tokens at
-login and verifies them on every request via `JwtTokenVerifier` (PRD §10 M5.3, apx.api.interfaces
-.TokenVerifier).
-"""
+login and verifies them on every request via `JwtTokenVerifier`
+(apx.api.interfaces .TokenVerifier)."""
 
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ def verify_login(password_hash: str | None, password: str) -> bool:
     """`verify_password` for a login attempt whose user may not exist: with no stored hash it
     still runs a full argon2 verify against `dummy_hash()` and returns False, so an unknown
     email takes as long as a wrong password and response timing does not reveal which emails
-    are registered (REVIEW L-02)."""
+    are registered."""
     if password_hash is None:
         verify_password(dummy_hash(), password)
         return False

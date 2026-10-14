@@ -1,6 +1,6 @@
 """Unit tests for `apx.parse.store.FileParsedDocumentStore`: a 5-page parse (real PNGs) round
 -trips exactly, `put` is idempotent and content-addressed, and a missing or tampered entry
-raises the matching typed error instead of returning partial data (PRD §10 M5.2)."""
+raises the matching typed error instead of returning partial data."""
 
 from __future__ import annotations
 

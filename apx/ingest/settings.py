@@ -1,8 +1,7 @@
 """Environment-driven configuration for `apx.ingest`: the watch-folder and content-addressed
-store locations, and the upload hardening limits every ingest path enforces (PRD §10 M5.5).
+store locations, and the upload hardening limits every ingest path enforces.
 `max_bytes`/`max_pages` default to PRD §10 M5.3's 20 MB / 30 pages, the only upload limits
-(the API upload route and the inbox watcher both enforce them through `Ingestor`).
-"""
+(the API upload route and the inbox watcher both enforce them through `Ingestor`)."""
 
 from __future__ import annotations
 
@@ -34,6 +33,6 @@ class IngestSettings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_ingest_settings() -> IngestSettings:
-    """Process-wide settings, created once and reused. Tests call `get_ingest_settings
-    .cache_clear()` after `monkeypatch.setenv` to pick up a fresh environment."""
+    """Process-wide settings, created once and reused. Tests call `get_ingest_settings.
+    cache_clear()` after `monkeypatch.setenv` to pick up a fresh environment."""
     return IngestSettings()

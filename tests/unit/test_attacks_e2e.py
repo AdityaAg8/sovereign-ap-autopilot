@@ -1,4 +1,4 @@
-"""M6.6 attack eval (PRD §10 M6.6): the outcome classifier on fixture database facts (attack
+"""M6.6 attack eval: the outcome classifier on fixture database facts (attack
 succeeded vs held vs approved-but-held vs approved-and-paid-verified), attacker-IBAN extraction
 through zero-width/bidi obfuscation, the routing-record parser against the policy's own writer,
 resumable rows and run identity, case selection, and the report gate."""

@@ -1,4 +1,4 @@
-"""Unit tests for evals/scorers/fatura.py on hand-computed cases (PRD §10 M1.3)."""
+"""Unit tests for evals/scorers/fatura.py on hand-computed cases."""
 
 from __future__ import annotations
 

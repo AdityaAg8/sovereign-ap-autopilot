@@ -1,6 +1,6 @@
 """Unit tests for the M9.3 agent loop, prompt builder and citation checks: a scripted LLM and a
 scripted dispatcher drive the real ToolLoop, LlmOpsChat, LlmExceptionAgent and
-DefaultAgentPromptBuilder (PRD §10 M9.3, ADR-0010)."""
+DefaultAgentPromptBuilder (ADR-0010)."""
 
 from __future__ import annotations
 

@@ -1,10 +1,10 @@
-# GPU image for apx/parse's scan-path service (PRD §3, §4, §10 M3.1): PaddleOCR-VL-1.6 served
+# GPU image for apx/parse's scan-path service: PaddleOCR-VL-1.6 served
 # over FastAPI via `transformers`, loaded from the read-only models/ mount, never downloaded
 # here. Mirrors infra/docker/toolbox's CUDA/uv/transformers pins (same model, same pin reasons).
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
 
 # curl: healthcheck and tests/integration/test_parse_service.py's `docker compose exec` probe
-# (the service publishes no host port by design, PRD C1, so exec-in is the only way to reach it).
+# (the service publishes no host port by design, so exec-in is the only way to reach it).
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 

@@ -1,4 +1,4 @@
-/** "?" opens a reference of every keyboard shortcut active on the current screen (PRD §10 M5.4).
+/** "?" opens a reference of every keyboard shortcut active on the current screen.
  * This entry point owns the binding and open state; the dialog body is a lazy chunk warmed on
  * the first interaction and mounted on first open, keeping it off the critical path. */
 

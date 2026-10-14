@@ -1,9 +1,8 @@
 """factory/labels.py: the M2.3 label schema (field, value, page, normalized bounding box) plus
 the pure geometry that turns raw DOM `getClientRects()` measurements collected by
 `factory.render` into per-page `Label` records, unioning the individual line boxes of a value
-that wraps across lines while keeping each line's own box (PRD §10 M2.3). Contains no Playwright
-import, so it is fully testable with synthetic input.
-"""
+that wraps across lines while keeping each line's own box. Contains no Playwright
+import, so it is fully testable with synthetic input."""
 
 from __future__ import annotations
 
@@ -52,7 +51,7 @@ class Label(BaseModel):
     """One ground-truth box: `field` with value `value`, appearing on 0-based page `page`.
     `bbox` is the union of every rendered line's box on that page; `line_boxes` keeps each line's
     own box (length 1 unless the value wraps). `line_index` is the 0-based row position within
-    its own line-items table for line-item fields, `None` for header fields (PRD §10 M2.3)."""
+    its own line-items table for line-item fields, `None` for header fields."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -108,7 +107,7 @@ def build_label_set(
     line_field_names: frozenset[str],
 ) -> LabelSet:
     """Pure transform from one `factory.render` JS collection into a `LabelSet`: deterministic,
-    same `raw` input always yields the same labels (PRD §10 M2.3). Raises `ValueError` if a
+    same `raw` input always yields the same labels. Raises `ValueError` if a
     `data-field` name is not part of the extraction schema, or if a field rendered with no
     visible box at all (a template bug, not something to silently drop)."""
     known = header_field_names | line_field_names
@@ -163,7 +162,7 @@ def label_bounds_problems(label_set: LabelSet, *, eps: float = 1e-6) -> list[str
 
 def dump_label_set_json(label_set: LabelSet) -> str:
     """Canonical JSON text for a `LabelSet`: pydantic `mode="json"` dump, LF-terminated, matching
-    `factory.erp.dump_erp_json`'s convention so both artifacts read the same way (PRD §10 M2.3)."""
+    `factory.erp.dump_erp_json`'s convention so both artifacts read the same way."""
     return json.dumps(label_set.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n"
 
 

@@ -1,6 +1,6 @@
 """create initial schema: users/roles, vendor and admin-verified bank details (with history),
 purchase-order/GRN 3-way-match tables, invoices and grounded fields, decisions/approvals/
-proposals, the hash-chained audit log, LLM call telemetry and training labels (PRD §10 M5.1).
+proposals, the hash-chained audit log, LLM call telemetry and training labels.
 
 The table DDL is generated directly from `apx.db.base.Base.metadata`: SQLAlchemy 2.0 renders
 the `GENERATED ALWAYS AS (...) STORED` computed column and every native Postgres enum

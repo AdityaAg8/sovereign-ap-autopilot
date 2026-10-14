@@ -2,7 +2,7 @@
 inlines the Noto Sans / Naskh Arabic / Kufi Arabic subset fonts as base64 `data:` URIs so every
 rendered invoice is a single self-contained HTML file, and exposes the bidi-safe number/currency
 filters the Arabic-first and bilingual layouts use to keep TRNs, IBANs and amounts in reading
-order inside RTL text (PRD §10 M2.2)."""
+order inside RTL text."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ _FONT_FACES: tuple[tuple[str, str, str], ...] = (
 @lru_cache(maxsize=1)
 def font_face_css() -> markupsafe.Markup:
     """`@font-face` rules for every bundled Noto weight, with the font bytes inlined as base64
-    `data:` URIs so a rendered invoice has no external file dependency (PRD §10 M2.2). Returned
+    `data:` URIs so a rendered invoice has no external file dependency. Returned
     as `Markup`: it is built only from the constants above and base64 text, and the template
     environment's autoescape would otherwise turn its quotes into `&#34;` -- invalid CSS that
     silently drops every rule and leaves the page on system fallback fonts."""
@@ -53,14 +53,14 @@ def font_face_css() -> markupsafe.Markup:
 def ltr_isolate(value: object) -> markupsafe.Markup:
     """Wrap `value` in a bidi isolate forced to left-to-right, so Western-digit invoice numbers,
     dates, TRNs, IBANs and amounts keep correct reading order when embedded in Arabic (RTL)
-    prose (PRD §10 M2.2: "correct bidi for numbers/TRN/IBAN")."""
+    prose ("correct bidi for numbers/TRN/IBAN")."""
     text = markupsafe.escape(str(value))
     return markupsafe.Markup(f'<bdi dir="ltr">{text}</bdi>')
 
 
 def format_money(value: Decimal) -> str:
     """Format a `Decimal` amount with thousands separators and exactly 2 decimal places, e.g.
-    `Decimal("12345.6")` -> `"12,345.60"`. Never a float on the money path (PRD §8)."""
+    `Decimal("12345.6")` -> `"12,345.60"`. Never a float on the money path."""
     if not isinstance(value, Decimal):
         raise TypeError(f"format_money expects Decimal, got {type(value).__name__}")
     return f"{value:,.2f}"
@@ -101,6 +101,6 @@ def get_env() -> Environment:
 def render_template(name: str, context: Mapping[str, Any]) -> str:
     """Render one named template from `factory/templates/` with `context`. Deterministic: the
     environment carries no clock, locale or randomness, so identical inputs always produce
-    byte-identical HTML (PRD §10 M2.2)."""
+    byte-identical HTML."""
     template = get_env().get_template(name)
     return template.render(**context)

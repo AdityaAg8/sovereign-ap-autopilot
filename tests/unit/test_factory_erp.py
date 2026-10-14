@@ -1,6 +1,6 @@
 """Unit tests for `factory.erp`: determinism per seed, TRN/IBAN validity of every generated
 identity, referential integrity across vendors/POs/GRNs, partial deliveries, roles and
-approval limits, and JSON export (PRD §10 M2.1)."""
+approval limits, and JSON export."""
 
 from __future__ import annotations
 

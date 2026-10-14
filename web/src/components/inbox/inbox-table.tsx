@@ -1,5 +1,5 @@
 /** Virtualized inbox table: invoice number, vendor, status, amount, confidence and flags for every
- * invoice, with j/k/enter keyboard navigation (PRD §10 M5.4); columns drop out by container width
+ * invoice, with j/k/enter keyboard navigation; columns drop out by container width
  * (globals.css `.inbox-grid`). Uses @tanstack/react-virtual so the DOM only ever
  * holds the visible rows regardless of dataset size. While the rows load, the filter bar and
  * column labels already render above row-height skeletons, so the page paints its real layout

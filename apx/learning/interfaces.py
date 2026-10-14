@@ -1,7 +1,7 @@
 """Typed value objects for the M10.1 corrections store, active-learning candidate selection
 and retraining export: what a reviewer's fix looked like, what makes an (invoice, field) pair
-worth reviewing next, and one row of the manifest handed to `ml/` training code (PRD §10
-M10.1, §6.2 I5)."""
+worth reviewing next, and one row of the manifest handed to `ml/` training code
+(I5)."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class CorrectionRecord(Frozen):
 
 class ActiveLearningCandidate(Frozen):
     """One (invoice, field) pair ranked for the next round of human review, with the
-    deterministic reasons that produced its score (`apx.learning.selection`, PRD §10 M10.1)."""
+    deterministic reasons that produced its score (`apx.learning.selection`)."""
 
     invoice_id: InvoiceId
     field_name: str

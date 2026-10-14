@@ -1,6 +1,6 @@
 """Tests for select_payee and electronic_iban (P1): the payee is always one of the vendor
 master's admin-verified accounts, and `Invoice.iban` only selects among several of them, never
-introduces one (PRD §6.3 P1, ADR-0008 K5, ADR-0014, M6.5)."""
+introduces one (P1, ADR-0008 K5, ADR-0014)."""
 
 from __future__ import annotations
 

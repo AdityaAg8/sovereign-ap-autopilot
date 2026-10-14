@@ -1,7 +1,7 @@
-"""Unit tests for `apx.scan.colors.normalize_color` (M6 part-1 review finding F5): the CMYK
+"""Unit tests for `apx.scan.colors.normalize_color` (part-1 review finding F5): the CMYK
 4-tuple branch and the `None`/unrecognised-shape default branch, plus a detector-level regression
-showing a CMYK near-white-on-white glyph is still caught as INVISIBLE_TEXT (PRD §3, §6.3 A01,
-M6.2)."""
+showing a CMYK near-white-on-white glyph is still caught as INVISIBLE_TEXT
+(A01)."""
 
 from __future__ import annotations
 

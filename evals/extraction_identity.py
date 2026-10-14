@@ -1,4 +1,4 @@
-"""Identity of an extraction eval row (M7.1 review H2): the llama-swap alias, the sha256 of the
+"""Identity of an extraction eval row (review H2): the llama-swap alias, the sha256 of the
 GGUF that alias serves and a hash of the prompt contract (ADR-0012), defined in
 `apx.extract.identity` so the runtime trust gate checks the same thing; eval runs also stamp a
 serving identity (the alias's llama-swap args, the parser build). Resumed runs and the promotion

@@ -1,8 +1,8 @@
 """Head anchoring for the audit chain: a periodic checkpoint of the chain's current tail,
 stored both in Postgres (`audit_anchor`, append-only) and appended to an external file under
 a configurable path, so a nightly verify run can detect tail truncation and whole-chain
-rewrites that the hash chain's internal consistency check alone cannot see (PRD §6.2 I4,
-§6.4, §10 M10.4).
+rewrites that the hash chain's internal consistency check alone cannot see
+(I4).
 
 Threat this closes: `apx.audit.verify.verify_chain` only checks that the rows *present* are
 consistent with each other. Deleting the newest rows (tail truncation) -- or, for an attacker
@@ -24,10 +24,10 @@ with write access to both the database and that path can still forge both.
 By design, `PgAuditFullVerifier.verify()` only advances the anchor to the chain's current
 head *after* a clean chain-and-anchor verify, never before: this keeps "the anchor" and "a
 verified-clean state" the same statement, and bounds an undetected tail truncation to at most
-one verify interval (nightly, per PRD §6.4's "verifier job walks the chain nightly").
+one verify interval (nightly, 's "verifier job walks the chain nightly").
 
 `PgAuditFullVerifier.verify()` also carries the exit-code contract `python -m apx.audit
-verify` promises (§10 M10.4: 0 ok, 1 broken, 2 could-not-run). Every failure here that is not
+verify` promises (1 broken, 2 could-not-run). Every failure here that is not
 a *verified* mismatch -- a database connection failure, a query that raises, a filesystem
 error reading or writing the anchor file -- is caught and re-raised as
 `apx.common.errors.AuditUnavailableError` (an `ApxError`), never left to escape as a raw
@@ -52,8 +52,7 @@ entirely), so that case stays a hard `"db_file_mismatch"`. And a file that falls
 than one anchor, while still hash-valid and thus still healable, means the append path itself
 is broken (failing silently run after run) rather than a single crash; an operator alerting on
 this job should treat `len(FullVerifyResult.healed_anchor_ids) > 1` as worth investigating even
-though the run still reports `ok=True`.
-"""
+though the run still reports `ok=True`."""
 
 from __future__ import annotations
 
@@ -128,7 +127,7 @@ class AnchorVerifyResult(Frozen):
 
 class FullVerifyResult(Frozen):
     """Structured result of a full verify run (chain + anchors), suitable for the nightly job
-    to log or emit as JSON (§10 M10.4)."""
+    to log or emit as JSON."""
 
     ok: bool
     chain: VerifyResult
@@ -226,8 +225,9 @@ def verify_anchors(
     0. If the file is a non-empty, exact prefix of `db_anchors` (every anchor the file has
        matches the database one-for-one, and the database has one or more further anchors the
        file lacks), step 1's identity check is skipped for that trailing gap -- it is judged
-       instead by steps 2-3 below, on `db_anchors` alone (see `to_heal_in_file` on the result;
-       PRD F2, the non-atomic DB-commit-then-file-append crash window). A file with *no*
+       instead by steps 2-3 below, on `db_anchors` alone
+       (see `to_heal_in_file` on the result, the non-atomic DB-commit-then-file-append crash
+       window). A file with *no*
        anchors at all never qualifies here, even if the database has some -- see the module
        docstring on why an empty file must stay a hard mismatch.
     1. Otherwise, `db_anchors` and `file_anchors` must be identical, position by position -- a
@@ -244,8 +244,7 @@ def verify_anchors(
 
     Steps 2-3 always walk `db_anchors` (the potentially-longer, authoritative list once step 0
     or step 1 has cleared it) and stop at the first violation, reporting the offending anchor's
-    `id`. An empty `db_anchors` (no anchor has ever been written) is vacuously ok.
-    """
+    `id`. An empty `db_anchors` (no anchor has ever been written) is vacuously ok."""
     checked = 0
     file_count = len(file_anchors)
     file_is_a_consistent_prefix = (
@@ -382,14 +381,13 @@ async def _write_anchor(session: AsyncSession) -> AuditAnchorRecord | None:
 class PgAuditFullVerifier:
     """Runs the full audit verification -- hash chain plus head-anchor cross-checks -- against
     Postgres and the external anchor file, and, only on a clean result, advances the anchor to
-    the chain's current head (PRD §6.2 I4, §6.4, §10 M10.4). This is what the nightly job
+    the chain's current head (I4). This is what the nightly job
     (`python -m apx.audit verify`) runs; `apx.audit.verify.PgAuditVerifier` (chain-only, no
-    anchor side effects) remains available for callers that just need the hash-chain check.
-    """
+    anchor side effects) remains available for callers that just need the hash-chain check."""
 
     async def verify(self) -> FullVerifyResult:
         try:
-            # One snapshot, streamed in pages (bounded memory, REVIEW L-05): only the entries an
+            # One snapshot, streamed in pages (bounded memory): only the entries an
             # anchor names are kept, which is all `verify_anchors` looks up.
             walker = ChainWalker()
             anchored_entries: list[AuditEntry] = []

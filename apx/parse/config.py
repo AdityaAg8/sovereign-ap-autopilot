@@ -1,4 +1,4 @@
-"""Settings for the parse service HTTP client (PRD §3 apx/parse, §8 pydantic-settings config).
+"""Settings for the parse service HTTP client.
 Every field defaults to the value that matches infra/compose.yaml's `parse` service on the
 internal `app` network, except the service token, which `make env` generates into `.env`; set the
 `PARSE_` prefixed environment variables below to override in another deployment."""

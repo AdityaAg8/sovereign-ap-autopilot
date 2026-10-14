@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh-clone check (PRD §10 M5.6): clones a committed ref into a temporary directory and proves
+# Fresh-clone check: clones a committed ref into a temporary directory and proves
 # the tracked tree alone installs, lints, type-checks, passes the unit tests, validates the
 # Compose file and builds the apx image -- nothing untracked (planning files, data/, models/,
 # a local .venv or .env) is needed. Writes reports/fresh_clone.md. Usage: fresh_clone_test.sh [ref]
@@ -43,7 +43,7 @@ step "mypy --strict" uv run mypy
 step "web lint + typecheck" bash -c "cd web && pnpm lint && pnpm typecheck"
 # pyproject's addopts already deselect gpu/integration/artifacts/external/perf tests.
 step "unit tests" uv run pytest -q -p no:cacheprovider --no-cov tests/unit
-# Compose has no default secrets (REVIEW C-02), so generate them the way `make up` does first.
+# Compose has no default secrets, so generate them the way `make up` does first.
 step "compose config" bash -c "uv run python scripts/init_env.py && cd infra && docker compose --env-file ../.env config --quiet"
 step "apx image build" docker build -q -f infra/docker/apx/Dockerfile -t apx-fresh-clone-check .
 

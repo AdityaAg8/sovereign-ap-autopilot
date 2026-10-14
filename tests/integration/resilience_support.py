@@ -1,4 +1,4 @@
-"""Shared harness for the PRD §11.2 resilience tests (`test_resilience_llama_swap.py`,
+"""Shared harness for the resilience tests (`test_resilience_llama_swap.py`,
 `test_resilience_postgres.py`): a throwaway, migrated pgvector Postgres container the test can
 stop, start and restart mid-workflow, the `InvoiceActivityDeps` wiring over the M5.2 crash-test
 fakes, and helpers that read the exactly-once evidence (history attempts, idempotency rows)."""

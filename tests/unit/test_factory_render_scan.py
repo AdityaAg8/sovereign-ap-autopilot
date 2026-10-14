@@ -1,7 +1,6 @@
 """Unit tests for `factory.scan`: the Augraphy scan pipeline preserves pixel dimensions and is
 deterministic per seed within a single process (the specific pitfall Augraphy's own
-reproducibility notes call out), and the box-to-raster remap is a trivial page-fraction scale
-(PRD §10 M2.3)."""
+reproducibility notes call out), and the box-to-raster remap is a trivial page-fraction scale."""
 
 from __future__ import annotations
 

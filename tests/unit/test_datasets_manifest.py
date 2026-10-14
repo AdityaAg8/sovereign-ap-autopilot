@@ -1,6 +1,5 @@
 """Unit tests for evals/datasets/manifest.py: the data/manifest.json pydantic contract and its
-load/save round trip (PRD §5, §10 M1.1). No network, no GPU.
-"""
+load/save round trip. No network, no GPU."""
 
 from __future__ import annotations
 

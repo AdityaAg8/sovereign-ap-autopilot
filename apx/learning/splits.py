@@ -1,11 +1,11 @@
-"""Assigns a reviewer correction to a dataset split (PRD §6.2 I5, §10 M10.1): a document that any
+"""Assigns a reviewer correction to a dataset split (I5): a document that any
 evaluation set in the committed `evals/splits.json` holds out (listed in any group other than
 `train`) is left unassigned, so its corrections can never reach a training manifest; every other
 document is new production data and trains. Fails closed: with no readable splits file nothing
 is proven safe, so the correction stays unassigned too. Deliberately never names the held-out
 groups themselves -- only apx/trust may use the calibration split (tests/test_no_leakage.py).
 `require_splits` is the start-up check: the API and worker refuse to start without a readable
-file, so a deployment can never silently train on nothing (REVIEW H-04)."""
+file, so a deployment can never silently train on nothing."""
 
 from __future__ import annotations
 

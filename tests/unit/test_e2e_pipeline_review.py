@@ -1,4 +1,4 @@
-"""`scripts/e2e_pipeline.py`'s reviewer model for a refused approval (PRD §10 M5.6): a 422 naming
+"""`scripts/e2e_pipeline.py`'s reviewer model for a refused approval: a 422 naming
 fields to correct gets the invoice kind and the named lines' VAT category and rate patched from
 what is printed on the document, then one retry; the supplier TRN, amounts and missing lines are
 never corrected, so those refusals stand. No network: an httpx mock transport plays the API."""

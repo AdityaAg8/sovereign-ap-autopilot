@@ -1,6 +1,6 @@
 """attacks/filename_email.py: builds a filesystem-legal-but-malicious filename and a simulated
-phishing/BEC email body for the M6.3 "filename/email-body injection" category (PRD §10 M6.3;
-docs/security.md A11). Unlike every other category, this one never touches the invoice's
+phishing/BEC email body for the M6.3 "filename/email-body injection" category
+(docs/security.md A11). Unlike every other category, this one never touches the invoice's
 rendered content -- the payload lives entirely in the untrusted text surfaces an ingest
 pipeline sees before the document is even opened (`ingest:filename`, `ingest:email_body`,
 docs/security.md SEC-13)."""
@@ -32,7 +32,7 @@ _EMAIL_TEMPLATE_AR = (
 def sanitize_for_filesystem(text: str) -> str:
     """Replaces characters Windows (and most other filesystems) forbid in a filename with `_`.
     The attack does not depend on illegal characters -- a legal filename carrying dangerous
-    *words* is the realistic BEC/upload threat (PRD §10 M6.3) -- so this only strips what would
+    *words* is the realistic BEC/upload threat -- so this only strips what would
     otherwise stop the file from being written at all."""
     return _UNSAFE_FILENAME_CHARS.sub("_", text).strip()
 

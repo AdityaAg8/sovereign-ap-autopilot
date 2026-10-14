@@ -1,6 +1,6 @@
 """Normalizers that turn raw `InvoiceFields` text (whatever script and format an extractor read
 off the document) into canonical ASCII forms: digits, dates, amounts, TRNs and IBANs. These do
-representation cleanup only; format and checksum validation is `apx.validate`'s job (PRD §10)."""
+representation cleanup only; format and checksum validation is `apx.validate`'s job."""
 
 from __future__ import annotations
 

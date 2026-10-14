@@ -1,8 +1,7 @@
-"""Login hardening (REVIEW L-02, N-04): the per-email bucket and the coarse per-IP bucket throttle
+"""Login hardening: the per-email bucket and the coarse per-IP bucket throttle
 failed attempts with a 429 and `Retry-After`, refill over time and keep memory bounded, over-long
 usernames are refused with 422, and an unknown email still costs one full argon2 verify.
-The database is replaced by a stub session; the limiter and the route are the real ones.
-"""
+The database is replaced by a stub session; the limiter and the route are the real ones."""
 
 from __future__ import annotations
 
@@ -164,7 +163,7 @@ def test_memory_stays_bounded_under_a_spray_of_maximal_usernames() -> None:
     # REVIEW N-04 measured ~1 MB per bucket with 1 MB usernames. Now each bucket holds a
     # 32-byte digest: 2,000 buckets from 320-char emails stay far under 1 MB in total.
     # A large IP factor admits every attempt from "gw": only admitted attempts create account
-    # buckets (P3-03), and this test is about the cap on those.
+    # buckets, and this test is about the cap on those.
     limiter = LoginRateLimiter(
         burst=1, refill_per_minute=1, clock=_Clock(), max_keys=2_000, ip_factor=20_000
     )

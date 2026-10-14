@@ -1,8 +1,7 @@
 """Unit tests for the ADR-0008 K1 role capability matrix and the K4 proposal-kind capability
-map (PRD §10 M5.3): pure functions, no database needed. The database-backed parts of
+map: pure functions, no database needed. The database-backed parts of
 authorisation (P1 verified payee, P2 SoD) are covered end to end in
-`tests/integration/test_api_authz.py` against a real Postgres container.
-"""
+`tests/integration/test_api_authz.py` against a real Postgres container."""
 
 from __future__ import annotations
 

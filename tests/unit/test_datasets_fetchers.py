@@ -1,8 +1,7 @@
 """Unit tests for the evals/datasets fetchers (docile, fatura, extractbench, agentdojo):
-token/package presence branching, manifest construction and BLOCKED.md deferral (PRD §5
-data table, §10 M1.1). All network and subprocess calls are stubbed; no real downloads,
-no GPU.
-"""
+token/package presence branching, manifest construction and BLOCKED.md deferral.
+All network and subprocess calls are stubbed; no real downloads,
+no GPU."""
 
 from __future__ import annotations
 

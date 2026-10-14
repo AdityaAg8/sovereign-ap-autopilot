@@ -1,7 +1,6 @@
 """Shared helpers for evals.datasets fetchers: sha256 hashing, resumable range-request
 downloads over httpx, and appending BLOCKED.md entries for human-only gaps so a missing
-token or package degrades the fetch run instead of failing it (PRD §9 loop, §10 M1.1).
-"""
+token or package degrades the fetch run instead of failing it."""
 
 from __future__ import annotations
 
@@ -39,8 +38,7 @@ def download_resumable(
 ) -> Path:
     """Downloads `url` to `dest`, resuming a partial `dest.part` file via a Range request.
     Renames `.part` to `dest` only once the transfer completes, so a killed job resumes
-    cleanly on the next run; a `dest` that already exists is left untouched (already fetched).
-    """
+    cleanly on the next run; a `dest` that already exists is left untouched (already fetched)."""
     if dest.exists():
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -74,9 +72,8 @@ def download_resumable(
 
 
 def append_blocked_entry(tag: str, title: str, why: str, command: str) -> None:
-    """Appends a BLOCKED.md entry (PRD §9: human-only gaps) unless one with this `[tag]` is
-    already present, so re-running a deferred fetch does not duplicate the entry.
-    """
+    """Appends a BLOCKED.md entry unless one with this `[tag]` is
+    already present, so re-running a deferred fetch does not duplicate the entry."""
     marker = f"[{tag}]"
     existing = BLOCKED_MD.read_text(encoding="utf-8") if BLOCKED_MD.exists() else "# BLOCKED\n"
     if marker in existing:

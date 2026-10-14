@@ -1,5 +1,5 @@
-"""Unit tests for the active-content technique (PRD §6.3 A10): `/OpenAction`,
-`/Names/JavaScript` and a page-level `/AA` are all flagged PDF_JAVASCRIPT (M6.2)."""
+"""Unit tests for the active-content technique (A10): `/OpenAction`,
+`/Names/JavaScript` and a page-level `/AA` are all flagged PDF_JAVASCRIPT."""
 
 from __future__ import annotations
 

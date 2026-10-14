@@ -1,6 +1,6 @@
 """Invoice endpoints: list/filter/paginate, detail, field edits (reviewer), decisions
 (approve/reject/send_to_review/execute_proposal), the source-document route and the SSE status
-stream (PRD §10 M5.3, M5.4)."""
+stream."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ async def invoice_events(
 async def get_invoice_document(
     invoice_id: str, service: ServiceDep, store: DocumentStoreDep, _user: CurrentUser
 ) -> Response:
-    """Serves the invoice's original source document for the pdf.js viewer (PRD §10 M5.4). Any
+    """Serves the invoice's original source document for the pdf.js viewer. Any
     authenticated role may fetch it -- the same read boundary as `GET /invoices/{id}` above, not
     a narrower one -- since it is core review material, not vendor bank master data. `nosniff`
     is set globally for every response by `apx.api.app`'s security-headers middleware; the

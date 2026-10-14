@@ -1,4 +1,4 @@
-"""Entry point for `uv run python -m evals.datasets fetch [--set NAME]` (PRD §10 M1.1)."""
+"""Entry point for `uv run python -m evals.datasets fetch [--set NAME]`."""
 
 from __future__ import annotations
 

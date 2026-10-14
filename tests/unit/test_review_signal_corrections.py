@@ -1,4 +1,4 @@
-"""M11.4 (REVIEW.md N-03, KNOWN_ISSUES KI-02): `InvoiceWorkflow` hands the corrections carried by a
+"""M11.4 (KNOWN_ISSUES KI-02): `InvoiceWorkflow` hands the corrections carried by a
 `review` signal to `confirm_review` and asks it to check them, so the activity can refuse a signal
 whose corrections are not the ones recorded with the approval. The `workflow.patched` marker keeps
 histories recorded before the change replaying: a pre-change history, whose `confirm_review` got

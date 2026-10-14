@@ -1,4 +1,4 @@
-"""Unit tests for the runtime model allowlist (PRD §4): `LlamaSwapClient` refuses any alias
+"""Unit tests for the runtime model allowlist: `LlamaSwapClient` refuses any alias
 outside `RUNTIME_MODEL_ALIASES` with a typed error before sending anything, and neither apx/ nor
 the runtime compose config ever names the offline red-team model."""
 

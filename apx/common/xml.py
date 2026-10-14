@@ -3,7 +3,7 @@ document-derived bytes (`apx.asp_mock`, `apx.einvoice`): rejects any document co
 `<!DOCTYPE` marker outright before parsing (removing both the XXE local-file-disclosure and
 billion-laughs entity-expansion attack classes at the source, rather than trusting parser flags
 alone), enforces a size cap, and never resolves entities, loads a DTD or touches the network even
-for a document that somehow slips past the DOCTYPE scan (PRD §8 standards, security fix)."""
+for a document that somehow slips past the DOCTYPE scan (security fix)."""
 
 from __future__ import annotations
 

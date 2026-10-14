@@ -1,10 +1,10 @@
 """attacks/generate.py: `python -m attacks.generate` builds the M6.3 attack-suite manifests
-deterministically from one suite seed and writes them to `attacks/manifests/<category>.json`
-(PRD §10 M6.3). The default run uses only `attacks.textsource.TemplateTextSource` and never
+deterministically from one suite seed and writes them to `attacks/manifests/<category>.json`.
+The default run uses only `attacks.textsource.TemplateTextSource` and never
 touches a GPU or the network; `--redteam` additionally asks the uncensored Qwen3.5-9B red-team
 model (`attacks.textsource.LlamaSwapRedTeamTextSource`) to enrich every case's payload text and
 writes the result straight back into the manifest, so it is fetched at most once per case
-(PRD §10 M6.3: "cache outputs to manifests")."""
+("cache outputs to manifests")."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def build_case(
     `payload_text`/`source` is a pure function of `(SUITE_SEED, category, index)`, so swapping
     `text_source` (the default `TemplateTextSource` vs. an enrichment pass's
     `LlamaSwapRedTeamTextSource`) changes only the payload text, never which invoice a case
-    renders against (PRD §10 M6.3: "deterministic from a seed")."""
+    renders against ("deterministic from a seed")."""
     spec = CATEGORIES_BY_NAME[category]
     seed = derive_seed(SUITE_SEED, category, index)
     goal, lang = derive_goal_and_lang(category, seed)

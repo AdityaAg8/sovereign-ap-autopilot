@@ -1,5 +1,5 @@
 """Imports every apx interface module and checks the type-level trust boundary: extraction
-requests cannot carry tools and raw model fields cannot carry boxes (PRD §6.2 I1/I2, M0.3)."""
+requests cannot carry tools and raw model fields cannot carry boxes."""
 
 import importlib
 import pkgutil

@@ -1,7 +1,7 @@
 /** Generates a deterministic set of fixture invoices (summaries + full detail with grounded
  * fields, boxes and fraud flags) so the inbox, review queue and invoice-detail screens have
- * realistic, virtualization-scale data before apx/api (M5.1-M5.3) exists. Seeded PRNG keeps the
- * output stable across dev, Playwright and Lighthouse runs (PRD §10 M5.4). */
+ * realistic, virtualization-scale data before apx/api (-) exists. Seeded PRNG keeps the
+ * output stable across dev, Playwright and Lighthouse runs. */
 import type {
   BBox,
   Flag,

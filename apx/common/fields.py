@@ -1,7 +1,7 @@
 """The UAE PINT AE invoice field schema: `InvoiceFields` covers the guideline's 51 mandatory
 header business terms plus repeating line items, and exports a JSON Schema restricted to the
 keywords llama.cpp's grammar converter supports, for use as llama-server's structured-output
-`response_format` (PRD §10 M3.2, §4)."""
+`response_format`."""
 
 from __future__ import annotations
 

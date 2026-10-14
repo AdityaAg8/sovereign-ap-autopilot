@@ -1,7 +1,7 @@
 """`POST /auth/login`: verifies an email/password pair against `users`/`user_roles` and issues a
-short-lived HS256 JWT carrying the user's roles (PRD §10 M5.3, docs/security.md B8). Attempts are
+short-lived HS256 JWT carrying the user's roles (docs/security.md B8). Attempts are
 throttled per email plus a coarse per-client-IP cap, and an unknown email costs a full argon2
-verify, so neither guessing nor timing reveals which accounts exist (REVIEW L-02, N-04)."""
+verify, so neither guessing nor timing reveals which accounts exist."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ async def login(
     session: DbSession,
     settings: SettingsDep,
 ) -> TokenResponse:
-    # Bound the username before it reaches the limiter or argon2 (REVIEW N-04).
+    # Bound the username before it reaches the limiter or argon2.
     if len(form.username) > MAX_EMAIL_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -60,7 +60,7 @@ async def login(
         )
 
     user = await session.scalar(select(User).where(User.email == form.username))
-    # Always one argon2 verify, known email or not, active or not (constant work, L-02).
+    # Always one argon2 verify, known email or not, active or not (constant work).
     password_ok = verify_login(None if user is None else user.password_hash, form.password)
     if user is None or not user.is_active or not password_ok:
         raise HTTPException(

@@ -3,8 +3,8 @@ pipeline module's Protocol (or, for ASP send and archive, an idempotency-guarded
 client) through the injected `InvoiceActivityDeps` registry, then appends an audit event.
 Business logic for scanning, parsing, extraction, trust, validation, fraud, policy and
 e-invoicing lives on their own module branches; this file wires, never re-implements, them
-(PRD §3, §6.2 I4, §6.4, §10 M5.2). Where an activity writes state in its own transaction
-(`send_to_asp`, `archive`, `mark_failed`), the audit entry joins that transaction (REVIEW M-02)."""
+(I4). Where an activity writes state in its own transaction
+(`send_to_asp`, `archive`, `mark_failed`), the audit entry joins that transaction."""
 
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ class InvoiceActivityDeps:
     idempotency: IdempotencyStore = field(default_factory=SqlIdempotencyStore)
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     exception_agent: ExceptionAgent | None = None
-    """Writes the cited review note for REVIEW-routed invoices (M9.3); None disables notes."""
+    """Writes the cited review note for REVIEW-routed invoices; None disables notes."""
 
 
 def verified_payment_iban(vendor: Vendor | None, claimed: str | None) -> str | None:
@@ -200,7 +200,7 @@ def _activity_event(step: str, invoice_id: str, payload: dict[str, JsonValue]) -
 class DefaultInvoiceActivities:
     """Structurally satisfies `apx.workflows.interfaces.InvoiceActivities`. Instances (not the
     class) are registered with the Temporal `Worker`, one bound method per activity, so the
-    instance can carry `deps` (PRD §8: no per-activity globals)."""
+    instance can carry `deps` (no per-activity globals)."""
 
     def __init__(self, deps: InvoiceActivityDeps) -> None:
         self._deps = deps
@@ -419,8 +419,8 @@ class DefaultInvoiceActivities:
 
     @activity.defn(name="review_note")
     async def review_note(self, invoice: Invoice, routing: RoutingDecision) -> bool:
-        """Ask the exception agent for a cited review note on a REVIEW-routed invoice (PRD §10
-        M9.3). The note is advisory, so a model outage or an unverifiable note never holds up the
+        """Ask the exception agent for a cited review note on a REVIEW-routed invoice.
+        The note is advisory, so a model outage or an unverifiable note never holds up the
         human review: either outcome is recorded as its own audit event instead, and only a
         grounded note is stored. Returns whether a note was stored."""
         agent = self._deps.exception_agent
@@ -531,10 +531,10 @@ class DefaultInvoiceActivities:
 
     @activity.defn(name="send_to_asp")
     async def send_to_asp(self, key: IdempotencyKey, document: EInvoiceDocument) -> AspReceipt:
-        """Idempotent by `key` (§6.4): a retried call after a worker crash never resubmits. The
+        """Idempotent by `key`: a retried call after a worker crash never resubmits. The
         idempotency record, `SENT` and the audit entry commit in one transaction, so a failed
         audit append leaves no record and the retry replays `submit` (idempotent by `key`, same
-        receipt) and writes the event: exactly one `send_to_asp` entry per key (M-02)."""
+        receipt) and writes the event: exactly one `send_to_asp` entry per key."""
         async with self._deps.session_factory() as session:
             cached = await self._deps.idempotency.get(session, key)
         if cached is not None:
@@ -569,11 +569,11 @@ class DefaultInvoiceActivities:
 
     @activity.defn(name="archive")
     async def archive(self, key: IdempotencyKey, document: EInvoiceDocument) -> ArchiveRecord:
-        """Idempotent by `key` (§6.4). The invoice's one terminal payment-state transition --
+        """Idempotent by `key`. The invoice's one terminal payment-state transition --
         `invoices.status` to `ARCHIVED` -- is written only by the attempt that first records
-        `key`, so a retried call never re-applies it (M5.2 crash-recovery test). The record, the
+        `key`, so a retried call never re-applies it (crash-recovery test). The record, the
         status and the audit entry commit together, so a failed audit append leaves no record
-        and the retry writes the event: exactly one `archive` entry per key (M-02)."""
+        and the retry writes the event: exactly one `archive` entry per key."""
         async with self._deps.session_factory() as session:
             cached = await self._deps.idempotency.get(session, key)
         if cached is not None:

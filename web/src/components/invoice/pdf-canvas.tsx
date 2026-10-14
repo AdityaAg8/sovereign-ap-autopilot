@@ -1,4 +1,4 @@
-/** Renders one page of a PDF document into a canvas with pdf.js (PRD §10 M5.4 "pdf.js viewer").
+/** Renders one page of a PDF document into a canvas with pdf.js.
  * pdf.js runs entirely in a dedicated worker (pdf-render-worker.ts) that paints into this
  * canvas through OffscreenCanvas, so neither its display library nor its parser ever blocks the
  * main thread. Reports the on-screen page size so the caller can size a same-size overlay for

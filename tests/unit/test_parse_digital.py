@@ -1,5 +1,5 @@
 """Tests for `apx.parse.digital`: the born-digital pdfplumber fast path that the ≥98% IoU gate
-(PRD §10 M3.1) runs against -- box normalization, line clustering, RTL word ordering and table
+ runs against -- box normalization, line clustering, RTL word ordering and table
 detection. Fast, no GPU, no network; PDFs are generated in-memory with reportlab."""
 
 from __future__ import annotations

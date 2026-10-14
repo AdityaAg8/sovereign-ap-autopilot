@@ -1,4 +1,4 @@
-# The apx application image (PRD §10 M5.6): one slim, CPU-only Python 3.12 environment for the
+# The apx application image: one slim, CPU-only Python 3.12 environment for the
 # `api` and `worker` Compose services. Models, OCR and Postgres stay in their own containers and
 # are reached over the internal `app` network; dependencies come from uv.lock exactly.
 FROM python:3.12-slim
@@ -34,7 +34,7 @@ COPY factory ./factory
 COPY db ./db
 COPY alembic.ini ./
 # The learning splits (I5): which documents evaluation holds out. The API assigns every review
-# correction a split from it and refuses to start without it (apx.learning.splits, REVIEW H-04).
+# correction a split from it and refuses to start without it (apx.learning.splits).
 COPY evals/splits.json ./evals/splits.json
 RUN uv sync --frozen --no-dev --inexact
 

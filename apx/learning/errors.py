@@ -1,5 +1,5 @@
 """Typed errors for `apx.learning`: the retraining export never silently drops or widens
-which rows it reads (PRD §8, §6.2 I5)."""
+which rows it reads (I5)."""
 
 from __future__ import annotations
 

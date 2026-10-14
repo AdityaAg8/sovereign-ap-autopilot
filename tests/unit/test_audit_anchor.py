@@ -1,8 +1,7 @@
 """Unit tests for `apx.audit.anchor`: the pure `verify_anchors` cross-check (database/file
 mismatch, a broken anchor chain, and a missing or changed anchored row) and the anchor file's
-append/read round-trip (PRD §6.2 I4, §6.4, §10 M10.4). No database is used;
-`PgAuditFullVerifier` is exercised by `tests/integration/test_audit_anchor.py`.
-"""
+append/read round-trip (I4). No database is used;
+`PgAuditFullVerifier` is exercised by `tests/integration/test_audit_anchor.py`."""
 
 from __future__ import annotations
 
@@ -106,7 +105,7 @@ def test_db_and_file_anchor_mismatch_is_detected() -> None:
     db_anchors = _build_anchor_chain([(2, "2" * 64)])
     # The external file's copy has a different `last_hash` for the same anchor id: one of the
     # two locations was edited without the other, exactly what `AUDIT_ANCHOR_FILE` guards
-    # against (PRD §10 M10.4 "rewriting head+anchor inconsistently").
+    # against ("rewriting head+anchor inconsistently").
     file_anchors = [db_anchors[0].model_copy(update={"last_hash": "9" * 64})]
 
     result = verify_anchors(db_anchors, file_anchors, entries)

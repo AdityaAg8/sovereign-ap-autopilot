@@ -1,7 +1,7 @@
 """Pure, DB-free helpers shared by the tool dispatcher and toolbox: turning a `ToolContract`
 into an OpenAI-style `ToolSpec`, enforcing the D3 role/origin scoping invariants, masking a raw
 IBAN, building the `chat:<user_id>` / `mcp:<user_id>` audit actor for a `ToolCaller`, and parsing
-and checking a reply's inline citations (PRD §10 M9.2, M9.3, ADR-0010 D1, D3, D4, D6)."""
+and checking a reply's inline citations (ADR-0010 D1, D3, D4, D6)."""
 
 from __future__ import annotations
 
@@ -51,8 +51,7 @@ def authorize_tool(contract: ToolContract, caller: ToolCaller) -> None:
     Raises `ConfigError` if the runtime built an invalid `ToolCaller` (origin `agent` with a
     user, or origin `chat`/`mcp` with no user or scope) -- that is a caller bug, never a model
     refusal. Raises `ToolScopeError` when the origin is not in `contract.origins`, and
-    `ToolRoleError` when a chat/mcp user holds none of `contract.roles`.
-    """
+    `ToolRoleError` when a chat/mcp user holds none of `contract.roles`."""
     if caller.origin == "agent":
         if caller.user is not None:
             raise ConfigError("origin 'agent' must not carry a user (ADR-0010 D3)")
@@ -75,8 +74,7 @@ def authorize_tool(contract: ToolContract, caller: ToolCaller) -> None:
 def mask_iban(iban: str) -> MaskedIban:
     """`****` + the last 4 characters of the whitespace-stripped, upper-cased IBAN.
 
-    Raises `ToolArgumentError` if fewer than 4 alphanumeric characters remain.
-    """
+    Raises `ToolArgumentError` if fewer than 4 alphanumeric characters remain."""
     kept = "".join(_IBAN_ALNUM_RE.findall(iban.strip().upper()))
     if len(kept) < 4:
         raise ToolArgumentError("value has fewer than 4 alphanumeric characters to mask")
@@ -95,8 +93,7 @@ def audit_actor(caller: ToolCaller) -> AuditActor:
     or truncated to fit. Raises `ConfigError` if the caller invariants are violated, or if the
     (stripped) user id contains a character outside `[A-Za-z0-9_:.\\-]` or the resulting actor
     exceeds 80 characters -- silently mangling an identity would corrupt the audit trail, so an
-    unrepresentable id is a hard failure rather than a best-effort rewrite (reviewer M9.1 F4).
-    """
+    unrepresentable id is a hard failure rather than a best-effort rewrite."""
     if caller.origin == "agent":
         if caller.user is not None:
             raise ConfigError("origin 'agent' must not carry a user (ADR-0010 D3)")

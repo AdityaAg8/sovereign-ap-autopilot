@@ -3,9 +3,8 @@
 PDF-page coordinates: it paginates the DOM itself (real spacer elements reserve each page's
 margins and push any row or landmark that would straddle a page cut), measures the labels, then
 prints that same paginated DOM with a zero print margin, so the PDF matches the measured layout
-by construction (PRD §10 M2.4). Optionally also returns a clean per-page PNG screenshot for the
-30% of invoices that get an Augraphy scan variant (PRD §10 M2.3).
-"""
+by construction. Optionally also returns a clean per-page PNG screenshot for the
+30% of invoices that get an Augraphy scan variant."""
 
 from __future__ import annotations
 
@@ -223,7 +222,7 @@ pagination script's spacers stand in for that margin (see `RenderWorker.render`)
 class RenderedInvoice:
     """One rendered invoice document: the digital PDF (source of truth), its DOM-box labels in
     PDF-page coordinates, and — only when requested — one clean PNG screenshot per page for the
-    Augraphy scan-variant path (PRD §10 M2.3)."""
+    Augraphy scan-variant path."""
 
     pdf_bytes: bytes
     labels: LabelSet
@@ -266,8 +265,8 @@ def _png_chunk_crcs_are_valid(data: bytes) -> bool:
 
 
 def _capture_page_screenshot(page: Page, *, y: float) -> bytes:
-    """Screenshots one page-sized region and retries if the PNG comes back corrupt (PRD §10
-    M2.3). Raises `RuntimeError` if every attempt is corrupt."""
+    """Screenshots one page-sized region and retries if the PNG comes back corrupt.
+    Raises `RuntimeError` if every attempt is corrupt."""
     last_error: Exception | None = None
     for _attempt in range(_MAX_SCREENSHOT_ATTEMPTS):
         data = page.screenshot(
@@ -293,8 +292,9 @@ def _capture_page_screenshot(page: Page, *, y: float) -> bytes:
 
 class RenderWorker:
     """One Chromium browser + context, reused across many `render()` calls. Not thread-safe;
-    create one instance per worker process when parallelizing (PRD §10 M2.3: "parallelize
-    rendering... multiple browser contexts/processes"), typically via `factory.build`'s
+    create one instance per worker process when parallelizing
+    ("parallelize rendering... multiple browser contexts/processes"), typically via
+    `factory.build`'s
     process-pool initializer."""
 
     def __init__(self, *, scale: float = 2.0) -> None:
@@ -335,7 +335,7 @@ class RenderWorker:
             # The bundled Noto faces are `font-display: swap` data URIs that load lazily: "load"
             # can fire before they are decoded, and measuring or printing then uses a fallback
             # system font (on Linux, one with no usable Arabic ToUnicode map). Load every face
-            # explicitly so the labels and the PDF both come from the Noto layout (PRD §10 M2.2).
+            # explicitly so the labels and the PDF both come from the Noto layout.
             page.evaluate(_LOAD_FONTS_JS)
 
             natural_height = cast(float, page.evaluate("document.documentElement.scrollHeight"))
@@ -355,7 +355,7 @@ class RenderWorker:
             # page's top/bottom margin and push every unit clear of each page cut, so with a
             # zero print margin Chromium cuts at exact multiples of the page height and has
             # nothing left to re-break. PDF coordinates then equal the measured DOM coordinates
-            # by construction instead of by simulating Chromium's fragmentation (PRD §10 M2.4).
+            # by construction instead of by simulating Chromium's fragmentation.
             page.add_style_tag(content=_ZERO_MARGIN_PAGE_CSS)
             pdf_bytes = page.pdf(
                 width=f"{PAGE_WIDTH_MM}mm",
@@ -388,5 +388,5 @@ class RenderWorker:
 def css_page_geometry_matches(css_text: str) -> bool:
     """True if `css_text` (the contents of a stylesheet) declares the same A4-size, 14mm-margin
     `@page` rule this module's constants assume. Used by a test to catch silent drift if
-    `factory/templates/_shared.html.j2`'s `@page` rule ever changes (PRD §10 M2.3)."""
+    `factory/templates/_shared.html.j2`'s `@page` rule ever changes."""
     return "size: A4" in css_text and f"margin: {MARGIN_MM:.0f}mm" in css_text

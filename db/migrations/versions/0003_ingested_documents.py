@@ -1,6 +1,6 @@
 """create ingested_documents: the sha256-keyed dedupe record `apx.ingest` uses to guarantee
 exactly one `InvoiceWorkflow` starts per document, even under concurrent watcher/upload ingest
-of the same bytes (PRD §10 M5.5).
+of the same bytes.
 
 Uses explicit `op.create_table`/`op.drop_table` (unlike `0001_initial_schema`, which bootstraps
 the whole schema from `Base.metadata` in one shot) because this table has no native enum

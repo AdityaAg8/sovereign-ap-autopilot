@@ -1,10 +1,10 @@
-"""factory/restore_scans.py: restores the missing 30% Augraphy scan variants (PRD §10 M2.3) onto an
+"""factory/restore_scans.py: restores the missing 30% Augraphy scan variants onto an
 already-rendered factory corpus without touching its PDFs, labels, splits or sha256s (ADR-0012
 amendment). It recomputes the factory plan from the seed, matches every existing document to it by
 `doc_seed`, re-renders each planned scan document's HTML to recover the clean page screenshots
 (refusing unless the re-rendered PDF is byte-identical to the one on disk), runs
-`factory.scan.scan_page` with the factory's exact per-page seeds, and flips `has_scan` in its truth.
-"""
+`factory.scan.scan_page` with the factory's exact per-page seeds, and flips `has_scan` in its
+truth."""
 
 from __future__ import annotations
 

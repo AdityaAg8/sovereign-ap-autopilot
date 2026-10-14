@@ -1,6 +1,6 @@
 """Guards the integration suite against host-port collisions: every file that starts its own
 throwaway Postgres container must bind a distinct `HOST_PORT` and `CONTAINER_NAME`, or a cold
-run where two modules overlap fails with "port is already allocated" (M5 review F6)."""
+run where two modules overlap fails with "port is already allocated" (review F6)."""
 
 from __future__ import annotations
 

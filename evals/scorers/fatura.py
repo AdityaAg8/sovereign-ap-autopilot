@@ -1,4 +1,4 @@
-"""FATURA field F1 scorer (PRD §5, §10 M1.3): compares predicted per-document field extractions
+"""FATURA field F1 scorer: compares predicted per-document field extractions
 against the FATURA (Zenodo record 8261508) gold annotations using the shared normalized-exact-
 match field F1 core."""
 

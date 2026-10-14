@@ -1,5 +1,5 @@
 """Vendor master and user records: vendors, admin-verified bank accounts, bank-detail changes
-and users with roles. Inputs to policy rules P1-P3 and fraud rules (PRD §6.3)."""
+and users with roles. Inputs to policy rules P1-P3 and fraud rules."""
 
 from __future__ import annotations
 

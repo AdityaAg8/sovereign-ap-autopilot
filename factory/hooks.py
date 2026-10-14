@@ -2,8 +2,7 @@
 suites will register into, so those milestones can inject a fraudulent or adversarial variant of
 one invoice's render context or HTML without changing `factory.build`'s generation loop again.
 Nothing is registered here: the M2.3 5,000-invoice run applies zero hooks by name, so it always
-produces the clean baseline dataset (PRD §10 M2.3, M6.3, M8).
-"""
+produces the clean baseline dataset."""
 
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ class ContextMutationHook(Protocol):
 
 class HtmlMutationHook(Protocol):
     """Mutates one invoice's already-rendered HTML before `factory.render` turns it into a PDF,
-    e.g. to inject hidden text, a zero-width character or a bidi override (M6 attack suite)."""
+    e.g. to inject hidden text, a zero-width character or a bidi override (attack suite)."""
 
     def __call__(self, html: str, *, context: Mapping[str, Any], seed: int) -> str: ...
 
@@ -75,9 +74,9 @@ class HookRegistry:
 
 
 FRAUD_TYPOLOGY_HOOKS = HookRegistry(kind="fraud typology")
-"""M8 fraud-typology hooks (PRD §10 M8): unverified-IBAN redirects, over-billing, duplicate
+"""M8 fraud-typology hooks: unverified-IBAN redirects, over-billing, duplicate
 invoices and similar. Empty until M8 registers into it."""
 
 ATTACK_HOOKS = HookRegistry(kind="attack")
-"""M6 attack-suite hooks (PRD §10 M6.3): hidden text, zero-width characters, bidi overrides,
+"""M6 attack-suite hooks: hidden text, zero-width characters, bidi overrides,
 homoglyph vendor names, fake approval stamps and similar. Empty until M6 registers into it."""

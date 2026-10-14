@@ -1,5 +1,5 @@
 """Unit tests for `attacks.filename_email`: the `filename_email_injection` category's filename
-sanitization and email-body construction (PRD §10 M6.3; docs/security.md A11)."""
+sanitization and email-body construction (docs/security.md A11)."""
 
 from __future__ import annotations
 

@@ -1,7 +1,6 @@
 """Fetches the DocILE annotated-trainval and test splits (never the 1M-doc unlabeled set)
 from the token-gated Rossum S3 bucket into data/docile/, deferring with a BLOCKED.md entry
-when DOCILE_TOKEN is absent instead of failing the run (PRD §5 data table, §10 M1.1).
-"""
+when DOCILE_TOKEN is absent instead of failing the run."""
 
 from __future__ import annotations
 
@@ -25,7 +24,7 @@ DOWNLOAD_URL_TEMPLATE = (
     "https://docile-dataset-rossum.s3.eu-west-1.amazonaws.com/{token}/{dataset}.zip"
 )
 # Split identifiers as accepted by rossumai/docile's download_dataset.sh; the 1M-doc
-# "unlabeled" set is intentionally excluded (PRD §5).
+# "unlabeled" set is intentionally excluded.
 REMOTE_SPLITS: tuple[tuple[str, Split | None], ...] = (
     ("annotated-trainval", None),  # bundles both train and val documents
     ("test", "test"),

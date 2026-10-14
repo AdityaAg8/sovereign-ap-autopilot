@@ -1,10 +1,9 @@
-"""Active-learning candidate selection (PRD §10 M10.1): scores every (invoice, field) pair
+"""Active-learning candidate selection: scores every (invoice, field) pair
 that has not yet been reviewer-corrected on three deterministic signals -- low model
 confidence, extractor A/B disagreement and how often that field name has needed correction
 historically -- and ranks them for the next round of human review. The rule is a fixed
 weighted sum with no learned or tuned parameters, so a run is exactly reproducible from the
-same database state (I6: no threshold here is adjusted to make anything pass).
-"""
+same database state (I6: no threshold here is adjusted to make anything pass)."""
 
 from __future__ import annotations
 
@@ -31,7 +30,7 @@ the value has no recorded confidence at all (treated as maximally uncertain)."""
 
 CORRECTED_OFTEN_THRESHOLD = 3
 """A field name that has been reviewer-corrected at least this many times across all invoices
-counts as "corrected-often" (PRD §10 M10.1 row)."""
+counts as "corrected-often"."""
 
 
 def score_candidate(*, low_confidence: bool, disagreement: bool, corrected_often: bool) -> float:
@@ -116,7 +115,7 @@ async def select_active_learning_candidates(
 ) -> list[ActiveLearningCandidate]:
     """Ranks every not-yet-corrected (invoice, field) pair by `score_candidate` and returns
     the top `limit`, ties broken by `(invoice_id, field_name)` ascending so the result is
-    fully deterministic given the same database state (PRD §10 M10.1)."""
+    fully deterministic given the same database state."""
     snapshots = await _latest_field_snapshots(session)
     disagreements = await _disagreement_pairs(session)
     corrected_often_names = await _corrected_often_field_names(session)

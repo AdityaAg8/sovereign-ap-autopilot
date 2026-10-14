@@ -1,8 +1,7 @@
 """Pydantic model and (de)serialization for data/manifest.json: the per-dataset record of
-whether an eval/training set is present or deferred, with a sha256 per downloaded file (PRD
-§5 data table, §10 M1.1). `load_manifest()`/`save_manifest()` are the contract M1.2's
-evals/splits.json generation and M1.3's scorers build on top of.
-"""
+whether an eval/training set is present or deferred, with a sha256 per downloaded file.
+`load_manifest()`/`save_manifest()` are the contract M1.2's
+evals/splits.json generation and M1.3's scorers build on top of."""
 
 from __future__ import annotations
 
@@ -23,8 +22,8 @@ Split = Literal["train", "val", "test", "eval"]
 
 
 class DatasetStatus(StrEnum):
-    """Whether a dataset in the manifest was actually fetched or deferred (PRD §9 loop:
-    human-only gaps degrade gracefully rather than failing the run)."""
+    """Whether a dataset in the manifest was actually fetched or deferred
+    (loop: human-only gaps degrade gracefully rather than failing the run)."""
 
     PRESENT = "present"
     DEFERRED = "deferred"

@@ -1,8 +1,7 @@
-"""Maps typed `apx` errors to HTTP responses without ever leaking a stack trace to the client
-(PRD §10 M5.3): policy denials become 403, review-state conflicts 409, not-found 404, upload
+"""Maps typed `apx` errors to HTTP responses without ever leaking a stack trace to the client:
+policy denials become 403, review-state conflicts 409, not-found 404, upload
 hardening failures 4xx, and anything unexpected becomes a generic 500 whose real cause is only
-logged server-side via structlog.
-"""
+logged server-side via structlog."""
 
 from __future__ import annotations
 

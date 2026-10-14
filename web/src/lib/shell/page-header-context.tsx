@@ -1,5 +1,5 @@
 /** Lets a page set the shell topbar's title and action buttons without the App Router layout
- * needing per-route props (PRD §10 M5.4 app shell). */
+ * needing per-route props. */
 
 "use client";
 

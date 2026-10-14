@@ -1,4 +1,4 @@
-"""M11.3 (REVIEW.md N-01, N-13): `InvoiceWorkflow` buffers a `review` signal that lands before
+"""M11.3: `InvoiceWorkflow` buffers a `review` signal that lands before
 its review wait (the API may approve as soon as `route` commits AWAITING_REVIEW), still acts on it
 only once `confirm_review` backs it, and ends FAILED when a recorded approval went stale. The
 `workflow.patched` guard keeps histories recorded before the fix replaying deterministically:

@@ -1,8 +1,7 @@
-"""Learn-then-Test fixed-sequence threshold (ADR-0009 §6, PRD §6.1): the gated λ grid, the
+"""Learn-then-Test fixed-sequence threshold (ADR-0009 §6): the gated λ grid, the
 binomial walk that turns calibrated P(correct) into a single accept threshold λ̂ with a
 finite-sample error guarantee, and the `TrustGate` that applies λ̂ and the hard-reject rules at
-decision time.
-"""
+decision time."""
 
 from __future__ import annotations
 
@@ -73,8 +72,9 @@ def learn_then_test(
     k_j = #(p >= λ_j), m_j = #(p >= λ_j and wrong), p_j = BinomCDF(m_j; k_j, alpha). The testable
     grid is the λ_j with k_j >= `min_accepted` (k_min); the others are an untestable prefix,
     recorded as skipped with their label-free k_j and never read labels. Over the testable grid,
-    walk while p_j <= delta and stop at the first failure; λ̂ = last passing λ_j (§6.1, ADR-0009
-    §6 as amended). The returned `steps` always cover the *full* grid: rows at and before the
+    walk while p_j <= delta and stop at the first failure; λ̂ = last passing λ_j
+    (ADR-0009 §6 as amended). The returned `steps` always cover the *full* grid: rows at and before
+    the
     stop carry the walk's real pass/fail; rows after it are still computed from the LTT labels
     (ADR-0009 §6/§7 promise the full step table to MLflow, the audit chain and the error curve)
     but marked `informational=True`, since they took no part in the sequential decision and can
@@ -82,9 +82,8 @@ def learn_then_test(
 
     `calibrator_version` is left as "" and `n_fit_fields` as 0 on the returned `ThresholdResult`:
     this function only sees the LTT partition, not the fitted `Calibrator` or the FIT count. The
-    caller (the M7.4/M7.5 cal job in `evals.trust_gate`, or a `TrustGate`) fills them in with
-    `.model_copy(update=...)`.
-    """
+    caller (the cal job in `evals.trust_gate`, or a `TrustGate`) fills them in with
+    `.model_copy(update=...)`."""
     if len(p_correct) != len(correct):
         raise TrustGateError("p_correct and correct must have the same length")
     _validate_grid(config.grid)
@@ -147,7 +146,7 @@ def learn_then_test(
 
 class CalibratedTrustGate:
     """Concrete `TrustGate`: a fitted `Calibrator` plus a fixed λ̂. A field is accepted iff it is
-    not hard-rejected and its calibrated P(correct) >= λ̂ (§6.1, ADR-0009)."""
+    not hard-rejected and its calibrated P(correct) >= λ̂ (ADR-0009)."""
 
     def __init__(self, calibrator: Calibrator, lambda_hat: float | None) -> None:
         self._calibrator = calibrator

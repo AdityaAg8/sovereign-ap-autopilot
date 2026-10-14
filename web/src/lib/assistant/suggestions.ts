@@ -1,4 +1,4 @@
-/** Starter questions for the assistant panel (PRD §10 M9.3) name real invoices by their printed
+/** Starter questions for the assistant panel name real invoices by their printed
  * number, falling back to the short id when the number was not extracted. */
 import type { ApiClient } from "@/lib/api/contract";
 

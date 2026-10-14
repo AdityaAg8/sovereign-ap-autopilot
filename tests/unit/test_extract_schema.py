@@ -1,5 +1,5 @@
 """Tests for `apx.extract.schema`: full BT-code coverage of the 51 mandatory header fields, a
-gold round-trip through JSON, and the llama.cpp JSON-Schema keyword whitelist (PRD §10 M3.2)."""
+gold round-trip through JSON, and the llama.cpp JSON-Schema keyword whitelist."""
 
 from __future__ import annotations
 

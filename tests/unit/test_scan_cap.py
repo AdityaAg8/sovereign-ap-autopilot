@@ -1,5 +1,5 @@
 """Unit tests for `apx.scan.cap.cap_flags`: at most N flags per kind, each kind's highest scores
-always kept, original order preserved and the rest counted per kind (PRD §6.3 P4, M6.2)."""
+always kept, original order preserved and the rest counted per kind (P4)."""
 
 from __future__ import annotations
 

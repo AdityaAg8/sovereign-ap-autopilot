@@ -1,5 +1,5 @@
 """Adapters between our own pipeline output and a third-party evaluation framework's own
-expected input/output format (PRD §10 M1.3). Kept separate from evals/scorers/ so a scorer stays
+expected input/output format. Kept separate from evals/scorers/ so a scorer stays
 a pure, typed function while framework-specific plumbing (subprocess invocation, on-disk clone
 layout, JSON payload shape) lives here instead."""
 

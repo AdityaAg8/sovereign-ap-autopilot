@@ -2,10 +2,10 @@
 auto-completing or waiting for a human review signal based on `apx.policy`'s routing decision.
 Deterministic by construction: activities (in `apx.workflows.activities`) do every I/O call,
 external side effect and wall-clock read; this file only sequences them and holds in-memory
-state for the `status` query (PRD §3, §6.4, §10 M5.2). A `review` signal is acted on only once
-`confirm_review` finds it backed by the database (REVIEW.md C-03); an unbacked one is ignored, and
-one that arrives before the review wait is buffered for it (REVIEW.md N-01). An approval's
-corrections are checked there too: they must be the ones recorded with the approval (N-03)."""
+state for the `status` query. A `review` signal is acted on only once
+`confirm_review` finds it backed by the database; an unbacked one is ignored, and
+one that arrives before the review wait is buffered for it. An approval's
+corrections are checked there too: they must be the ones recorded with the approval."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ exact class name (not its bases), hence every concrete subclass is listed; tests
 name to a real `apx` exception. Transient failures (`ModelServingError` incl. `ModelBusyError`,
 `ParseError`, and `ModelOutputError`, since sampling may differ) keep the default retries;
 `ModelContextError` (prompt larger than the slot's context) is deterministic. GPU preflight
-(ADR-0013 addendum, M5.6a) in the GPU-stage activities: `GpuProbeError` (no `nvidia-smi`, or
+(ADR-0013 addendum) in the GPU-stage activities: `GpuProbeError` (no `nvidia-smi`, or
 unparsable output) is a deployment fault a retry cannot fix, so it is listed; its subclass
 `GpuProbeTransientError` (`nvidia-smi` timed out or exited non-zero) is deliberately not listed,
 so exact-name matching retries it; the
@@ -156,14 +156,14 @@ PAYEE_PIN_PATCH = "adr14-payee-pin"
 invoice alone; new executions also pass the payee pinned at routing (`RoutingDecision.payee`)."""
 REVIEW_GUARD_PATCH = "m11-review-guard"
 """`workflow.patched` id: histories recorded before M11.2 replay without `review_hold` after
-routing and without `confirm_review` after the review signal (REVIEW.md C-03, H-02)."""
+routing and without `confirm_review` after the review signal."""
 REVIEW_BUFFER_PATCH = "m11-review-signal-buffer"
 """`workflow.patched` id: histories recorded before M11.3 replay a `review` signal that arrived
-before the review wait as dropped; new executions buffer it for the wait (REVIEW.md N-01)."""
+before the review wait as dropped; new executions buffer it for the wait."""
 REVIEW_SIGNAL_CORRECTIONS_PATCH = "m11-review-signal-corrections"
 """`workflow.patched` id: histories recorded before M11.4 replay `confirm_review` with the invoice
 id and the decision only; new executions also pass the signal's corrections and ask the activity
-to check them against the approval's recorded corrections digest (REVIEW.md N-03, KI-02)."""
+to check them against the approval's recorded corrections digest (KI-02)."""
 _BEFORE_REVIEW_WAIT: Final = frozenset(
     {
         InvoiceStatus.RECEIVED,
@@ -182,7 +182,7 @@ FRAUD_CHECKED, so the API can accept and signal a decision in that window."""
 
 class ReviewDecision(Frozen):
     """Payload of the `review` signal: a human reviewer's outcome for a REVIEW-routed invoice.
-    Sent by `apx.api` (M5.3) once a reviewer approves or rejects; the workflow itself never
+    Sent by `apx.api` once a reviewer approves or rejects; the workflow itself never
     calls `apx.policy.interfaces.PaymentStateWriter` (that is the API's job, outside Temporal)."""
 
     approved: bool
@@ -193,8 +193,8 @@ class ReviewDecision(Frozen):
 
 @workflow.defn
 class InvoiceWorkflow:
-    """One instance per invoice; the caller sets the workflow id to the invoice id (PRD §3:
-    "id derived from sha256"), which is also how Temporal's own history-based durability keys
+    """One instance per invoice; the caller sets the workflow id to the invoice id
+    ("id derived from sha256"), which is also how Temporal's own history-based durability keys
     the exactly-once ASP submission and archive record after a worker crash and restart."""
 
     def __init__(self) -> None:
@@ -407,7 +407,7 @@ class InvoiceWorkflow:
         dropped, and the invoice stays awaiting review for a real decision. An approval the API
         did record but whose digest or payee has since moved raises `StaleApprovalError`
         (non-retryable), so the run ends FAILED with that reason instead of waiting forever for
-        a decision nobody can send again (N-13). N-03: the signal's corrections, which
+        a decision nobody can send again. N-03: the signal's corrections, which
         `apply_review` applies next, must digest to those recorded with the approval, and an edit
         of the invoice's corrections since the approval makes it stale."""
         guarded = workflow.patched(REVIEW_GUARD_PATCH)
@@ -434,10 +434,10 @@ class InvoiceWorkflow:
 
     @workflow.signal
     def review(self, decision: ReviewDecision) -> None:
-        """Delivered once a human reviewer decides a REVIEW-routed invoice (M5.3). Kept while
+        """Delivered once a human reviewer decides a REVIEW-routed invoice. Kept while
         the workflow waits for review, or buffered for that wait when it arrives earlier: the
         `route` activity commits AWAITING_REVIEW before this workflow's own status says so, and
-        the API may already have approved and signalled (N-01). Buffering is safe because
+        the API may already have approved and signalled. Buffering is safe because
         `confirm_review` still refuses anything the database does not back; if the route turns
         out AUTO or BLOCK the buffered decision is never read. Ignored once a decision is held
         or after the review point, so a duplicate or stray signal cannot flip a decided invoice."""

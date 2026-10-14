@@ -1,5 +1,5 @@
-"""Detects zero-width and bidi control characters hidden in PDF text (PRD §3, §6.3 A05/A06,
-M6.2). Arabic-aware: ZWJ/ZWNJ inside an Arabic word and RLM next to a digit in Arabic-script
+"""Detects zero-width and bidi control characters hidden in PDF text.
+Arabic-aware: ZWJ/ZWNJ inside an Arabic word and RLM next to a digit in Arabic-script
 context are normal shaping and never flag; bidi overrides (RLO/LRO) always flag."""
 
 from __future__ import annotations

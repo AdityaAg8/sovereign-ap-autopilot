@@ -1,8 +1,7 @@
 """`data/inbox/` watcher (watchfiles): ingests every file dropped into the watch folder through
-the same `Ingestor.ingest` function the API upload path calls (PRD §10 M5.5), so a document that
+the same `Ingestor.ingest` function the API upload path calls, so a document that
 lands in the inbox and is also uploaded (or is re-saved by an editor, or copied in twice) starts
-its `InvoiceWorkflow` exactly once.
-"""
+its `InvoiceWorkflow` exactly once."""
 
 from __future__ import annotations
 

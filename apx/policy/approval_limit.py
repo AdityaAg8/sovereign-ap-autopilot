@@ -1,8 +1,7 @@
-"""The single source of the P3 approval limit (§6.3, REVIEW L-03): the worker's routing and the
+"""The single source of the P3 approval limit: the worker's routing and the
 API's authorization both read `APPROVAL_LIMIT` through `load_approval_limit`, so the two can never
 disagree. The retired per-process `API_APPROVAL_LIMIT`/`WORKER_APPROVAL_LIMIT` are still honoured
-only when they equal it; a different value is a `ConfigError`, never a silent drift.
-"""
+only when they equal it; a different value is a `ConfigError`, never a silent drift."""
 
 from __future__ import annotations
 

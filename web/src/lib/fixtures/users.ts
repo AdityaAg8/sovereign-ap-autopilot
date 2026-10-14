@@ -1,6 +1,6 @@
-/** Fixture users for the dev-only login flow (PRD §1 roles: reviewer, approver, admin). Any
+/** Fixture users for the dev-only login flow (approver, admin). Any
  * password is accepted for a listed email so Playwright and manual dev logins stay simple; a real
- * password check happens server-side once apx/api's JWT auth (M5.3) lands. */
+ * password check happens server-side once apx/api's JWT auth lands. */
 import type { AuthUser } from "@/lib/api/types";
 
 export const FIXTURE_USERS: readonly AuthUser[] = [

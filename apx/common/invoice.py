@@ -1,5 +1,5 @@
 """Canonical, normalised invoice model shared by validate, fraud, policy and einvoice. Built
-from accepted or reviewer-corrected fields, never directly from model output (PRD §3)."""
+from accepted or reviewer-corrected fields, never directly from model output."""
 
 from __future__ import annotations
 

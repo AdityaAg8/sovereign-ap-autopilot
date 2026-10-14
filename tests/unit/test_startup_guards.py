@@ -1,7 +1,6 @@
 """Start-up guards from the M11 review: the API and worker refuse to start without a readable
-learning splits file and the image ships it (H-04), and both read one approval limit that a
-stale per-process setting cannot silently override (L-03). No database or network is used.
-"""
+learning splits file and the image ships it, and both read one approval limit that a
+stale per-process setting cannot silently override. No database or network is used."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-/** Review queue route: invoices awaiting a human decision, in received order (PRD §10 M5.4). Open
+/** Review queue route: invoices awaiting a human decision, in received order. Open
  * one to approve, fix a field, or reject — see the invoice detail page's review action bar. */
 
 "use client";

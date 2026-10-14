@@ -1,5 +1,5 @@
 """Interfaces for InvoiceWorkflow: statuses, step names used in idempotency keys, workflow
-input/state and the activity set the Temporal workflow calls (PRD §3, §6.4, §10 M5.2)."""
+input/state and the activity set the Temporal workflow calls."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class InvoiceStatus(StrEnum):
 
 
 class Step(StrEnum):
-    """Step names; `f"{invoice_id}:{step}"` is the idempotency key (§6.4)."""
+    """Step names; `f"{invoice_id}:{step}"` is the idempotency key."""
 
     SCAN = "scan"
     PARSE = "parse"

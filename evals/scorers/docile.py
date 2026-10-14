@@ -1,4 +1,4 @@
-"""DocILE KILE and LIR scorers (PRD §5 "Field F1, KILE and LIR / DocILE val", §10 M1.3): typed
+"""DocILE KILE and LIR scorers (KILE and LIR / DocILE val"): typed
 wrappers around the official `docile` package's own field-matching and metric functions
 (`docile.evaluation.pcc_field_matching.get_matches`, `.line_item_matching.get_lir_matches`,
 `.evaluate.compute_metrics`) -- the same primitives `docile.evaluation.evaluate.evaluate_dataset`

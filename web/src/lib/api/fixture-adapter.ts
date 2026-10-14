@@ -1,4 +1,4 @@
-/** Dev-only ApiClient adapter backed by in-memory fixture data (PRD §10 M5.4). Used whenever
+/** Dev-only ApiClient adapter backed by in-memory fixture data. Used whenever
  * NEXT_PUBLIC_API_MODE is unset or "fixture" — the default in local dev and in the Playwright
  * smoke suite, so e2e can run before apx/api exists and later flip to the HTTP adapter unchanged. */
 import type { ApiClient } from "@/lib/api/contract";
@@ -245,7 +245,7 @@ class FixtureApiClient implements ApiClient {
   async decide(invoiceId: string, request: DecisionRequest): Promise<void> {
     const invoice = store().get(invoiceId);
     if (!invoice) throw new ApiError(`Invoice ${invoiceId} not found.`, 404);
-    // Mirrors the API's review state machine (REVIEW.md C-01, H-02): reject only while awaiting
+    // Mirrors the API's review state machine: reject only while awaiting
     // review; send-to-review only before routing, as a hold that leaves the status to the workflow.
     const status = invoice.summary.status;
     if (request.action === "reject" && status !== "awaiting_review")

@@ -1,4 +1,4 @@
-/** Inbox route: every invoice regardless of status, in the virtualized table (PRD §10 M5.4). */
+/** Inbox route: every invoice regardless of status, in the virtualized table. */
 
 "use client";
 

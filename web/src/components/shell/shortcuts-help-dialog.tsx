@@ -1,5 +1,5 @@
 /** Body of the "?" reference of every keyboard shortcut active on the current screen, sourced
- * from the shortcuts registry so it never drifts from what's actually bound (PRD §10 M5.4).
+ * from the shortcuts registry so it never drifts from what's actually bound.
  * Loaded on demand by `shortcuts-help-overlay.tsx`, which owns the "?" binding. */
 
 "use client";

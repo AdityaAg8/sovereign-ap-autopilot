@@ -1,10 +1,10 @@
-"""Eval runner CLI (PRD §5, §10 M1.4): scores a predictor against fatura, extractbench, docile,
+"""Eval runner CLI: scores a predictor against fatura, extractbench, docile,
 uae and pint_ae using evals/scorers/*, loading document identity from data/manifest.json and
 split assignment from evals/splits.json, and writes one small JSON report per run to
-reports/runs/<run_id>.json. Sets that cannot be scored yet (docile without a DOCILE_TOKEN, uae
-before the M2 factory exists) come back as "deferred" rows rather than errors, so `make
-eval-quick` always succeeds end to end on a fresh clone.
-"""
+reports/runs/<run_id>.json. Sets that cannot be scored yet
+(docile without a DOCILE_TOKEN, uae before the factory exists) come back as "deferred" rows rather
+than errors, so `make
+eval-quick` always succeeds end to end on a fresh clone."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ _EXTRACTBENCH_FRAMEWORK_DIR = "external/ExtractBench"
 
 
 class GateKind(StrEnum):
-    """How a metric's PRD §5 gate reads against a measured value."""
+    """How a metric's gate reads against a measured value."""
 
     REPORT = "report"
     """No threshold: the number is tracked, not judged."""
@@ -59,7 +59,7 @@ class GateKind(StrEnum):
 
 
 class GateResult(BaseModel):
-    """One gate evaluation: the kind, the PRD threshold (unset for REPORT), the measured value,
+    """One gate evaluation: the kind, the threshold (unset for REPORT), the measured value,
     and whether it passed (unset for REPORT, where pass/fail is not defined)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -71,8 +71,9 @@ class GateResult(BaseModel):
 
 
 class SetOutcome(BaseModel):
-    """One eval set's result within a run: either scored (with metrics and, where PRD §5
-    defines one, a gate) or deferred (with a human-readable reason, never a stack trace)."""
+    """One eval set's result within a run: either scored
+    (with metrics and, where defines one, a gate) or deferred (with a human-readable reason, never a
+    stack trace)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -236,8 +237,8 @@ def _first_quote(rule: Mapping[str, Any] | None) -> str | None:
 
 def _first_grounding(rule: Mapping[str, Any] | None) -> tuple[int | None, list[float] | None]:
     """Returns the (page, bbox) of the first evidence entry that carries a bbox -- the field's
-    real grounding location for the official framework's bbox-based grounding metric (PRD §5
-    ExtractBench row). Unlike `_first_quote`, this does not require a non-empty `quote`: a coarse
+    real grounding location for the official framework's bbox-based grounding metric.
+    Unlike `_first_quote`, this does not require a non-empty `quote`: a coarse
     field such as a checkbox has `quote: null` on its only evidence entry but still has a citable
     page/bbox, and skipping it here would leave every boolean field ungrounded for no reason.
     The quote and the page/bbox may therefore come from different evidence entries; each feeds
@@ -355,7 +356,7 @@ def _score_extractbench_set(
     )
 
 
-# --- DocILE / UAE (deferred until a token / M2) --------------------------------------------
+# --- DocILE / UAE (deferred until a token) --------------------------------------------
 
 
 def _score_docile_set(manifest: Manifest) -> SetOutcome:
@@ -502,7 +503,7 @@ def write_run_report(report: RunReport, out_dir: Path = RUNS_DIR) -> Path:
 def summarize_outcome(outcome: SetOutcome) -> str:
     """One-line human summary of a `SetOutcome`'s measured metrics, shared by this module's
     terminal report and evals/scoreboard.py's markdown table so both describe a result the same
-    way (PRD ADR-0005: never invent a number, always show the same one)."""
+    way (ADR-0005: never invent a number, always show the same one)."""
     if outcome.status == "deferred":
         return f"deferred: {outcome.reason or 'not available'}"
     metrics = outcome.metrics
@@ -560,7 +561,7 @@ def _colorize(text: str, code: str, *, enabled: bool) -> str:
 
 def _render_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     """Renders a left-aligned, column-padded GFM table so the raw markdown/terminal text is
-    itself readable, not just its rendered form (PRD .claude/rules/design.md)."""
+    itself readable, not just its rendered form."""
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):

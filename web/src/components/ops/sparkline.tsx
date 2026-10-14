@@ -1,4 +1,4 @@
-/** A tiny inline trend line (PRD §10 M10.3): plain SVG, scales to its box, draws nothing until
+/** A tiny inline trend line: plain SVG, scales to its box, draws nothing until
  * there are two points. Nulls are skipped; a series that never moved is drawn as a faint dotted
  * baseline so it reads as "steady" rather than as a divider. Decorative unless given a label. */
 import { cn } from "@/lib/utils";

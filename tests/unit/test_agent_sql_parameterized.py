@@ -1,4 +1,4 @@
-"""Unit tests proving `apx.agent`'s SQL stays parameterised (PRD §10 M9.2, ADR-0010 D2): an AST
+"""Unit tests proving `apx.agent`'s SQL stays parameterised (ADR-0010 D2): an AST
 scan finds no f-string, string concatenation, `%` or `.format` reaching `SqlReader.fetch_all`
 inside `apx/agent`; every statement in `AGENT_SQL` is a SELECT/WITH that binds `:limit`; and a
 hostile argument string never appears in the executed statement text, checked with a hypothesis

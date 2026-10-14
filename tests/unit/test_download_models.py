@@ -1,7 +1,6 @@
 """Unit tests for scripts/download_models.py: sha256/size verification, skip-if-already-
 verified resume behaviour, and the multi-model CLI, all against a fake downloader --
-no network (PRD §8, §10 M0.4).
-"""
+no network."""
 
 from __future__ import annotations
 

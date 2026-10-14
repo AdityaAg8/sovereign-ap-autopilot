@@ -1,5 +1,5 @@
 """`LlamaSwapClient`: the `apx.llm.interfaces.LlmClient` over llama-swap's OpenAI-compatible API
-on the internal network (PRD §4, §6.2 I2). Structured calls always send the §4 extraction
+on the internal network (I2). Structured calls always send the §4 extraction
 settings -- thinking off, JSON-schema constrained output, the request's temperature and seed,
 logprobs on -- and every transport or protocol failure is a typed error, never an empty result.
 The one retry here is bounded, logged backoff on llama-swap's 429/503 "busy" answers
@@ -42,7 +42,7 @@ RUNTIME_MODEL_ALIASES: frozenset[str] = frozenset(
     {"extractor-a", "exception-agent", "ops-chat", "extractor-b", "arbiter"}
 )
 """The llama-swap aliases the runtime pipeline may call (infra/llama-swap.yaml runtime models).
-Offline-only models (bake-off, teacher, red-team) are deliberately absent (PRD §4)."""
+Offline-only models (bake-off, teacher, red-team) are deliberately absent."""
 
 
 class LlmSettings(BaseSettings):

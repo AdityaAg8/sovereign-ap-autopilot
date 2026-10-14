@@ -1,6 +1,6 @@
 /** Approve / Fix / Reject action bar for the review queue, bound to a/f/r keyboard shortcuts (PRD
  * §10 M5.4). Approve is disabled — with the reason stated, never just greyed out silently — when
- * the signed-in role can't clear this invoice's amount (PRD §1 roles; the real authorization
+ * the signed-in role can't clear this invoice's amount (roles; the real authorization
  * boundary is apx/api's policy engine once M5.3/M6.5 land, this is UX gating only). A refused
  * approval (422: ADR-0012 fields still unresolved) is announced inline through a live region. */
 

@@ -2,8 +2,7 @@
 (ADR-0018 §5), so a resume never refuses them mid-queue and the trust job never mixes parses.
 Files are moved with their `.parse_failures.jsonl` sibling, never deleted or rewritten.
 
-Usage: python -m evals.archive_stale_rows [--dry-run] [--archive-dir logs/archive] ROWS.jsonl ...
-"""
+Usage: python -m evals.archive_stale_rows [--dry-run] [--archive-dir logs/archive] ROWS.jsonl ..."""
 
 from __future__ import annotations
 

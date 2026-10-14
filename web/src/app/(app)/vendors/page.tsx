@@ -1,4 +1,4 @@
-/** Vendor list route (PRD §10 M5.4). */
+/** Vendor list route. */
 
 "use client";
 

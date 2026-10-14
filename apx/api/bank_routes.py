@@ -1,4 +1,4 @@
-"""Vendor bank-master endpoints (REVIEW.md M-01): an admin proposes a bank-detail change, stored
+"""Vendor bank-master endpoints: an admin proposes a bank-detail change, stored
 unverified, and a different admin records the out-of-band verification that makes it payable
 under P1. Both go through `apx.bank.BankMasterService` (PolicyGuard -> PaymentStateWriter)."""
 

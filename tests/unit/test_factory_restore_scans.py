@@ -1,7 +1,7 @@
 """Unit tests for `factory.restore_scans`: on a tiny scan-free factory corpus, restoring the planned
 scan variants writes decodable page-sized scan PNGs and flips `has_scan` without touching any PDF
 or label byte, is deterministic and idempotent, and refuses (typed errors) a corpus that does not
-match the plan or whose PDF the renderer cannot reproduce (PRD §10 M2.3, ADR-0012 amendment)."""
+match the plan or whose PDF the renderer cannot reproduce (ADR-0012 amendment)."""
 
 from __future__ import annotations
 

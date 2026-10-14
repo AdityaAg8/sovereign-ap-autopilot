@@ -1,4 +1,4 @@
-"""Unit tests for the runtime injection guard (PRD §6.3 P4, M6.4, ADR-0017): span collection from
+"""Unit tests for the runtime injection guard (P4, ADR-0017): span collection from
 real PDFs, the guard.json threshold contract, the P4 score mapping, REVIEW/BLOCK routing through
 `DetectorScanner` and the policy engine's thresholds, and fail-closed behaviour. The classifier
 is a deterministic fake keyed on the span text; the guard, spans and scanner are the real units."""

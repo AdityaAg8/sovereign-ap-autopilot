@@ -1,6 +1,6 @@
 """Realistic, deterministic instances of every type that crosses the `InvoiceWorkflow` Temporal
 boundary (a 5-page bilingual parse with real page PNGs, 30-line invoice, full A/B/arbiter
-extraction), shared by the payload-size and parse-store tests (PRD §10 M5.2)."""
+extraction), shared by the payload-size and parse-store tests."""
 
 from __future__ import annotations
 

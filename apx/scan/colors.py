@@ -2,7 +2,7 @@
 (gray, RGB or CMYK, in any 0..1 form) to 8-bit RGB, measures a raw colour distance used to spot
 a glyph's own ink in a render, and computes WCAG relative luminance/contrast so
 `apx.scan.visibility` can judge whether rendered text is actually visible against its rendered
-background (PRD §3 M6.2)."""
+background."""
 
 from __future__ import annotations
 
@@ -16,8 +16,7 @@ def normalize_color(value: object, default: RGB = _BLACK) -> RGB:
 
     Handles the shapes pdfplumber (via pdfminer) produces: `None` (no colour set, PDF default
     is black), a single number (DeviceGray, 0..1), a 3-tuple (DeviceRGB, 0..1 each) or a 4-tuple
-    (DeviceCMYK, 0..1 each). Any other shape falls back to `default`.
-    """
+    (DeviceCMYK, 0..1 each). Any other shape falls back to `default`."""
     if value is None:
         return default
     if isinstance(value, int | float):

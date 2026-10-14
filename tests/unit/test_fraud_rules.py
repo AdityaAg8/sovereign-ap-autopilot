@@ -105,7 +105,7 @@ class FakeHistory:
 
 @dataclass
 class FakeSimilarityIndex:
-    """Test double for `PageSimilarityIndex`; the model itself is wired in later (M8.2+)."""
+    """Test double for `PageSimilarityIndex`; the model itself is wired in later (+)."""
 
     results: list[SimilarPage]
 

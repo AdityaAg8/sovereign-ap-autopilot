@@ -1,5 +1,5 @@
 /** Fixed primary navigation for the authenticated shell: Inbox, Review queue, Vendors,
- * Operations (PRD §10 M5.4, M10.3). Collapses to an icon rail below md, highlights the active
+ * Operations. Collapses to an icon rail below md, highlights the active
  * route and binds the g-i/g-r/g-v/g-o jump shortcuts. */
 
 "use client";

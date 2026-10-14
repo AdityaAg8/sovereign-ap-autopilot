@@ -1,6 +1,6 @@
 """Tests for DefaultProposalSink (P5): agent, chat and MCP proposals stay inside
 AGENT_PROPOSAL_KINDS and can never be `change_bank`; every accepted proposal is audited before
-being persisted, and a proposal never executes itself (PRD §6.3 P5, ADR-0008 K3, M6.5)."""
+being persisted, and a proposal never executes itself (P5, ADR-0008 K3)."""
 
 from __future__ import annotations
 

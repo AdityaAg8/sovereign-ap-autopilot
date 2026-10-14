@@ -1,5 +1,5 @@
-"""Production adapters that turn the pipeline modules into the invoice workflow's ports (PRD §10
-M5.6): grounded fields into a typed `Invoice`, the hidden-content detector into a `Scanner`, the
+"""Production adapters that turn the pipeline modules into the invoice workflow's ports:
+grounded fields into a typed `Invoice`, the hidden-content detector into a `Scanner`, the
 fraud rules into a `FraudEngine`, `Invoice` into PINT AE UBL, and the interim trust score of the
 no-calibrator path (everything to review)."""
 
@@ -192,7 +192,7 @@ def _normalized(fields: Mapping[FieldName, FieldValue], name: FieldName) -> str 
 
 
 class DetectorScanner:
-    """`Scanner` over the rule-based hidden-content detector (M6.2) and the M6.4 injection
+    """`Scanner` over the rule-based hidden-content detector and the M6.4 injection
     guard (ADR-0017). The injection score is the strongest flag of a kind only an attack
     produces: text a reader cannot see, active content, or a guard INJECTION flag, whose score
     is already on the P4 scale (`apx.scan.guard.policy_score`). `guard=None` runs the detector
@@ -295,7 +295,7 @@ class RuleFraudEngine:
     near-duplicate pages against the same vendor's recent invoices when a `PageSource` is given,
     plus learned (Qwen3-VL-Embedding-2B) near-duplicate pages against the same vendor's stored
     pages when `page_index` is given; this invoice's pages are then stored for later ones.
-    Both page checks need a resolved vendor. The isolation forest joins with its model (M8.2)."""
+    Both page checks need a resolved vendor. The isolation forest joins with its model."""
 
     def __init__(
         self,

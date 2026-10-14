@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verifies M0 (Foundations) is done: lint, typecheck, unit tests, header check, web
-# lint/typecheck/build all green, and every M0 artifact exists (PRD §10 M0.1-M0.6).
+# lint/typecheck/build all green, and every M0 artifact exists.
 # Prints a PASS/FAIL table and exits nonzero if any gate fails; wired to `make verify-m0`.
 set +e
 set +u
@@ -69,7 +69,7 @@ run_gate "ruff format --check" uv run ruff format --check .
 run_gate "mypy --strict" uv run mypy
 run_gate "pytest -m 'not gpu'" uv run pytest -m "not gpu"
 
-echo "==> PRD §8 file headers"
+echo "==> file headers"
 run_gate "check_headers --all" uv run python scripts/check_headers.py --all
 
 echo "==> Web: lint, typecheck, build"

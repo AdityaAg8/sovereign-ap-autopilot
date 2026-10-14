@@ -1,4 +1,4 @@
-"""Unit tests for extraction row identity (`evals.extraction_identity`, M7.1 review H2): the served
+"""Unit tests for extraction row identity (`evals.extraction_identity`, review H2): the served
 GGUF sha256 resolves from models.lock or an export manifest, the prompt version tracks the prompt
 contract, and the harness refuses to resume a row file written by another build or prompt, or
 under other llama-swap serving args or another parser build."""
@@ -90,7 +90,7 @@ def test_local_gguf_sha_comes_from_the_export_manifest(tmp_path: Path) -> None:
 )
 def test_broken_export_manifest_is_a_served_model_error(tmp_path: Path, manifest: str) -> None:
     """The runtime trust gate treats ServedModelError as a refusal; any other exception type
-    would fail the activity and Temporal would retry it forever (M7.5 review F4)."""
+    would fail the activity and Temporal would retry it forever (review F4)."""
     model, _ = served_paths(SWAP, "extractor-b-challenger")
     export = tmp_path / model.removeprefix("/models/")
     export.parent.mkdir(parents=True)

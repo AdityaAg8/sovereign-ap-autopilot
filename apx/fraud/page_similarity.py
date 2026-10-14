@@ -1,4 +1,4 @@
-"""Embedder-backed `PageSimilarityIndex` (PRD §3 apx/fraud, §10 M8.1): pages are embedded with a
+"""Embedder-backed `PageSimilarityIndex`: pages are embedded with a
 `PageEmbedder` (Qwen3-VL-Embedding-2B), stored with `add`, and `nearest` returns the stored pages
 closest by cosine similarity as `SimilarPage`s. The flag decision (threshold 0.9, rule id
 `near_duplicate_embedding`) stays with `DuplicateInvoiceRule.evaluate_similarity`.

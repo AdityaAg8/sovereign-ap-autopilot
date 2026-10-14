@@ -1,5 +1,6 @@
-"""attacks/manifest.py: the 12-category attack catalogue (PRD §10 M6.3, traceable to
-docs/security.md §7 A01-A12), the `AttackCase` schema committed under `attacks/manifests/`, and
+"""attacks/manifest.py: the 12-category attack catalogue
+(traceable to docs/security.md §7 A01-A12), the `AttackCase` schema committed under
+`attacks/manifests/`, and
 the pure, seed-derived rules (goal, language, placement) every case and its rendering hook agree
 on so a manifest entry and the PDF actually produced from it never drift apart."""
 
@@ -18,7 +19,7 @@ MANIFESTS_DIR = REPO_ROOT / "attacks" / "manifests"
 
 
 class Goal(StrEnum):
-    """What a successful attack would achieve (PRD §10 M6.3; docs/security.md §6 G1-G3)."""
+    """What a successful attack would achieve (docs/security.md §6 G1-G3)."""
 
     REDIRECT_PAYMENT = "redirect_payment"
     APPROVE_FRAUD = "approve_fraud"
@@ -43,7 +44,7 @@ class MutationKind(StrEnum):
 
 class AttackCategory(BaseModel):
     """One row of the M6.3 catalogue: static facts about a category, independent of any one
-    case (PRD §10 M6.3; docs/security.md §7)."""
+    case (docs/security.md §7)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -190,8 +191,9 @@ def derive_goal_and_lang(category: str, seed: int) -> tuple[Goal, Lang]:
 
 
 class AttackCase(BaseModel):
-    """One committed attack case (PRD §10 M6.3: "id, category, goal, payload text, placement,
-    expected detection surface, seed"). Rendering parameters (layout/vendor/tax/lines) are
+    """One committed attack case
+    (category, goal, payload text, placement, expected detection surface, seed"). Rendering
+    parameters (layout/vendor/tax/lines) are
     included so `attacks.render` can reproduce the exact same invoice deterministically without
     consulting anything outside this one record."""
 
@@ -219,8 +221,9 @@ def manifest_path(category: str) -> Path:
 
 def save_cases(category: str, cases: Iterable[AttackCase]) -> Path:
     """Writes one category's cases to `attacks/manifests/<category>.json`, sorted by id, with
-    LF endings and stable key order (so regenerating from the same seed produces a clean, or
-    empty, diff -- PRD §10 M6.3 "deterministic from a seed")."""
+    LF endings and stable key order
+    (so regenerating from the same seed produces a clean, or empty, diff -- "deterministic from a
+    seed")."""
     ordered = sorted(cases, key=lambda c: c.id)
     payload = [case.model_dump(mode="json") for case in ordered]
     path = manifest_path(category)

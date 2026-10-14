@@ -2,8 +2,7 @@
 screenshot from `factory.render` through a curated, dimension-preserving Augraphy pipeline
 (ink bleed, bleed-through, brightness and photocopy noise; no page-warping/geometric
 augmentations), reseeded per document for determinism, plus the trivial page-fraction remap of a
-`factory.labels.BBox` onto that raster (PRD §10 M2.3: "map boxes to raster").
-"""
+`factory.labels.BBox` onto that raster ("map boxes to raster")."""
 
 from __future__ import annotations
 
@@ -44,13 +43,12 @@ def _build_pipeline(seed: int) -> AugraphyPipeline:
     (1) anything that warps geometry (folding, rotation, page borders), which would invalidate a
     label box normalized to [0, 1] page fractions; and (2) `Scribbles`/`WaterMark`, whose default
     font handling can call out to fontsquirrel.com over the network to fetch a handwriting font
-    (PRD §8: the pipeline makes no outbound calls).
+    (the pipeline makes no outbound calls).
 
     Reseeds Python's `random`, numpy and OpenCV's RNG from `seed` immediately before building the
     pipeline: per Augraphy's own reproducibility notes, a seed only reproduces output when it is
     set again right before each use, not once per process (successive calls in one process
-    otherwise keep advancing the same RNG state).
-    """
+    otherwise keep advancing the same RNG state)."""
     # `seed` may be an arbitrary 64-bit value (e.g. from `factory.build`'s sha256-derived seeds).
     # numpy's legacy RandomState needs a value below 2**32, and `AugraphyPipeline` itself later
     # passes the same `random_seed` straight to `cv2.setRNGSeed`, which needs a value that fits a
@@ -141,7 +139,7 @@ def map_bbox_to_pixels(bbox: BBox, *, image_width: int, image_height: int) -> Pi
     """Maps a [0, 1]-normalized page `bbox` onto a raster of `image_width` x `image_height`
     pixels. Trivial because the digital PDF page, the clean screenshot and the Augraphy scan
     variant all share the same page-fraction coordinate frame; only the pixel resolution differs
-    (PRD §10 M2.3: "map boxes to raster")."""
+    ("map boxes to raster")."""
     x, y, w, h = bbox
     return (
         round(x * image_width),

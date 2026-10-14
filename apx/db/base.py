@@ -1,6 +1,6 @@
 """Declarative base and shared column mixins for every ORM model in `apx.db.models`. A fixed
-naming convention keeps constraint and index names stable across Alembic autogenerate runs
-(PRD §7 apx/db, §10 M5.1).
+naming convention keeps constraint and index names stable across Alembic autogenerate runs.
+
 """
 
 from __future__ import annotations

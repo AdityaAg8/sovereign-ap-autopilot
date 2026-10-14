@@ -1,4 +1,4 @@
-"""Unit tests for the `review_note` workflow activity (PRD §10 M9.3): a grounded note is stored as
+"""Unit tests for the `review_note` workflow activity: a grounded note is stored as
 an `agent.review_note` audit event on the invoice; a refused note or an unreachable model is
 recorded as its own audit event and never raises, so the human review is never held up."""
 

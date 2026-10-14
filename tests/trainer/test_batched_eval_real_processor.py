@@ -1,4 +1,4 @@
-"""Batched dev eval (M7.1-perf) through the real Extractor B processor (`models/Qwen/Qwen3.5-4B`,
+"""Batched dev eval (-perf) through the real Extractor B processor (`models/Qwen/Qwen3.5-4B`,
 offline) with only the model faked: prompts are left-padded and each unpadded row equals its
 single-row prompt, generate is greedy with the KV cache and a pad id, outputs map back to the right
 sample_id, the padding side is restored, a real `torch.cuda.OutOfMemoryError` shrinks the batch,

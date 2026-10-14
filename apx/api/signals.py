@@ -1,8 +1,7 @@
-"""Delivers a human review outcome to the invoice's Temporal `InvoiceWorkflow` (its `review`
-signal, PRD §10 M5.3). The API records the decision through `apx.policy` first, then signals, so
+"""Delivers a human review outcome to the invoice's Temporal `InvoiceWorkflow`
+(its `review` signal). The API records the decision through `apx.policy` first, then signals, so
 a REVIEW-routed execution resumes instead of waiting forever while the database says approved.
-A signal to a workflow that has already finished is a typed 409, not a retryable 503.
-"""
+A signal to a workflow that has already finished is a typed 409, not a retryable 503."""
 
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ class ReviewSignaller(Protocol):
 
 
 class UnconfiguredReviewSignaller:
-    """Default until `API_TEMPORAL_ADDRESS` is set: fails loudly (PRD §8) rather than pretend
+    """Default until `API_TEMPORAL_ADDRESS` is set: fails loudly rather than pretend
     the workflow was told."""
 
     async def signal_review(

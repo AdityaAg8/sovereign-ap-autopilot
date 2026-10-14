@@ -1,4 +1,4 @@
-"""What a factory document looks like at runtime (PRD §10 M2.3/M3.3, ADR-0012 amendment 3): a
+"""What a factory document looks like at runtime (ADR-0012 amendment 3): a
 born-digital invoice is its `<sha>.pdf`; a `has_scan` invoice is its Augraphy scan PNGs
 (`<sha>.pageN.scan.png`) assembled into an image-only PDF with no text layer, the form a
 multi-page scanned upload takes, so `apx.parse.parser` routes every page to the OCR service.

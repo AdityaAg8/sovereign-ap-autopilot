@@ -1,4 +1,4 @@
-"""The trainer's fixed arguments (`training_arguments_kwargs`, design §4) build a real TRL
+"""The trainer's fixed arguments (`training_arguments_kwargs`) build a real TRL
 `SFTConfig` on the pinned stack, for both the full run and the probe's overrides, so a field that
 moved between transformers/TRL versions fails here on CPU instead of minutes into a GPU job."""
 

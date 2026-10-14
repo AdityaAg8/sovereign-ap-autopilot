@@ -1,6 +1,6 @@
 """Unit tests for `attacks.pdf_metadata`: the byte-level PDF /Info-dictionary and XMP injection
 `zero_width`, `bidi_override` and `pdf_metadata_injection` rely on instead of an HTML/CSS
-mutation (PRD §10 M6.3; docs/security.md A10). Verifies both that the injected text round-trips
+mutation (docs/security.md A10). Verifies both that the injected text round-trips
 through pdfplumber's metadata reader and that the resulting bytes are still a structurally valid
 PDF a real reader (pypdfium2) can open."""
 

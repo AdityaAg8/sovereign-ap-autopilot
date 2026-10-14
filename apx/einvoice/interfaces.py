@@ -1,5 +1,5 @@
 """Interfaces for PINT AE: building UBL 2.1 invoices and credit notes from a validated Invoice
-and schematron validation against the pinned rule set (PRD §3, §5 schematron gate)."""
+and schematron validation against the pinned rule set."""
 
 from __future__ import annotations
 

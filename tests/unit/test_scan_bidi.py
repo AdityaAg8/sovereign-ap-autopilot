@@ -1,5 +1,5 @@
-"""Unit test for the bidi-override technique (PRD §6.3 A06): a right-to-left override that can
-reorder digits is always flagged BIDI_CONTROL, unlike normal RTL/Arabic bidi marks (M6.2)."""
+"""Unit test for the bidi-override technique (A06): a right-to-left override that can
+reorder digits is always flagged BIDI_CONTROL, unlike normal RTL/Arabic bidi marks."""
 
 from __future__ import annotations
 

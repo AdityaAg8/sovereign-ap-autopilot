@@ -1,7 +1,7 @@
 """Content-addressed on-disk `ParsedDocumentStore`: the parse activity writes each parse here
 once and hands downstream activities a small `ParsedDocumentRef`, so page PNGs never cross the
 Temporal payload boundary. Layout: `<root>/<document_sha256>/<content_sha256>/document.json`
-plus `page-<index>.png` (PRD §3, §6.4, §10 M5.2)."""
+plus `page-<index>.png`."""
 
 from __future__ import annotations
 

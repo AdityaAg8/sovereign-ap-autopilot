@@ -1,5 +1,5 @@
-"""Scoreboard generator (PRD §5, ADR-0005, §10 M1.4/M10.6): renders reports/scoreboard.md with
-one row per PRD §5 metric, each taken from the newest authoritative measured source -- model runs
+"""Scoreboard generator (ADR-0005): renders reports/scoreboard.md with
+one row per metric, each taken from the newest authoritative measured source -- model runs
 in reports/runs/*.json, the JSON evidence (chat_evals, attacks_e2e, trust_gate, extractor_b_gates,
 bakeoff) or a generated report read by the strict parsers
 in evals/scoreboard_sources.py -- with its gate, status and source timestamp. Dummy-predictor
@@ -225,7 +225,7 @@ def newest_cell(*cells: Cell | None) -> Cell | None:
     return max(measured, key=lambda c: max(s.at for s in c.sources)) if measured else None
 
 
-# --- one resolver per PRD §5 row --------------------------------------------------------------
+# --- one resolver per row --------------------------------------------------------------
 
 
 def _docile(inputs: Inputs) -> Cell:
@@ -515,7 +515,7 @@ def _latency_vram(inputs: Inputs) -> Cell:
 
 @dataclass(frozen=True)
 class ScoreboardRow:
-    """One row of the PRD §5 scoreboard table and the resolver that measures it."""
+    """One row of the scoreboard table and the resolver that measures it."""
 
     metric: str
     dataset: str
@@ -544,7 +544,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
     ScoreboardRow(
         "Straight-through rate",
         "UAE test",
-        "Report at α ∈ {0.5, 1, 2}%",  # noqa: RUF001 -- PRD §5 wording
+        "Report at α ∈ {0.5, 1, 2}%",  # noqa: RUF001 -- wording
         _stp,
     ),
     ScoreboardRow(
@@ -572,7 +572,7 @@ ROWS: tuple[ScoreboardRow, ...] = (
 )
 
 
-# --- supplementary measured gates (not PRD §5 rows) -------------------------------------------
+# --- supplementary measured gates -------------------------------------------
 
 
 def supplementary_rows(inputs: Inputs) -> list[list[str]]:
@@ -732,7 +732,7 @@ def _real_row(
 
 
 def real_rows(inputs: Inputs) -> list[list[str]]:
-    """The ADR-0019 §6 rows. They are not PRD §5 rows until the PRD table lists them."""
+    """The ADR-0019 §6 rows. They are not rows until the table lists them."""
     rows = [
         _real_row(
             "ExtractBench short value / grounding F1 (real 245, then all 252)",

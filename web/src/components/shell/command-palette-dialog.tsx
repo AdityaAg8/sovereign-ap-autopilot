@@ -1,5 +1,5 @@
 /** Body of the global ⌘K command palette: fuzzy navigation to invoices/vendors and quick actions
- * (PRD §10 M5.4). Loaded on demand by `command-palette.tsx`, which owns the Mod+K binding, so cmdk
+ *. Loaded on demand by `command-palette.tsx`, which owns the Mod+K binding, so cmdk
  * and the dialog primitives stay off every signed-in page's critical path. */
 
 "use client";

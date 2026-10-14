@@ -2,8 +2,8 @@
 wrapped as `UntrustedText`. Escaping is implemented independently of
 `apx.common.untrusted.to_untrusted`, which strips suspicious codepoints outright: scan evidence
 must instead keep the exact codepoint visible, as a `\\uXXXX` escape, so a human reviewer can see
-precisely what was hidden in the document, while still being safe to print or log (PRD §6.2 I2,
-ADR-0008, M6.2)."""
+precisely what was hidden in the document, while still being safe to print or log
+(I2, ADR-0008)."""
 
 from __future__ import annotations
 

@@ -1,10 +1,10 @@
-"""In-memory token-bucket throttle for `POST /auth/login` (REVIEW L-02 and N-04, docs/security.md
-B8): an account bucket per normalised email slows password guessing against one account, and a
+"""In-memory token-bucket throttle for `POST /auth/login`
+(docs/security.md B8): an account bucket per normalised email slows password guessing against one
+account, and a
 coarse per-client-IP bucket with a much higher limit caps one source's total attempts. Keys are
 sha256 digests in capped maps, so memory stays bounded whatever the usernames look like; a refused
 request never creates an account bucket, and eviction drops the fullest old bucket, so a spray of
-usernames cannot flush a drained account's bucket back to full (REVIEW.md P3-03).
-"""
+usernames cannot flush a drained account's bucket back to full."""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ class LoginRateLimiter:
     successful login. Not thread-safe; the API calls it from its single event loop, where it
     never awaits. Process-local by design: the API is one local process.
 
-    Trade-off (REVIEW N-04). Every request reaches the API from the gateway container, so the
+    Trade-off. Every request reaches the API from the gateway container, so the
     client IP cannot tell a local attacker from the real user; keying the account bucket on
     (IP, email) protected nothing and still let any local page lock an account out. So the
     account bucket is keyed on the email alone, and a successful login refunds its token, so

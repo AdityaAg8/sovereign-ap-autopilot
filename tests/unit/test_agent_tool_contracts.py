@@ -1,7 +1,7 @@
 """Unit tests for the ADR-0010 D1/D3 tool contract table: there are exactly six tools with the
 documented effects/origins/roles, MCP lists exactly the read and propose tools, every parameter
 model is closed and schema-producing, `MaskedIban` rejects a raw IBAN, and `executed`/`sent`
-accept only `False` (PRD §10 M9.2, ADR-0010 M9.2 gate)."""
+accept only `False` (ADR-0010 gate)."""
 
 from __future__ import annotations
 

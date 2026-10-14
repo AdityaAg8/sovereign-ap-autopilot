@@ -1,4 +1,4 @@
-/** GPU residency (PRD §10 M10.3): which models llama-swap holds in memory right now and for how
+/** GPU residency: which models llama-swap holds in memory right now and for how
  * long. Models load on demand and unload when their stage finishes, so this shows the GPU
  * following the work. State is spelled out in words, never colour alone. */
 import type { OpsSnapshot } from "@/lib/api/types";

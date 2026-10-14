@@ -1,4 +1,4 @@
-"""Unit tests for ml/guard/thresholds.py (PRD §6.3 P4, ADR-0017): backfilling guard.json's cal
+"""Unit tests for ml/guard/thresholds.py (P4, ADR-0017): backfilling guard.json's cal
 block threshold from the same checkpoint's scores JSONL, and refusing scores that belong to a
 different checkpoint (their max-F1 point would not reproduce guard.json's `threshold`)."""
 

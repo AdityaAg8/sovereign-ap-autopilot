@@ -1,4 +1,4 @@
-"""ExtractBench short arm of the M3.4 bake-off (PRD §5 ExtractBench row, §10 M3.4): builds one
+"""ExtractBench short arm of the M3.4 bake-off: builds one
 schema-constrained request per document from its own `data_schema` (parse text, page images when
 the arm reads images, a size-capped schema digest), turns the answer into an identity-stamped
 row and scores rows through `evals.scorers.extractbench` (the official framework if cloned). A

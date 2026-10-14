@@ -1,6 +1,5 @@
 """Unit tests for the non-VAT `apx.validate.interfaces` checks: TRN, AE IBAN, dates, currency
-and mandatory-field presence, plus `ValidationReport.passed` and the `InvoiceValidator` wiring
-(PRD §10 M4.1)."""
+and mandatory-field presence, plus `ValidationReport.passed` and the `InvoiceValidator` wiring."""
 
 from __future__ import annotations
 

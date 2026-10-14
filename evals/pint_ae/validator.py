@@ -1,6 +1,6 @@
 """Validates a PINT AE invoice/credit-note XML document against the pinned schematron rule
 sets, applying each compiled SchXslt XSLT stylesheet and parsing the resulting SVRL report
-into typed failed-assert records with rule IDs and flags (PRD §5, §10 M1.3)."""
+into typed failed-assert records with rule IDs and flags."""
 
 from __future__ import annotations
 

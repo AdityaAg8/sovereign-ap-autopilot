@@ -1,6 +1,6 @@
 /** M9.3 acceptance: asking the assistant "why was X blocked" returns an answer that cites audit
  * ids, and a citation opens that invoice's Audit tab on the cited event. Also checks the
- * assistant declines a payment request instead of acting (PRD §10 M9.3, ADR-0010). */
+ * assistant declines a payment request instead of acting (ADR-0010). */
 import { test, expect, type Page } from "@playwright/test";
 
 async function signIn(page: Page) {

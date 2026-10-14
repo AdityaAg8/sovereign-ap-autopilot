@@ -1,9 +1,8 @@
 """Fixed evaluation/training splits keyed by document sha256, written to the committed
-evals/splits.json (PRD §5, §6.2 I5, ADR-0005). Builds the fatura/extractbench/docile/cord groups
+evals/splits.json (I5, ADR-0005). Builds the fatura/extractbench/docile/cord groups
 deterministically from data/manifest.json, and exposes `register_documents` so a later
-milestone (e.g. M2's UAE factory) can add newly generated documents to `uae`/`attacks`
-without ever reshuffling a sha256 that was already assigned.
-"""
+milestone (e.g. 's UAE factory) can add newly generated documents to `uae`/`attacks`
+without ever reshuffling a sha256 that was already assigned."""
 
 from __future__ import annotations
 
@@ -62,8 +61,9 @@ class SplitsFile(BaseModel):
 
 
 def empty_splits(*, now: datetime | None = None) -> SplitsFile:
-    """A SplitsFile with every known set/split present but empty (the M1 starting point for
-    `uae`, `docile` and `attacks`, which are populated by later milestones)."""
+    """A SplitsFile with every known set/split present but empty
+    (the starting point for `uae`, `docile` and `attacks`, which are populated by later
+    milestones)."""
     return SplitsFile(
         generated_at=now or datetime.now(UTC),
         sets={name: {split: [] for split in splits} for name, splits in SET_SPLIT_NAMES.items()},
@@ -173,10 +173,11 @@ def build_from_manifest(manifest: Manifest, existing: SplitsFile | None = None) 
 def register_documents(
     splits: SplitsFile, set_name: SetName, assignments: Mapping[str, str]
 ) -> SplitsFile:
-    """Adds `{sha256: split}` assignments into `set_name` (e.g. once the M2 UAE factory
-    produces documents). A sha256 already present anywhere in the set, in any split, is left
+    """Adds `{sha256: split}` assignments into `set_name`
+    (e.g. once the UAE factory produces documents). A sha256 already present anywhere in the set, in
+    any split, is left
     untouched: registering only adds new documents, it never reshuffles an existing one
-    (PRD ADR-0005)."""
+    (ADR-0005)."""
     valid_splits = SET_SPLIT_NAMES[set_name]
     current: SplitGroups = copy.deepcopy(
         splits.sets.get(set_name, {split: [] for split in valid_splits})
@@ -221,7 +222,7 @@ def find_duplicate_documents(splits: SplitsFile) -> list[str]:
 def find_leaks(splits: SplitsFile) -> list[str]:
     """Cross-pool sha256 overlaps: any document reachable from more than one of
     train/cal/test/docile_val/extractbench_eval/attacks_eval would mean eval, cal or test data
-    reaching training (or cal/test mixing with each other) (PRD §6.2 I5). Empty means clean."""
+    reaching training (or cal/test mixing with each other) (I5). Empty means clean."""
     pools = {name: _pool(splits, members) for name, members in POOL_MEMBERS.items()}
     names = sorted(pools)
     problems: list[str] = []

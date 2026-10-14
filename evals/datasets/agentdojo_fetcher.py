@@ -1,8 +1,8 @@
 """Checks whether the AgentDojo banking benchmark package is installed. `agentdojo` is a
 declared dev dependency (pyproject.toml's dev group), so this normally succeeds once `uv sync`
 has run; this fetcher only reports availability and defers with a BLOCKED.md entry on the rare
-environment where it is still missing, rather than installing anything (PRD §5 data table,
-§10 M1.1).
+environment where it is still missing, rather than installing anything.
+
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ FETCH_COMMAND = "uv add agentdojo && uv run python -m evals.datasets fetch --set
 
 
 def fetch(data_root: Path) -> DatasetEntry:
-    del data_root  # AgentDojo is a pip package, not a data directory (PRD §5).
+    del data_root  # AgentDojo is a pip package, not a data directory.
     try:
         version = importlib.metadata.version("agentdojo")
     except importlib.metadata.PackageNotFoundError:

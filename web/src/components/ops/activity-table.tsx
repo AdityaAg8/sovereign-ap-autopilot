@@ -1,4 +1,4 @@
-/** Most recent invoice activity (PRD §10 M10.3): where each of the latest invoices is now. Rows
+/** Most recent invoice activity: where each of the latest invoices is now. Rows
  * that are new or moved since the last tick glow briefly (keyed by update time so the glow
  * replays on every move); ids and amounts are mono so the columns line up. */
 import Link from "next/link";

@@ -1,4 +1,4 @@
-"""Persists the fraud flags raised on an invoice (PRD §10 M8.3) so review can show each flag's
+"""Persists the fraud flags raised on an invoice so review can show each flag's
 plain-language explanation. Called by the workflow's fraud step with the engine's report."""
 
 from __future__ import annotations

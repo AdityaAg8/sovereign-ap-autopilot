@@ -1,7 +1,6 @@
 """Mines benign invoice text (EN, AR and bilingual) from the generated UAE invoice sets for the
-M6.4 guard's hard negatives (PRD §10 M6.4). Reads only a dataset's `train` pool, never cal or
-test, so the guard data cannot leak into the M3/M7 extraction evals.
-"""
+M6.4 guard's hard negatives. Reads only a dataset's `train` pool, never cal or
+test, so the guard data cannot leak into the M3/M7 extraction evals."""
 
 from __future__ import annotations
 

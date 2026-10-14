@@ -1,5 +1,5 @@
 # Pre-commit gate for Sovereign AP Autopilot: Python and web lint/format, secret
-# scanning, large-file guard and the PRD §8 header check (PRD §10 M0.2).
+# scanning, large-file guard and the header check.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.8

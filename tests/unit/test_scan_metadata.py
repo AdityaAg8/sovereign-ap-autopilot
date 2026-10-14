@@ -1,6 +1,6 @@
-"""Unit tests for the metadata-injection technique (PRD §6.3 A10): a long free-text Info dict
+"""Unit tests for the metadata-injection technique (A10): a long free-text Info dict
 value, a zero-width-carrying XMP stream, and an annotation are all flagged PDF_METADATA; the
-standard Producer/CreationDate/... boilerplate every PDF writer sets is never flagged (M6.2).
+standard Producer/CreationDate/... boilerplate every PDF writer sets is never flagged.
 Also covers two M6 part-1 review findings: F1, an undecodable XMP stream must fail closed with
 `ScanError` rather than being treated as empty/clean; F2, a baseline Info dict key (Producer,
 Creator, ...) is exempt from the length heuristic but never from the suspicious-codepoint check."""

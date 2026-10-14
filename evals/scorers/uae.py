@@ -1,5 +1,5 @@
-"""UAE factory field F1 scorer, reported separately for English and Arabic invoices (PRD §5
-scoreboard row "Field F1, EN and AR separately", §10 M1.3). Built on the same normalized-exact-
+"""UAE factory field F1 scorer, reported separately for English and Arabic invoices
+(scoreboard row "Field F1, EN and AR separately"). Built on the same normalized-exact-
 match field F1 core as the FATURA scorer; the only UAE-specific piece is partitioning documents
 by language before scoring."""
 

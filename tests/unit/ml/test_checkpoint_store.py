@@ -201,7 +201,7 @@ def test_retention_plan_rejects_negative_keep() -> None:
 
 
 # Filesystem-bound (mkdir, file writes and renames per example): wall time tracks host load,
-# not the code, so Hypothesis's 200 ms per-example deadline made it flaky (REVIEW N-12). Every
+# not the code, so Hypothesis's 200 ms per-example deadline made it flaky. Every
 # example still runs to completion and the example count is unchanged; only the timing check
 # is dropped.
 @settings(deadline=None)

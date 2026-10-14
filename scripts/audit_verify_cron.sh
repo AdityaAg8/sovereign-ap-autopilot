@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nightly audit verifier job (PRD §6.4, §10 M10.4): runs `python -m apx.audit verify`
+# Nightly audit verifier job: runs `python -m apx.audit verify`
 # (hash-chain + head-anchor check, apx/audit/anchor.py) via `uv run`, tees the structured
 # JSON result plus a timestamped human summary into logs/audit-verify/, and exits with the
 # CLI's own exit code (0 ok, 1 chain/anchor mismatch, 2 could not run) so cron, systemd or a
@@ -10,7 +10,7 @@
 # M10.4; once a Temporal worker exists, wire the same `python -m apx.audit verify` command
 # into a Temporal Schedule instead of cron without changing anything in apx/audit/.
 #
-# Suggested crontab entry (nightly at 02:00, matching PRD §6.4 "walks the chain nightly"):
+# Suggested crontab entry (nightly at 02:00, matching "walks the chain nightly"):
 #   0 2 * * * /usr/bin/env bash /path/to/repo/scripts/audit_verify_cron.sh
 set -euo pipefail
 

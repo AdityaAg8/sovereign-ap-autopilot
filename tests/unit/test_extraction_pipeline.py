@@ -1,4 +1,4 @@
-"""Tests for `apx.extract.pipeline` (PRD §10 M5.6): A and B both run, disputes go to the arbiter
+"""Tests for `apx.extract.pipeline`: A and B both run, disputes go to the arbiter
 only when there is one and something to settle, the arbiter rules only on disputed fields, and an
 invalid A falls back to B's values."""
 

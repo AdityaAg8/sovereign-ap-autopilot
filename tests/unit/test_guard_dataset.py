@@ -1,4 +1,4 @@
-"""Unit tests for ml/guard/dataset.py and ml/guard/mine.py (PRD §10 M6.4): family-level split
+"""Unit tests for ml/guard/dataset.py and ml/guard/mine.py: family-level split
 dealing, the no-leak check, dedupe priority, hard negatives, invoice-text mining (train pool only)
 and the full build over the committed attack suite."""
 

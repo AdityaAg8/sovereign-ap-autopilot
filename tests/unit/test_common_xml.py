@@ -1,7 +1,7 @@
 """Unit tests for `apx.common.xml`: the shared hardened parser rejects an oversized payload, any
 document declaring a DOCTYPE (which covers both XXE local-file-disclosure and billion-laughs
 entity-expansion payloads), and malformed XML, while parsing an ordinary well-formed document
-normally (PRD §8 standards, security fix for XXE / entity expansion)."""
+normally (security fix for XXE / entity expansion)."""
 
 from __future__ import annotations
 

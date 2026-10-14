@@ -1,9 +1,8 @@
 """Unit and property tests for `apx.learning.selection.score_candidate`: the deterministic,
 fixed-weight active-learning score is bounded, has no learned parameters, and is monotonic in
-each of its three signals (PRD §10 M10.1). The database-backed selection query itself is
+each of its three signals. The database-backed selection query itself is
 covered by `tests/integration/test_corrections.py` (needs real Postgres data to exercise
-confidence/disagreement/correction-frequency together).
-"""
+confidence/disagreement/correction-frequency together)."""
 
 from __future__ import annotations
 

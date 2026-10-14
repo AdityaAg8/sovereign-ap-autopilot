@@ -1,4 +1,4 @@
-"""MCP server (PRD §10 M9.4, ADR-0010 D8): exposes exactly `MCP_TOOL_NAMES` -- the four read
+"""MCP server (ADR-0010 D8): exposes exactly `MCP_TOOL_NAMES` -- the four read
 tools and the two proposal tools -- over stdio to a local MCP client. Every list and call
 re-authenticates the `APX_MCP_TOKEN` JWT (expiry), runs through the same `ToolDispatcher` as
 `ToolCaller(origin="mcp")`, returns canonical JSON plus spotlighted untrusted blocks, and audits

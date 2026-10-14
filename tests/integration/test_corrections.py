@@ -1,5 +1,5 @@
 """Integration tests for the M10.1 corrections store, active-learning selection and
-retraining export against a real, throwaway Postgres container (PRD §10 M10.1, §6.2 I5):
+retraining export against a real, throwaway Postgres container (I5):
 
 - `apx.api.service.DbInvoiceService.edit_field` (the existing fix path) records the before
   value, grounding box, source and model/revision of the field being corrected, alongside the
@@ -9,8 +9,7 @@ retraining export against a real, throwaway Postgres container (PRD §10 M10.1, 
 - `apx.learning.export.export_training_manifest` writes only training-split corrections,
   never calibration- or test-split ones.
 
-Marked `integration`, so it needs Docker (`pytest -m integration`).
-"""
+Marked `integration`, so it needs Docker (`pytest -m integration`)."""
 
 from __future__ import annotations
 
@@ -487,7 +486,7 @@ def test_export_training_manifest_only_writes_train_split_rows(schema: str, tmp_
 
 
 async def _reviewer_correction_reaches_manifest_scenario(out_path: Path) -> int:
-    """End to end (M10.1 acceptance): a correction made through the API is assigned the
+    """End to end (acceptance): a correction made through the API is assigned the
     training split -- the invoice is not a held-out eval document -- and so appears in the next
     exported training manifest."""
     invoice_id = _invoice_id("corrections-invoice-to-manifest")

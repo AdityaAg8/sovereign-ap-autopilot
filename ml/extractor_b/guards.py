@@ -1,4 +1,4 @@
-"""Bad-data protection for the Extractor B run (ADR-0011 §5, design §5): the pre-run guards that
+"""Bad-data protection for the Extractor B run (ADR-0011 §5): the pre-run guards that
 quarantine bad rows or stop on a leak or a mapping-bug rate, and the pure in-run spike guard that
 turns non-finite losses and gradients into skip or stop decisions. Torch-free and CPU-tested."""
 
@@ -123,7 +123,7 @@ def label_sanity(target_json: str, cfg: GuardConfig) -> QuarantineReason | None:
 
 
 # ---------------------------------------------------------------------------------------------
-# CORD label sanity (ADR-0019 amendment 1, §9.3a "Data guards per source"). UAE, FATURA and
+# CORD label sanity (ADR-0019 amendment 1, "Data guards per source"). UAE, FATURA and
 # DocILE rows keep `label_sanity` above, unchanged.
 # ---------------------------------------------------------------------------------------------
 
@@ -209,7 +209,7 @@ def cord_label_sanity(
 
 
 def check_leakage(sha256s: Iterable[str], train_split_sha256: frozenset[str]) -> None:
-    """Raise `DataLeakError` if any row's document is not on the train split (PRD §6.2 I5)."""
+    """Raise `DataLeakError` if any row's document is not on the train split (I5)."""
     leaked = sorted({s for s in sha256s if s not in train_split_sha256})
     if leaked:
         raise DataLeakError(

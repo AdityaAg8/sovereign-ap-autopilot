@@ -1,5 +1,5 @@
 /** One extracted field: label, grounded value, confidence, source and the inline edit affordance
- * (PRD §10 M5.4 "field list with confidence + source + edit affordance"). Selecting or focusing a
+ * ("field list with confidence + source + edit affordance"). Selecting or focusing a
  * row highlights its box on the document pane (web/DESIGN.md's synchronized-grounding signature).
  * ADR-0012 classified fields (document type, currency, line VAT category/rate) get constrained
  * editors: native selects for the code lists, a guided numeric input for the rate. */

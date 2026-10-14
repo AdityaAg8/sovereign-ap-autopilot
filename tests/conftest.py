@@ -1,7 +1,6 @@
-"""Root pytest fixtures for Sovereign AP Autopilot (PRD §8): blocks every real outbound HTTP
+"""Root pytest fixtures for Sovereign AP Autopilot: blocks every real outbound HTTP
 call by default so a unit test can never silently grow a network dependency, exempting only
-tests marked gpu/integration/artifacts/external, which declare the access they need up front.
-"""
+tests marked gpu/integration/artifacts/external, which declare the access they need up front."""
 
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ _NETWORK_MARKERS = ("gpu", "integration", "artifacts", "external")
 
 class NetworkDisabledError(RuntimeError):
     """Raised when a test not marked gpu/integration/artifacts/external attempts a real
-    outbound HTTP request; unit tests must never touch the network (PRD §8)."""
+    outbound HTTP request; unit tests must never touch the network."""
 
 
 def _blocked_handle_request(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:

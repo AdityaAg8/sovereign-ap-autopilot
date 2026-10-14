@@ -1,4 +1,4 @@
-"""Unit tests for `apx.learning.splits` (PRD §6.2 I5, §10 M10.1): documents an evaluation set
+"""Unit tests for `apx.learning.splits` (I5): documents an evaluation set
 holds out stay unassigned so their corrections are never exported for training, everything else
 trains, and an unreadable splits file fails closed to "unassigned"."""
 

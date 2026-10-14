@@ -1,7 +1,7 @@
 """Adds the P4 block threshold to an existing guard checkpoint's guard.json from its cal-split
 scores (the `ml.guard.infer` scores JSONL), without retraining: the runtime scan (apx.scan.guard)
 reads both the review and block thresholds from guard.json and never hardcodes either
-(PRD §6.3 P4, ADR-0017). Stdlib only, so it runs on the host."""
+(P4, ADR-0017). Stdlib only, so it runs on the host."""
 
 from __future__ import annotations
 

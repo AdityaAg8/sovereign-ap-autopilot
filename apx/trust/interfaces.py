@@ -1,6 +1,6 @@
 """Interfaces for the trust gate: per-field features, isotonic calibration of P(correct) and the
 Learn-then-Test fixed-sequence threshold. Only this module reads the cal split
-(PRD §5, §6.1, ADR-0004; exact feature, calibration and simulation definitions in ADR-0009)."""
+(ADR-0004; exact feature, calibration and simulation definitions in ADR-0009)."""
 
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ class TrustDecision(Frozen):
     fields: tuple[FieldDecision, ...]
     all_accepted: bool
     calibrator_version: str | None = None
-    """Version of the persisted calibrator artifact that decided (M7.5); None when no fitted
+    """Version of the persisted calibrator artifact that decided; None when no fitted
     calibrator was used."""
     refusal: str | None = None
     """Why the calibrated gate refused to decide (artifact missing, invalidated, corrupt, or its
@@ -256,7 +256,7 @@ class FeatureBuilder(Protocol):
 
 
 class Calibrator(Protocol):
-    """Logistic scorer + out-of-fold isotonic map, logistic fallback (§6.1, ADR-0009 §5)."""
+    """Logistic scorer + out-of-fold isotonic map, logistic fallback (ADR-0009 §5)."""
 
     @property
     def method(self) -> CalibrationMethod: ...

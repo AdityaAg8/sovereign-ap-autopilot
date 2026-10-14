@@ -1,5 +1,5 @@
 """Shared primitive types for every apx module: ids, enums, money, bounding boxes, grounded
-field values and idempotency keys. Depends on nothing else in apx (PRD §3, §6.2 I1, §6.4)."""
+field values and idempotency keys. Depends on nothing else in apx (I1)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from apx.common.errors import IdempotencyKeyError
 
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
-"""Lowercase hex SHA-256 digest; the identity of a document (§5 splits, §3 dedupe)."""
+"""Lowercase hex SHA-256 digest; the identity of a document."""
 
 InvoiceId = NewType("InvoiceId", str)
 """Stable invoice id; equals the source document sha256 for ingested invoices."""
@@ -22,7 +22,7 @@ UserId = NewType("UserId", str)
 VendorId = NewType("VendorId", str)
 
 IdempotencyKey = Annotated[str, StringConstraints(pattern=r"^[^:\s]+:[a-z][a-z0-9_]*$")]
-"""Deterministic key `invoice_id:step` carried by every side-effecting activity (§6.4)."""
+"""Deterministic key `invoice_id:step` carried by every side-effecting activity."""
 
 
 class Frozen(BaseModel):
@@ -32,14 +32,14 @@ class Frozen(BaseModel):
 
 
 class Language(StrEnum):
-    """Document languages in scope (§1)."""
+    """Document languages in scope."""
 
     EN = "en"
     AR = "ar"
 
 
 class Role(StrEnum):
-    """Human roles (§1). Capabilities per role live in apx.policy."""
+    """Human roles. Capabilities per role live in apx.policy."""
 
     REVIEWER = "reviewer"
     APPROVER = "approver"
@@ -47,7 +47,7 @@ class Role(StrEnum):
 
 
 class Stage(StrEnum):
-    """GPU stages; each maps to one llama-swap group with peak VRAM <= 11.5 GB (§2 C2, §4)."""
+    """GPU stages; each maps to one llama-swap group with peak VRAM <= 11.5 GB."""
 
     SCAN = "scan"
     PARSE = "parse"
@@ -59,7 +59,7 @@ class Stage(StrEnum):
 
 
 class Route(StrEnum):
-    """Policy outcome for an invoice (§6.3)."""
+    """Policy outcome for an invoice."""
 
     AUTO = "auto"
     REVIEW = "review"
@@ -67,7 +67,7 @@ class Route(StrEnum):
 
 
 class Money(Frozen):
-    """Exact monetary amount; never a float on the money path (§8)."""
+    """Exact monetary amount; never a float on the money path."""
 
     amount: Decimal
     currency: Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")] = "AED"
@@ -98,11 +98,10 @@ _STEP_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 def make_idempotency_key(invoice_id: InvoiceId, step: str) -> IdempotencyKey:
-    """Build the deterministic `invoice_id:step` key for a side-effecting activity (§6.4).
+    """Build the deterministic `invoice_id:step` key for a side-effecting activity.
 
     Raises apx.common.errors.IdempotencyKeyError if `step` is not a lowercase identifier, or if
-    `invoice_id` contains a colon or whitespace (either would make the key ambiguous to parse).
-    """
+    `invoice_id` contains a colon or whitespace (either would make the key ambiguous to parse)."""
     if not _STEP_PATTERN.match(step):
         raise IdempotencyKeyError(f"step must be a lowercase identifier, got: {step!r}")
     if ":" in invoice_id or re.search(r"\s", invoice_id):

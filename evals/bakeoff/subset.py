@@ -1,4 +1,4 @@
-"""The fixed M3.4 bake-off document subset (PRD §10 M3.4): the first 200 UAE test sha256s in sorted
+"""The fixed M3.4 bake-off document subset: the first 200 UAE test sha256s in sorted
 order, i.e. a hash-random, deterministic sample of evals/splits.json. The M7.1 P2 latency gate
 (`ml.extractor_b.gates.latency_subset`) uses this same subset, so both runs time the same work."""
 

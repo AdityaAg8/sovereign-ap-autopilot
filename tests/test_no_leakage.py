@@ -3,8 +3,7 @@ validates the committed evals/splits.json has no cross-pool sha256 overlap and n
 within a split, checks no real hold-out (CORD, DocILE val, ExtractBench; ADR-0019 §4.5) sits in an
 ml/ training manifest, greps apx/ to confirm only apx/trust references the cal split (quoted "cal"
 or a `*Split.CAL` member; the one exempt line is the DB enum declaring the value), and proves the
-checkers are not no-ops with planted violations. No network, no GPU.
-"""
+checkers are not no-ops with planted violations. No network, no GPU."""
 
 from __future__ import annotations
 

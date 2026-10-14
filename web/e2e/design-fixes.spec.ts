@@ -2,7 +2,7 @@
  * supplier's invoice number, every amount goes through one grouped formatter (also under an
  * Arabic browser locale), row focus rings are drawn inside the row, the dark-mode Approve button
  * meets WCAG AA contrast and differs from its disabled state, and audit events carry human labels
- * for apx's real action vocabulary (PRD §10 M5.4, web/DESIGN.md "Ledger"). */
+ * for apx's real action vocabulary (web/DESIGN.md "Ledger"). */
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { auditActionLabel } from "../src/lib/audit-actions";
 import { fixtureAudit } from "../src/lib/fixtures/assistant";

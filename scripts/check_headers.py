@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks that every source file starts with the PRD §8 header comment (1-3 sentences
+"""Checks that every source file starts with the header comment (1-3 sentences
 saying what the file does and where it fits). Hardened for M0.6: per-language parsing,
 generated/lockfile/migration skip rules, and a `paths` / `--all` (git ls-files) CLI for
 pre-commit and CI (`scripts/verify_m0.sh`)."""
@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Extensions the header rule applies to (PRD §8). Bare filenames are handled separately
+# Extensions the header rule applies to. Bare filenames are handled separately
 # below (Dockerfile has variants like Dockerfile.dev; Makefile does not).
 CHECKED_SUFFIXES = {
     ".py",
@@ -80,7 +80,7 @@ _ENCODING_RE = re.compile(r"^#.*coding[:=]\s*[-\w.]+")
 
 
 def _is_dockerfile_name(name: str) -> bool:
-    """Matches `Dockerfile`, `Dockerfile.dev`, `Dockerfile.prod`, etc. (PRD §8: Dockerfile*)."""
+    """Matches `Dockerfile`, `Dockerfile.dev`, `Dockerfile.prod`, etc.."""
     return name == "Dockerfile" or name.startswith("Dockerfile.")
 
 
@@ -106,7 +106,7 @@ def is_checked(path: Path) -> bool:
 
 def _is_alembic_autogen(path: Path) -> bool:
     """Skips generated Alembic migrations (`db/migrations/...`) that carry the standard
-    Alembic revision docstring instead of a PRD §8 header."""
+    Alembic revision docstring instead of a header."""
     if path.suffix != ".py" or "migrations" not in path.parts:
         return False
     try:
@@ -118,7 +118,7 @@ def _is_alembic_autogen(path: Path) -> bool:
 
 def _strip_leading_directives(lines: list[str]) -> list[str]:
     """Drops a leading shebang, Docker `# syntax=` pragma, or PEP 263 encoding line
-    before looking for the header comment (PRD §8 allows these to precede it)."""
+    before looking for the header comment (allows these to precede it)."""
     while lines:
         stripped = lines[0].strip()
         if (
@@ -133,7 +133,7 @@ def _strip_leading_directives(lines: list[str]) -> list[str]:
 
 
 def has_hash_header(text: str) -> bool:
-    """Shell, SQL, YAML, TOML, Dockerfile, Makefile: `#` comment header (PRD §8)."""
+    """Shell, SQL, YAML, TOML, Dockerfile, Makefile: `#` comment header."""
     lines = _strip_leading_directives(text.splitlines())
     body = ""
     for line in lines:
@@ -150,7 +150,7 @@ def has_hash_header(text: str) -> bool:
 
 
 def has_python_header(path: Path) -> bool:
-    """Python: a module docstring is the header (PRD §8). A leading encoding comment
+    """Python: a module docstring is the header. A leading encoding comment
     or shebang before the docstring is fine; ast.get_docstring ignores them."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -161,7 +161,7 @@ def has_python_header(path: Path) -> bool:
 
 
 def has_ts_js_header(text: str) -> bool:
-    """TS/TSX/JS/MJS/CJS: a leading `/** ... */` or `//` comment header (PRD §8)."""
+    """TS/TSX/JS/MJS/CJS: a leading `/** ... */` or `//` comment header."""
     lines = [line for line in text.splitlines() if line.strip()]
     if not lines:
         return False
@@ -185,7 +185,7 @@ def has_ts_js_header(text: str) -> bool:
 
 
 def check_file(path: Path) -> str | None:
-    """Returns a per-file error message if `path` is missing its PRD §8 header, else None."""
+    """Returns a per-file error message if `path` is missing its header, else None."""
     if path.suffix == ".py":
         if not has_python_header(path):
             return (
@@ -213,8 +213,8 @@ def check_file(path: Path) -> str | None:
 
 
 def git_ls_files(root: Path) -> list[Path]:
-    """Returns every git-tracked file under `root`, for `--all` mode (PRD §8/§12: CI
-    runs the header check over the whole tracked tree, not just the diff)."""
+    """Returns every git-tracked file under `root`, for `--all` mode
+    (CI runs the header check over the whole tracked tree, not just the diff)."""
     result = subprocess.run(
         ["git", "ls-files", "-z"],
         cwd=root,

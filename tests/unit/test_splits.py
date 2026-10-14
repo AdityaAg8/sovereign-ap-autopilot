@@ -1,7 +1,6 @@
 """Unit tests for evals/splits.py: the evals/splits.json pydantic contract, building fatura/
 extractbench/docile groups from a manifest, `register_documents`'s no-reshuffle guarantee, and
-the duplicate/leak checkers (PRD §5, §6.2 I5, ADR-0005). No network, no GPU.
-"""
+the duplicate/leak checkers (I5, ADR-0005). No network, no GPU."""
 
 from __future__ import annotations
 

@@ -1,12 +1,11 @@
 """Runtime PINT AE schematron validator: compiles the pinned trn-invoice/trn-creditnote
 schematron rule sets to XSLT with SchXslt on Saxon-HE (via saxonche), caching compiled
 stylesheets by source sha256, then runs a built UBL document through them and parses the SVRL
-report into typed failed-assert records with rule IDs (PRD §3 apx/einvoice, §10 M4.3). Ported
-from `evals/pint_ae/{compile,validator}.py` (M1.3): this module never downloads anything -- it
+report into typed failed-assert records with rule IDs. Ported
+from `evals/pint_ae/{compile,validator}.py`: this module never downloads anything -- it
 assumes the pinned PINT AE + SchXslt artifacts already exist under `data/pint_ae/` (populated
 once, offline, by `evals.pint_ae.fetch` / `make bootstrap`) and raises
-`SchematronArtifactsMissingError` otherwise, so the runtime path makes no outbound calls
-(CLAUDE.md standards)."""
+`SchematronArtifactsMissingError` otherwise, so the runtime path makes no outbound calls."""
 
 from __future__ import annotations
 

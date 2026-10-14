@@ -1,9 +1,8 @@
-"""Eval rows to trust records (M7.4/M7.5, ADR-0009 §4): loads the A and B rows the extraction
+"""Eval rows to trust records (ADR-0009 §4): loads the A and B rows the extraction
 harness wrote for a UAE split, checks they cover every document, use the current row schema and
 come from one build each, then rebuilds each field's runtime features with the same
 `apx.trust.features.field_features` the worker uses, and labels it against the factory gold.
-With no B rows (champion-only, ADR-0018 §5) the features use the fixed B-absent encoding.
-"""
+With no B rows (champion-only, ADR-0018 §5) the features use the fixed B-absent encoding."""
 
 from __future__ import annotations
 

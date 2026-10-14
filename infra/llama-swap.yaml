@@ -1,10 +1,10 @@
-# llama-swap config for the extract/arbitrate stages (PRD §4, §10 M0.4): one group per
+# llama-swap config for the extract/arbitrate stages: one group per
 # pipeline stage so only the models a stage needs are resident on the single RTX 4080
-#12 GB at once (PRD C2). Model files are the exact ones pinned in infra/models.lock.json,
+#12 GB at once. Model files are the exact ones pinned in infra/models.lock.json,
 # mounted read-only at /models by infra/compose.yaml -- llama-swap never fetches from the
 # network here (that already happened on the host via `make models`).
 #
-# Extraction-call policy (PRD §4 rule) -- thinking disabled, temperature <= 0.2, fixed
+# Extraction-call policy -- thinking disabled, temperature <= 0.2, fixed
 # seed, JSON-schema output and logprobs -- is applied per request by apx/llm, not baked
 # into these startup flags (chat-template kwargs and response_format are request fields).
 
@@ -151,7 +151,7 @@ models:
     checkEndpoint: /health
     ttl: 600
 
-  # M3.4 bake-off (PRD §4 offline table, §10 M3.4): offline challengers of extractor-a, never
+  # M3.4 bake-off: offline challengers of extractor-a, never
   # runtime aliases (apx.llm.client RUNTIME_MODEL_ALIASES), called only by `evals.bakeoff`. Each
   # runs one slot of 12288 tokens, the same per-slot context extractor-a gives one invoice, since
   # the bake-off is sequential. `make bakeoff-probe` measures each one before any eval hours.
@@ -200,7 +200,7 @@ models:
     checkEndpoint: /health
     ttl: 600
 
-# Groups map onto pipeline stages (PRD §3). ADR-0013: A and B together measured 10.3-10.6 GB
+# Groups map onto pipeline stages. ADR-0013: A and B together measured 10.3-10.6 GB
 # resident (peak 11.74-11.84 GB whole-card with a 1.1-1.4 GB desktop), which cannot hold the
 # 11.8 GB budget once the desktop takes its usual ~2.3 GB. So the extract group swaps: only one
 # of A/B is ever loaded (peak = A ~6.6 GB + desktop), and the worker's GpuStageScheduler batches

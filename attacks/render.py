@@ -1,6 +1,6 @@
 """attacks/render.py: renders one committed `AttackCase` into the exact UAE invoice PDF (plus,
 for the filename/email category, its sidecar email body) that M6.2's scanner and M6.6's
-end-to-end attack-success eval consume (PRD §10 M6.3). PDFs are never committed -- this module
+end-to-end attack-success eval consume. PDFs are never committed -- this module
 is what `attacks/manifests/*.json` gets turned into, at test or run time, under
 `data/attacks/` (gitignored)."""
 
@@ -40,7 +40,7 @@ _LAYOUTS_BY_ID = {layout.id: layout for layout in LAYOUTS}
 
 
 def build_suite_erp() -> Erp:
-    """The one ERP snapshot every attack case is rendered against (PRD §10 M6.3)."""
+    """The one ERP snapshot every attack case is rendered against."""
     return generate_erp(SUITE_ERP_SEED, n_vendors=SUITE_N_VENDORS, n_users=SUITE_N_USERS)
 
 
@@ -80,8 +80,7 @@ def render_case(case: AttackCase, *, erp: Erp, worker: RenderWorker) -> AttackRe
     """Renders one case end to end: builds its invoice context, applies its category's
     `factory.hooks.ATTACK_HOOKS` context/HTML mutation (a no-op for the two categories that use
     neither), renders the PDF, and applies the PDF-byte mutation for `pdf_metadata_injection`.
-    Deterministic: identical `case` and `erp` always produce byte-identical output (PRD §10
-    M6.3)."""
+    Deterministic: identical `case` and `erp` always produce byte-identical output."""
     layout = _LAYOUTS_BY_ID.get(case.layout_id)
     if layout is None:
         raise ValueError(f"attacks.render: unknown layout_id {case.layout_id!r}")
@@ -150,8 +149,9 @@ def render_all_to_disk(
     cases: list[AttackCase], *, out_dir: Path, scale: float = 1.0
 ) -> list[AttackRenderResult]:
     """Renders every case in `cases` with one shared `Erp` and one shared `RenderWorker`
-    (sequential -- PRD §10 M6.3's acceptance is determinism, not throughput, and the suite is a
-    few hundred cases, not the M2.3 5,000-invoice dataset)."""
+
+    (sequential -- 's acceptance is determinism, not throughput, and the suite is a few hundred
+    cases, not the 5,000-invoice dataset)."""
     erp = build_suite_erp()
     results: list[AttackRenderResult] = []
     with RenderWorker(scale=scale) as worker:
@@ -162,9 +162,9 @@ def render_all_to_disk(
 
 def register_splits(results: list[AttackRenderResult], *, splits_path: Path | None = None) -> None:
     """Registers every rendered case's sha256 into the `attacks` eval set of `evals/splits.json`
-    (PRD §10 M6.3: "attack docs get their own sha256s registered under the `attacks` eval set").
+    ("attack docs get their own sha256s registered under the `attacks` eval set").
     Raises if that would create leakage against any other split, rather than writing a bad
-    splits file (PRD §8: no silent fallbacks)."""
+    splits file (no silent fallbacks)."""
     path = splits_path or SPLITS_PATH
     splits = load_splits(path)
     assignments = {result.sha256: "eval" for result in results}

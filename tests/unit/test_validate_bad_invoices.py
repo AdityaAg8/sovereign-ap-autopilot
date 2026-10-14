@@ -1,6 +1,6 @@
 """Loads every crafted bad invoice in `tests/fixtures/bad_invoices/` and asserts it is caught by
-exactly the one `ViolationCode` the fixture was built for, no more and no fewer (PRD §10 M4.1
-acceptance: "30 crafted bad invoices each caught by exactly the expected rule")."""
+exactly the one `ViolationCode` the fixture was built for, no more and no fewer
+(acceptance: "30 crafted bad invoices each caught by exactly the expected rule")."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def test_bad_invoice_triggers_exactly_expected_rule(name: str, payload: dict[str
         f"{name}: expected exactly {{{expected}}}, got {codes} "
         f"({[(v.code, v.field, v.message) for v in report.violations]})"
     )
-    # `passed` only tracks error-severity violations (§10 M4.1); a warning-only fixture (e.g. a
+    # `passed` only tracks error-severity violations; a warning-only fixture (e.g. a
     # non-AED invoice) is still "caught" by its rule_id without failing the invoice outright.
     if any(v.severity == "error" for v in report.violations):
         assert not report.passed

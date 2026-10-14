@@ -1,4 +1,4 @@
-# GPU image for the fraud page-embedding service (PRD §3 apx/fraud, §4, §10 M8.1):
+# GPU image for the fraud page-embedding service:
 # Qwen3-VL-Embedding-2B over FastAPI via `transformers`, loaded from the read-only models/ mount,
 # never downloaded here. Same CUDA/uv/torch layout as infra/docker/parse.
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04

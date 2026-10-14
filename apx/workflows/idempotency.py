@@ -1,7 +1,6 @@
 """Exactly-once execution for the two side-effecting `InvoiceActivities` steps that carry an
 `IdempotencyKey` (ASP send and archive): a Postgres-backed store over the `idempotency_keys`
-table, so a Temporal activity retried after a worker crash never repeats the external call
-(PRD §6.4, §10 M5.2)."""
+table, so a Temporal activity retried after a worker crash never repeats the external call."""
 
 from __future__ import annotations
 

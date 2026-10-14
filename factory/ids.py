@@ -1,6 +1,6 @@
-"""Deterministic identifier generation for the synthetic ERP (M2.1): sequential entity ids and
+"""Deterministic identifier generation for the synthetic ERP: sequential entity ids and
 document numbers, UAE TRNs and AE IBANs built from a seeded `random.Random`, so the same seed
-always yields the same ids and every generated id passes `apx.validate.ids` (PRD §10 M2.1)."""
+always yields the same ids and every generated id passes `apx.validate.ids`."""
 
 from __future__ import annotations
 

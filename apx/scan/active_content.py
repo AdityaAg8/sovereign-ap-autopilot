@@ -1,6 +1,6 @@
 """Finds PDF content a rendered page never shows a human but a naive text-extraction step
 could still read: Info/XMP metadata, annotations, embedded attachments and active content
-(JavaScript, `/OpenAction`, `/AA`) (PRD §3, §6.3 A10, M6.2).
+(JavaScript, `/OpenAction`, `/AA`) (A10).
 
 Metadata is inherently present on every PDF (Producer, CreationDate, ...), so flagging its mere
 existence would fail the 750-clean-invoice gate. Info/XMP text is instead flagged only when it

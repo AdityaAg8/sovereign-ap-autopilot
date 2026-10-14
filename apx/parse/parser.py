@@ -1,8 +1,8 @@
 """Top-level `DocumentParser`: routes each page to the fast pdfplumber path when it is
-born-digital, or to the PaddleOCR-VL service (apx.parse.client) when it is a scan (PRD §3,
-§10 M3.1). This is the only place that decides which path a page takes; the decision itself
+born-digital, or to the PaddleOCR-VL service (apx.parse.client) when it is a scan.
+This is the only place that decides which path a page takes; the decision itself
 uses no model, just the page's own extractable word count. Nothing is rasterised until the
-`apx.common.raster` caps have passed (REVIEW H-03)."""
+`apx.common.raster` caps have passed."""
 
 from __future__ import annotations
 

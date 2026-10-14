@@ -1,6 +1,5 @@
 """Unit and property tests for `apx.validate.ids`: TRN format checks and the ISO 13616 /
-MOD 97-10 IBAN checksum, including that a single corrupted digit is always rejected
-(PRD §6.3, §10 M2.1)."""
+MOD 97-10 IBAN checksum, including that a single corrupted digit is always rejected."""
 
 from __future__ import annotations
 

@@ -1,8 +1,7 @@
 """Unit tests for `factory.hooks`: the module-level fraud-typology registry stays empty until
-M8 registers into it (M2.3 always renders a clean, hook-free dataset), the M6.3 attack registry
+M8 registers into it (always renders a clean, hook-free dataset), the M6.3 attack registry
 never carries anything beyond the categories `attacks.hooks` documents, and a local
-`HookRegistry` correctly registers, orders and no-ops context/HTML mutation hooks (PRD §10
-M2.3, M6.3, M8)."""
+`HookRegistry` correctly registers, orders and no-ops context/HTML mutation hooks."""
 
 from __future__ import annotations
 
@@ -13,12 +12,12 @@ import pytest
 
 from factory.hooks import ATTACK_HOOKS, FRAUD_TYPOLOGY_HOOKS, HookRegistry
 
-# `ATTACK_HOOKS` is a single process-wide registry (PRD §10 M6.3): importing `attacks.hooks`
+# `ATTACK_HOOKS` is a single process-wide registry: importing `attacks.hooks`
 # anywhere in a `pytest` run -- which `tests/unit/test_attacks_*.py` does -- registers these
 # names for the rest of that process, whether or not this module happens to run first. This
 # test module deliberately never imports `attacks`, so it cannot assert the registry is empty;
 # it instead asserts nothing *unexpected* got in, which holds whether `attacks` was imported or
-# not (PRD §10 M6.3; `attacks/hooks.py`'s module docstring lists exactly these eight names).
+# not (`attacks/hooks.py`'s module docstring lists exactly these eight names).
 _KNOWN_M6_3_HTML_OR_CONTEXT_HOOK_NAMES = frozenset(
     {
         "hidden_white_text",

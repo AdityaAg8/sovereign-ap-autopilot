@@ -1,6 +1,6 @@
 """Property and unit tests for apx.common.untrusted: exactly one fence pair, no raw angle
 brackets in the body, zero-width/bidi stripping, length and prompt-budget caps, and
-delimiter-injection resistance (PRD §6.2 I2, ADR-0008 T3/T4, M6.5)."""
+delimiter-injection resistance (I2, ADR-0008 T3/T4)."""
 
 from __future__ import annotations
 

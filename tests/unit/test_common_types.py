@@ -1,5 +1,5 @@
 """Unit tests for `apx.common.types.make_idempotency_key`: the deterministic key every
-side-effecting activity in `apx.workflows` carries (PRD §6.4, §10 M5.2)."""
+side-effecting activity in `apx.workflows` carries."""
 
 from __future__ import annotations
 

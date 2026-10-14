@@ -1,4 +1,4 @@
-"""Typed errors of the bank-master service (REVIEW.md M-01); `apx.api.bank_routes` maps each to
+"""Typed errors of the bank-master service; `apx.api.bank_routes` maps each to
 an HTTP status. Policy refusals stay `PolicyDeniedError`/`SegregationOfDutiesError` (403)."""
 
 from __future__ import annotations

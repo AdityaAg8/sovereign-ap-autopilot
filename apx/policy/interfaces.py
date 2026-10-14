@@ -1,6 +1,6 @@
 """Interfaces for the policy engine: role capabilities, segregation of duties, auto/review/block
 routing (P1-P5), authorisation grants for payment-affecting actions and agent proposals
-(PRD §6.2 I3, §6.3, ADR-0003, ADR-0008)."""
+(I3, ADR-0003, ADR-0008)."""
 
 from __future__ import annotations
 
@@ -285,7 +285,7 @@ class PaymentStateWriter(Protocol):
     ) -> None:
         """Record the approval (idempotent once the invoice is APPROVED). `corrections_digest`
         is `apx.review.corrections.corrections_digest` of the review corrections approved with
-        it, stored on the approval so the workflow can check a `review` signal (REVIEW N-03)."""
+        it, stored on the approval so the workflow can check a `review` signal."""
         ...
 
     async def record_bank_change(self, change: BankDetailChange, grant: Grant) -> None:
@@ -297,7 +297,7 @@ class PaymentStateWriter(Protocol):
     ) -> None:
         """Record the admin's out-of-band verification (`method` and its `reference` kept on the
         `bank_verifications` row): `verified=True`, `source="admin_callback"`. Raises
-        SegregationOfDutiesError if the verifier is the account's changer (REVIEW.md M-01)."""
+        SegregationOfDutiesError if the verifier is the account's changer."""
         ...
 
     async def execute_proposal(
@@ -481,7 +481,7 @@ def select_payee(vendor: Vendor | None, *, invoice_iban: str | None) -> Payee:
 
 
 def payee_iban_digest(iban: str) -> Sha256Hex:
-    """SHA-256 (hex) of an electronic-format IBAN; how a pinned payee is compared (§7)."""
+    """SHA-256 (hex) of an electronic-format IBAN; how a pinned payee is compared."""
     return Sha256Hex(hashlib.sha256(iban.encode("utf-8")).hexdigest())
 
 

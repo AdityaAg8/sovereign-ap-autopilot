@@ -1,4 +1,4 @@
-"""Shared parse cache for the GPU evals (extraction harness, Extractor B gates, M3.4 bake-off):
+"""Shared parse cache for the GPU evals (extraction harness, Extractor B gates, bake-off):
 each document is parsed once per parser build into a content-addressed store under
 data/cache/parse/<parser identity>/, so resumes and later evals never re-OCR a scan. The parser
 identity hashes apx/parse and the parse service source, so a parser fix invalidates the cache.

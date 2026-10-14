@@ -3,9 +3,8 @@ schema (approvals, bank details, proposal execution). Every method re-derives th
 subject from the database inside its own transaction and compares it against `grant.
 subject_digest`, raising `PolicyDeniedError` (rule STALE_GRANT) if reality moved since the
 grant was issued; idempotent replays (a retried API call, a duplicated signal) are no-ops
-(PRD §6.2 I3, §6.3, ADR-0008, §10 M6.5/M5.2). Each approval stores `approval_digest`, which the
-workflow re-checks before paying (REVIEW.md C-03), and an invoice rejected once is never approved
-(H-01)."""
+(I3, ADR-0008). Each approval stores `approval_digest`, which the
+workflow re-checks before paying, and an invoice rejected once is never approved."""
 
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ from apx.policy.interfaces import (
 from apx.policy.interfaces import Proposal as ProposalModel
 
 _PLACEHOLDER = User(id=UserId(""), display_name="", roles=frozenset())
-"""`subject_digest` excludes `actor` (PRD §6.3), so the `ActionRequest.actor` this module
+"""`subject_digest` excludes `actor`, so the `ActionRequest.actor` this module
 builds to recompute a digest never needs to be the real approver -- only `grant.actor` (used
 below to resolve `role_at_approval` and to attribute the write) matters."""
 
@@ -133,7 +132,7 @@ async def _resolve_role(
 ) -> Role:
     """The actor's current role that grants every capability in `required`, for
     `approvals.role_at_approval`; with several, the first by name, so the record never depends on
-    set iteration order (REVIEW.md L-04). Fails closed if the actor holds no such role any more
+    set iteration order. Fails closed if the actor holds no such role any more
     (their roles changed after the grant was issued -- a case the digest itself cannot catch,
     since roles are not part of it)."""
     rows = await session.scalars(
@@ -174,7 +173,7 @@ class SqlPaymentStateWriter:
         entity: str,
         payload: dict[str, JsonValue],
     ) -> None:
-        """Appends the audit event inside `session`'s transaction (M-02): the state write and
+        """Appends the audit event inside `session`'s transaction: the state write and
         its audit entry commit together or not at all. Called last, after the row locks."""
         await append_in_transaction(
             self._audit,
@@ -403,7 +402,7 @@ class SqlPaymentStateWriter:
             if current.verification_id is not None:
                 return  # idempotent replay: already verified
             if current.changed_by == grant.actor:
-                # Four eyes (REVIEW.md M-01, closes R-5): checked here, under the vendor lock, so
+                # Four eyes (closes R-5): checked here, under the vendor lock, so
                 # a same-actor re-change racing the API's own pre-check cannot slip through.
                 raise SegregationOfDutiesError(
                     f"actor {grant.actor} recorded this bank detail and cannot verify it"

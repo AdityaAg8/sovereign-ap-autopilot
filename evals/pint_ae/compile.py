@@ -1,5 +1,5 @@
 """Compiles a PINT AE schematron (.sch) file into a validating XSLT stylesheet using SchXslt's
-`pipeline-for-svrl.xsl` on saxonche (PRD §5, §10 M1.3), caching the compiled stylesheet by the
+`pipeline-for-svrl.xsl` on saxonche, caching the compiled stylesheet by the
 sha256 of its source .sch so repeat eval runs skip recompilation."""
 
 from __future__ import annotations
@@ -93,8 +93,7 @@ def compile_schematron(sch_path: Path, schxslt_dir: Path, cache_dir: Path) -> Pa
     """Compiles `sch_path` to a validating XSLT stylesheet, caching the result under
     `cache_dir/<sha256 of sch_path>.xslt` (cache key from the *original*, unpatched file, so it
     tracks the pinned artifact's identity). Returns the path to the (possibly cached) compiled
-    stylesheet. `schxslt_dir` is the `schxslt-<version>` directory from `fetch.ensure_schxslt`.
-    """
+    stylesheet. `schxslt_dir` is the `schxslt-<version>` directory from `fetch.ensure_schxslt`."""
     sch_bytes = sch_path.read_bytes()
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / f"{sha256_bytes(sch_bytes)}.xslt"

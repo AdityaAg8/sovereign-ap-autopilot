@@ -1,5 +1,5 @@
 """Async SQLAlchemy engine and session factory for Postgres, driven by the `DATABASE_URL`
-environment variable (asyncpg only; psycopg is not used, PRD §7 apx/db, §10 M5.1)."""
+environment variable (asyncpg only; psycopg is not used)."""
 
 from __future__ import annotations
 
@@ -26,12 +26,11 @@ MISSING_URL_MESSAGE = (
 
 def get_database_url() -> str:
     """Reads `DATABASE_URL` from the environment, else builds it from the Compose `POSTGRES_*`
-    settings. There is no baked-in default credential (REVIEW C-02).
+    settings. There is no baked-in default credential.
 
     Raises `apx.common.errors.ConfigError` when neither `DATABASE_URL` nor `POSTGRES_PASSWORD`
     is set, or when the URL does not use the `asyncpg` driver (psycopg is blocked on this host;
-    the async engine requires an async driver).
-    """
+    the async engine requires an async driver)."""
     url = os.environ.get("DATABASE_URL") or _compose_url()
     if not url.startswith("postgresql+asyncpg://"):
         raise ConfigError(f"DATABASE_URL must use the postgresql+asyncpg:// driver, got: {url!r}")
@@ -54,7 +53,7 @@ def _compose_url() -> str:
 
 @lru_cache(maxsize=1)
 def get_engine() -> AsyncEngine:
-    """Process-wide async engine, created once and reused (PRD §8: no per-request engines)."""
+    """Process-wide async engine, created once and reused (no per-request engines)."""
     return create_async_engine(get_database_url(), pool_pre_ping=True)
 
 

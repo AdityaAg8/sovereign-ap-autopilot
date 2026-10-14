@@ -1,4 +1,4 @@
-"""Integration tests for the bank-master API (REVIEW.md M-01) against a real, throwaway Postgres
+"""Integration tests for the bank-master API against a real, throwaway Postgres
 container: an admin proposes a change (stored unverified, never selectable by P1), the proposer
 cannot verify it (SoD, audited), a different admin verifies it with an out-of-band method and
 reference (then `select_payee` pays it), replays are idempotent, stale or malformed requests are

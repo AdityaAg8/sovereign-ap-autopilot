@@ -1,8 +1,7 @@
 """Fetches the ExtractBench short split (252 docs: metadata plus source PDFs) from HF
 `llamaindex/ExtractBench` and clones the official `run-llama/ExtractBench` scoring framework
-pinned to a fixed commit into data/external/ (PRD §5 data table, §10 M1.1). Eval-only; not
-used for training.
-"""
+pinned to a fixed commit into data/external/. Eval-only; not
+used for training."""
 
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ from evals.datasets.manifest import DatasetEntry, DatasetStatus, ManifestFile
 
 DATASET_NAME = "extractbench"
 HF_REPO_ID = "llamaindex/ExtractBench"
-# Only the "short" config/split (252 docs, PRD §5): its metadata file and referenced PDFs.
+# Only the "short" config/split (252 docs): its metadata file and referenced PDFs.
 HF_ALLOW_PATTERNS = ["short.jsonl", "docs/short/*"]
 FRAMEWORK_REPO = "https://github.com/run-llama/ExtractBench.git"
 FRAMEWORK_COMMIT = "11937d102cad9d9b815044888d55e7ce343d3924"

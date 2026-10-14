@@ -1,6 +1,6 @@
 """Interfaces for the local model client, model registry and GPU stage scheduler. Structured
 (tool-free) and tool-calling requests are distinct types so extractors cannot carry tools
-(PRD §3, §4, §6.2 I2, ADR-0002, ADR-0003)."""
+(I2, ADR-0002, ADR-0003)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from apx.common.types import Frozen, Sha256Hex, Stage
 
 
 class ModelRole(StrEnum):
-    """Runtime model roles (§4)."""
+    """Runtime model roles."""
 
     PARSE = "parse"
     GUARD = "guard"
@@ -46,7 +46,7 @@ class TextPart(Frozen):
 
 
 class ImagePart(Frozen):
-    """Page image sent to a VLM, as a data URL (never a remote URL; §2 C6)."""
+    """Page image sent to a VLM, as a data URL (never a remote URL)."""
 
     type: Literal["image_url"] = "image_url"
     data_url: Annotated[str, Field(pattern=r"^data:image/(png|jpeg);base64,")]
@@ -70,7 +70,7 @@ class ToolSpec(Frozen):
 
 
 class StructuredRequest(Frozen):
-    """Tool-free, JSON-schema constrained request (§4 extraction rules). Has no `tools` field by
+    """Tool-free, JSON-schema constrained request. Has no `tools` field by
     construction: this is the only request type extractors and the arbiter may build (I2)."""
 
     model: str

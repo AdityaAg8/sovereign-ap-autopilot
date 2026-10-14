@@ -1,4 +1,4 @@
-"""Pure, typed scorers for the evaluation harness (PRD §5, §10 M1.3): DocILE KILE/LIR, FATURA
+"""Pure, typed scorers for the evaluation harness: DocILE KILE/LIR, FATURA
 and UAE field F1, ExtractBench value/grounding F1, and a latency/VRAM collector."""
 
 from evals.scorers.docile import DocileTaskScore, score_kile, score_lir

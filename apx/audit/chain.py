@@ -1,9 +1,8 @@
 """Postgres-backed `AuditLog`: appends to `audit_log` under a transaction-scoped advisory lock so
-concurrent writers extend the hash chain one at a time and it can never fork (PRD §6.2 I4,
-§6.4, §10 M10.4). `append_in` (and `append_in_transaction` for any `AuditLog`) writes the event
+concurrent writers extend the hash chain one at a time and it can never fork
+(I4). `append_in` (and `append_in_transaction` for any `AuditLog`) writes the event
 inside the caller's transaction, so a state change and its audit entry commit or roll back
-together: no phantom entry for a rolled-back write, no committed write without its entry
-(REVIEW M-02)."""
+together: no phantom entry for a rolled-back write, no committed write without its entry."""
 
 from __future__ import annotations
 
@@ -90,7 +89,7 @@ class PgAuditLog:
 
             # Reserve the row's id up front (works for both `SERIAL` and `IDENTITY`
             # columns) so it can be included in the hashed row, matching the other
-            # columns' meaning of "assigned once, immutable thereafter" (§6.4).
+            # columns' meaning of "assigned once, immutable thereafter".
             next_id = int(
                 (
                     await session.execute(

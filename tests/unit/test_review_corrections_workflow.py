@@ -99,7 +99,7 @@ class _Directory:
 
 
 def _review_routing() -> RoutingDecision:
-    """REVIEW, with the payee the engine would pin for `_Directory`'s sole account (§7)."""
+    """REVIEW, with the payee the engine would pin for `_Directory`'s sole account."""
     account = BankAccount(
         iban=IBAN, verified=True, verified_by=None, verified_at=None, source="admin_callback"
     )

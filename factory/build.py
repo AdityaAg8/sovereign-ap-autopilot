@@ -1,10 +1,10 @@
 """factory/build.py: the M2.3 UAE invoice factory CLI. Plans a deterministic-from-seed dataset of
 invoices (exact train/cal/test counts, exact Arabic-first and Augraphy-scan-variant fractions via
-stratified sampling), renders each one across a pool of worker processes (one Chromium browser
-context per worker, PRD §10 M2.3: "parallelize rendering... multiple browser contexts/processes"),
+stratified sampling), renders each one across a pool of worker processes
+(one Chromium browser context per worker, "parallelize rendering... multiple browser
+contexts/processes"),
 writes the PDF/labels/ERP-truth/scan-PNG artifacts, and registers the results into
-`data/manifest.json` and the `uae` section of `evals/splits.json`.
-"""
+`data/manifest.json` and the `uae` section of `evals/splits.json`."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _stratified_subset(n_total: int, fraction: float, *, seed: int, salt: str) -
     """Deterministically selects exactly `round(n_total * fraction)` of the indices in
     `range(n_total)` via a seeded shuffle, so the fraction is an exact count rather than an
     expectation, and independent of any other stratification sharing the same `seed` but a
-    different `salt` (PRD §10 M2.3: exact "25% Arabic-first" / 30% scan-variant counts)."""
+    different `salt` (exact "25% Arabic-first" / 30% scan-variant counts)."""
     if not 0.0 <= fraction <= 1.0:
         raise ValueError(f"fraction must be within [0, 1], got {fraction}")
     count = round(n_total * fraction)
@@ -134,8 +134,7 @@ def build_plan(
     fraud_hooks: tuple[str, ...] = (),
     attack_hooks: tuple[str, ...] = (),
 ) -> list[DocPlan]:
-    """Builds the full, deterministic-from-`seed` generation plan for `n_total` invoices (PRD
-    §10 M2.3)."""
+    """Builds the full, deterministic-from-`seed` generation plan for `n_total` invoices."""
     if n_vendors <= 0:
         raise ValueError(f"n_vendors must be positive, got {n_vendors}")
     splits = _assign_splits(n_total, n_train, n_cal, n_test, seed=seed)
@@ -187,7 +186,7 @@ class DocResult:
 
 
 def _json_default(obj: object) -> object:
-    """`json.dump(..., default=...)` hook: `Decimal` amounts (money path, PRD §8) become strings
+    """`json.dump(..., default=...)` hook: `Decimal` amounts (money path) become strings
     and the `InvoiceLine` dataclasses inside a render context become plain dicts, recursively."""
     if isinstance(obj, Decimal):
         return str(obj)
@@ -278,7 +277,7 @@ def _render_one(plan: DocPlan, *, out_dir: Path) -> DocResult:
 
     if plan.is_scan:
         # Imported only when a scan variant is needed: augraphy pulls in numba's native
-        # extensions, which a digital-only build (and the M2.4 self-check loop) never uses.
+        # extensions, which a digital-only build (the self-check loop) never uses.
         from factory.scan import scan_page
 
         for page_index, page_png in enumerate(rendered.page_pngs):
@@ -315,7 +314,7 @@ def generate_dataset(
     attack_hooks: Sequence[str] = (),
 ) -> list[DocResult]:
     """Generates the full dataset: one deterministic ERP snapshot plus `n_total` rendered
-    invoices, in `index` order regardless of how many `workers` rendered them (PRD §10 M2.3)."""
+    invoices, in `index` order regardless of how many `workers` rendered them."""
     erp = generate_erp(seed, n_vendors=n_vendors, n_users=n_users)
     plans = build_plan(
         n_total=n_total,
@@ -364,8 +363,8 @@ def update_manifest_and_splits(
     seed: int,
 ) -> None:
     """Registers every rendered document's sha256 into `data/manifest.json`'s "uae" entry and the
-    `uae` section of `evals/splits.json`, then re-validates for leakage before saving either file
-    (PRD §10 M2.3, §5)."""
+    `uae` section of `evals/splits.json`, then re-validates for leakage before saving either
+    file."""
     manifest = load_manifest(manifest_path)
     repo_root_guess = out_dir.resolve().parent.parent  # out_dir is <repo_root>/data/uae
     files: list[ManifestFile] = []

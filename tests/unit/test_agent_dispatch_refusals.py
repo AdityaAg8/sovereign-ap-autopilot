@@ -1,4 +1,4 @@
-"""Unit tests for `PgToolDispatcher` (PRD §10 M9.2, ADR-0010 D1, D3, D7): every `ToolRefusalCode`
+"""Unit tests for `PgToolDispatcher` (ADR-0010 D1, D3, D7): every `ToolRefusalCode`
 is reachable, non-tool errors (a `PolicyDeniedError` maps to `policy_denied`; anything else
 propagates) behave as documented, and `specs()` only lists what a caller may actually use."""
 

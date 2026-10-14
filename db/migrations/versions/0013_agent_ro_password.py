@@ -1,5 +1,5 @@
 """Set the `apx_agent_ro` role's password from the `AGENT_RO_PASSWORD` env var instead of the
-literal migration 0004 used to hardcode (REVIEW L-01). `make env` generates the value into
+literal migration 0004 used to hardcode. `make env` generates the value into
 `.env` and compose hands it to `migrate`; without it the role's password is cleared (it cannot
 log in) rather than left at the old public default. Later changes go through
 `make rotate-db-password`.

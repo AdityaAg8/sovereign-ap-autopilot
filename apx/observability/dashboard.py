@@ -1,4 +1,4 @@
-"""Operations dashboard (PRD §10 M10.3): the KPIs -- straight-through rate, auto-accept error
+"""Operations dashboard: the KPIs -- straight-through rate, auto-accept error
 rate, model and end-to-end latency, attacks blocked, review queue size -- plus a live pipeline
 snapshot (invoices per stage, most recent activity, which models llama-swap holds). Every
 number is one SQL aggregate over the system of record, so it can be re-derived independently
@@ -36,7 +36,7 @@ PIPELINE_STAGES: Final[tuple[DbInvoiceStatus, ...]] = (
 AUTOMATED_SOURCES: Final[tuple[str, ...]] = ("extractor_a", "extractor_b", "arbiter")
 LLM_BASE_URL_ENV: Final[str] = "OPS_LLM_BASE_URL"
 
-# Definitions, one statement each (documented in docs/runbook.md, M10.6):
+# Definitions, one statement each (documented in docs/runbook.md):
 # - STP: invoices whose latest routing decision is `auto`, over invoices with any routing.
 # - Auto-accept error: automated field values later corrected by a reviewer (`labels` rows
 #   whose previous_source is a model) over automated field values (`fields` from a model).

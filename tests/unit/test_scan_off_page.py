@@ -1,5 +1,5 @@
-"""Unit test for the off-page/clipped technique (PRD §6.3 A03): text drawn outside the page or
-mostly clipped by its edge is flagged HIDDEN_TEXT (M6.2)."""
+"""Unit test for the off-page/clipped technique (A03): text drawn outside the page or
+mostly clipped by its edge is flagged HIDDEN_TEXT."""
 
 from __future__ import annotations
 

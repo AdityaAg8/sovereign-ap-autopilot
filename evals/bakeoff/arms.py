@@ -1,4 +1,4 @@
-"""The M3.4 bake-off arms and budget (PRD §10 M3.4, ADR-0013): the served extractor-a baseline, the
+"""The M3.4 bake-off arms and budget (ADR-0013): the served extractor-a baseline, the
 two challengers and the MTP latency arm, each a llama-swap alias with its prompt mode, plus the
 decision constants (≥ 1.0 F1 point at ≤ 1.5x latency, whole-card ≤ 11.8 GB, models ≤ 9.5 GB)."""
 

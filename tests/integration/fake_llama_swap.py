@@ -1,6 +1,6 @@
 """Stand-in for llama-swap's OpenAI-compatible `/v1/chat/completions`, run as its own process by
 `test_resilience_llama_swap.py` so the test can kill it mid-request and start it again on the same
-port (PRD §11.2 "llama-swap restart"). Every request is appended to `--log`; with `--hang` the
+port. Every request is appended to `--log`; with `--hang` the
 server accepts requests and never answers, like a llama-server busy on a long generation."""
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """Typed exception hierarchy for apx. The money path raises these instead of returning
-fallbacks, so every failure is explicit and routable (PRD §8, CLAUDE.md standards)."""
+fallbacks, so every failure is explicit and routable."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class IdempotencyKeyError(ApxError):
 
 
 class IdempotencyConflictError(ApxError):
-    """Same idempotency key replayed with a different payload (§6.4)."""
+    """Same idempotency key replayed with a different payload."""
 
 
 class IngestError(ApxError):
@@ -66,12 +66,12 @@ class ModelContextError(ModelServingError):
 
 
 class ModelNotAllowedError(ConfigError):
-    """A request named a model alias outside the runtime allowlist (offline-only models are never
-    reachable from the runtime pipeline, PRD §4)."""
+    """A request named a model alias outside the runtime allowlist
+    (offline-only models are never reachable from the runtime pipeline)."""
 
 
 class VramBudgetError(ModelServingError):
-    """A stage would exceed the 11.5 GB VRAM budget (§2 C2)."""
+    """A stage would exceed the 11.5 GB VRAM budget."""
 
 
 class GpuProbeError(ModelServingError):
@@ -122,7 +122,7 @@ class AspError(ApxError):
 
 
 class PolicyDeniedError(ApxError):
-    """An action was refused by the policy engine (§6.3)."""
+    """An action was refused by the policy engine."""
 
 
 class PayeeRefusal(StrEnum):
@@ -170,20 +170,20 @@ class SegregationOfDutiesError(PolicyDeniedError):
 class InvoiceStateConflictError(ApxError):
     """A review decision is not allowed from the invoice's current status (the review state
     machine: reject only while awaiting review, send-to-review only before routing). The API
-    answers 409 and records nothing (REVIEW.md C-01, H-02)."""
+    answers 409 and records nothing."""
 
 
 class ProposalNotExecutableError(ApxError):
     """A proposal kind that has no executable effect in this system (edit_field, route,
     request_info) was accepted. Refused rather than marked executed, so the audit never claims
-    an action that did not happen (REVIEW.md M-06); the proposal stays pending."""
+    an action that did not happen; the proposal stays pending."""
 
 
 class ProposalInvoiceMismatchError(ApxError):
     """`execute_proposal` was sent to one invoice's decisions endpoint with a proposal for
     another invoice. Refused before anything is recorded (API 409): otherwise the proposal's
     invoice would be approved while the audit entry and the review signal named the path's
-    invoice (REVIEW.md P3-02)."""
+    invoice."""
 
 
 class AuditChainError(ApxError):
@@ -194,4 +194,4 @@ class AuditUnavailableError(ApxError):
     """The audit chain or its anchors could not be read or written -- a database connectivity
     failure, a failed query, or a filesystem error on the external anchor file. Distinct from
     `AuditChainError`: this means verification never completed, not that it completed and
-    found tampering (I4, §10 M10.4's could-not-run/broken exit-code distinction)."""
+    found tampering (I4, 's could-not-run/broken exit-code distinction)."""

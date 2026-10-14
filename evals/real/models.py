@@ -1,6 +1,6 @@
 """Typed rows and reports of the real-data track (ADR-0019): one row per document per extractor
 version, one aggregate report per set, and the before/after comparison evals/scoreboard.py reads,
-plus the typed errors that enforce the track's honesty rules (§4)."""
+plus the typed errors that enforce the track's honesty rules."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ IDENTITY_KEYS: Final[tuple[str, ...]] = (
     "serving_args_sha256",
     "parser_identity",
 )
-"""Stamp keys a report requires to be equal on every row (§4.3). `git_sha` is stamped too but
+"""Stamp keys a report requires to be equal on every row. `git_sha` is stamped too but
 is listed, not compared: a resume after an unrelated commit stays one run."""
 
 
@@ -40,7 +40,7 @@ class RealTrackError(ApxError):
 
 class DirtyTreeError(RealTrackError):
     """A protected (non-dev) split was requested while extraction or scoring code has
-    uncommitted changes (§4.1)."""
+    uncommitted changes."""
 
 
 class ConsecutiveFailuresError(RealTrackError):

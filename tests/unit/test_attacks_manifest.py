@@ -1,7 +1,7 @@
 """Unit tests for `attacks.manifest` and `attacks.generate`: the 12-category catalogue shape,
 `derive_seed`/`derive_goal_and_lang` determinism, `AttackCase` schema validation, and the
 committed manifests under `attacks/manifests/` meeting M6.3's case-count acceptance criteria
-(PRD §10 M6.3: "≥ 300 cases across ≥ 12 categories", "≥ 20 cases" per category)."""
+("≥ 300 cases across ≥ 12 categories", "≥ 20 cases" per category)."""
 
 from __future__ import annotations
 

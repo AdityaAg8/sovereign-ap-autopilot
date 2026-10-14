@@ -1,5 +1,5 @@
 /** Authenticated app shell: sidebar nav, topbar, command palette, shortcut help and the assistant panel,
- * wrapping every page under (app) (PRD §10 M5.4). Redirects to /login when no session exists. */
+ * wrapping every page under (app). Redirects to /login when no session exists. */
 
 "use client";
 

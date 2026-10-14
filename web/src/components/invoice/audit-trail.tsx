@@ -1,4 +1,4 @@
-/** An invoice's audit trail (PRD §10 M9.3, §6.4): the hash-chained events that decided it, newest
+/** An invoice's audit trail: the hash-chained events that decided it, newest
  * first, with their system facts and the exception agent's review note. The event a citation
  * pointed at is scrolled into view and marked, so "why was this blocked?" lands on its evidence. */
 

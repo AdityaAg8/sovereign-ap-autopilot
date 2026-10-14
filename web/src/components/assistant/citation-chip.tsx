@@ -1,4 +1,4 @@
-/** One citation rendered inline in assistant text or a review note (PRD §10 M9.3): a small mono
+/** One citation rendered inline in assistant text or a review note: a small mono
  * chip naming the cited record ("Audit 41"). It links to the record when it has a page, so every
  * claim the assistant makes is one click from its evidence. */
 import Link from "next/link";

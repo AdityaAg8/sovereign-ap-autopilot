@@ -1,4 +1,4 @@
-"""Predictor interface the eval harness scores against (PRD §5, §10 M1.4): anything that maps a
+"""Predictor interface the eval harness scores against: anything that maps a
 document id to predicted field values, so evals/run.py can swap in a real model later without
 changing how any scorer is called."""
 

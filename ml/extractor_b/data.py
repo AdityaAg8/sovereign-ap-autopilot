@@ -1,4 +1,4 @@
-"""Extractor B data prep (ADR-0009 §1.2-1.4, ADR-0019 §9.2, design §2): turns the train-split
+"""Extractor B data prep (ADR-0009 §1.2-1.4, ADR-0019 §9.2): turns the train-split
 UAE factory, DocILE, FATURA and CORD v2 documents of the chosen mix (`REAL_MIX` v1|r1|r2) into
 `raw_train.jsonl` / `raw_dev.jsonl` plus page JPEGs resized by the serving function, then runs the
 pre-run guards. CPU only.
@@ -456,7 +456,7 @@ def build_row(
     rels: list[Path] = []
     visual = 0
     pages = doc.pages()
-    if len(pages) != doc.n_pages:  # the target was masked for doc.n_pages (REVIEW.md P5-06)
+    if len(pages) != doc.n_pages:  # the target was masked for doc.n_pages
         raise TrainingError(
             f"{doc.source.value} {doc.document_sha256}: {len(pages)} rendered pages, "
             f"{doc.n_pages} in its labels"

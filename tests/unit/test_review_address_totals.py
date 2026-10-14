@@ -1,4 +1,4 @@
-"""ADR-0012 amendment 4 (M5.6 e2e findings): a supplier address naming no UAE emirate is a
+"""ADR-0012 amendment 4 (e2e findings): a supplier address naming no UAE emirate is a
 validation error the reviewer can correct, and the correction reaches `apply_review` and the
 UBL; amounts that do not add up (`totals_mismatch`) are recorded with the routing decision so
 the API refuses the approval, and `apply_review` refuses them too."""

@@ -1,8 +1,8 @@
 """Pure SQLAlchemy statement builders for the invoice and vendor list endpoints' filter/paginate
 queries. Every filter value is bound as a parameter (never string-formatted into SQL), so a
 filter value containing SQL-injection payloads is always inert -- this is what
-`test_api_filters.py` checks by compiling these statements and inspecting the bound parameters
-(PRD §10 M5.3, M5.4).
+`test_api_filters.py` checks by compiling these statements and inspecting the bound parameters.
+
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def _vendor_search_filter(stmt: Select[Any], q: str | None) -> Select[Any]:
 
 
 def vendor_list_stmt(*, q: str | None, limit: int, offset: int) -> Select[tuple[Vendor, bool]]:
-    """Builds the vendor list/search/paginate query (PRD §10 M5.4): every vendor plus whether it
+    """Builds the vendor list/search/paginate query: every vendor plus whether it
     has at least one current, verified bank account, ordered by name. `q` matches
     (case-insensitively) the vendor name or TRN; every filter value is bound, never
     string-formatted into the SQL text (same convention as `invoice_list_stmt`)."""

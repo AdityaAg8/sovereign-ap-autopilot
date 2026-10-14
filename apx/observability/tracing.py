@@ -1,8 +1,8 @@
-"""OpenTelemetry tracing (PRD §10 M10.3): one process-wide tracer provider exporting spans over
+"""OpenTelemetry tracing: one process-wide tracer provider exporting spans over
 OTLP/HTTP to the internal Phoenix service, plus helpers to read the current trace id. With
 `OTEL_EXPORTER_OTLP_ENDPOINT` unset, spans are still created (trace ids stay valid for the
 `llm_calls` rows) but nothing is exported. Phoenix is on the internal network, so this adds no
-outbound traffic (PRD §8)."""
+outbound traffic."""
 
 from __future__ import annotations
 

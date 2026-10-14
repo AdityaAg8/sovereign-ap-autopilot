@@ -1,4 +1,4 @@
-"""Unit tests for the bank-master path (REVIEW.md M-01): IBAN mod-97 validation at write time
+"""Unit tests for the bank-master path: IBAN mod-97 validation at write time
 (table plus Hypothesis properties), the route-level authz matrix and error mapping of
 `apx.api.bank_routes` over a recording fake service, and the static proof that `apx.agent`
 (agent, chat, MCP) never reaches the bank service. The database path is covered by

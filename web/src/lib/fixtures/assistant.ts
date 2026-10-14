@@ -1,4 +1,4 @@
-/** Fixture-mode stand-ins for the M9.3 audit trail and ops assistant (PRD §10 M9.3): each
+/** Fixture-mode stand-ins for the M9.3 audit trail and ops assistant: each
  * invoice gets a deterministic audit trail derived from its status, route and fraud flags, and a
  * scripted assistant answers "why was X blocked / held" from that trail with real citations, so
  * the chat panel and its e2e test run without apx/api or a GPU. */

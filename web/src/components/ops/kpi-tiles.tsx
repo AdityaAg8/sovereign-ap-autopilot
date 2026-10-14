@@ -1,4 +1,4 @@
-/** The five operating KPIs (PRD §10 M10.3). Each tile says in one line what it counts, so a
+/** The five operating KPIs. Each tile says in one line what it counts, so a
  * number never needs a tooltip, and carries a two-minute trend line; values are tabular mono so
  * they don't jitter as they update. */
 import type { OpsKpis } from "@/lib/api/types";

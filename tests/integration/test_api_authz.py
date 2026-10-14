@@ -1,5 +1,5 @@
 """Integration tests for the M5.3/M5.4 API's authorisation matrix against a real, throwaway
-Postgres container (PRD §10 M5.3, §6.3 P1-P5): P3 gates an above-limit approval on the
+Postgres container (P1-P5): P3 gates an above-limit approval on the
 approver role, P2 bars the bank-detail changer from approving that vendor for 30 days, an
 admin-only user cannot approve payments, field edits need the reviewer role, a proposal
 executes only for its kind's required role, approvals need AWAITING_REVIEW, are idempotent
@@ -9,8 +9,7 @@ decision/edit appends to the audit chain
 vendor endpoints (masked bank details, the G-3 verified flag, recent invoices) and the
 document-serving route (authz matrix across every role plus path-traversal attempts,
 docs/security.md B1) are covered here too, reusing the same throwaway Postgres container. Marked
-`integration`, so it needs Docker (`pytest -m integration`).
-"""
+`integration`, so it needs Docker (`pytest -m integration`)."""
 
 from __future__ import annotations
 

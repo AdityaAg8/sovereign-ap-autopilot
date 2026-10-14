@@ -1,8 +1,7 @@
 """Unit tests for `factory.gold_xml`: the `truth.json` -> `InvoiceFields` mapping builds gold
 PINT AE XML that passes the runtime schematron for every UAE factory tax case (including reverse
 charge and designated zone), always uses the vendor's ERP-verified IBAN rather than the invoice's
-own claimed one (P1), and is deterministic; `render_report` shapes the M2.5 markdown report
-(PRD §10 M2.5)."""
+own claimed one (P1), and is deterministic; `render_report` shapes the M2.5 markdown report."""
 
 from __future__ import annotations
 

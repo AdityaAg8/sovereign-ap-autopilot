@@ -1,10 +1,10 @@
 """Unit tests for evals/run.py: the eval runner CLI, its per-set gold loaders, the deferred-not-
-error handling for docile/uae, and the NO_COLOR-respecting terminal summary (PRD §5, §10 M1.4).
+error handling for docile/uae, and the NO_COLOR-respecting terminal summary.
 No network for fatura/extractbench/docile/uae (all data is injected via tmp_path fixtures); the
 pint_ae case exercises the real pinned artifacts under data/pint_ae/, exactly as
-tests/unit/test_pint_ae_validator.py does, so it is marked `artifacts` (PRD §8: unit tests must
-never touch the network) and excluded from the default `pytest` selection. No GPU.
-"""
+tests/unit/test_pint_ae_validator.py does, so it is marked `artifacts`
+(unit tests must never touch the network) and excluded from the default `pytest` selection. No
+GPU."""
 
 from __future__ import annotations
 
@@ -204,7 +204,7 @@ def test_gold_extractbench_examples_carries_page_and_bbox_from_field_rules() -> 
     """The gold loader must populate page/bbox from `field_rules` evidence, not just the free-text
     `grounding` quote -- otherwise every gold example reaches `score_extractbench` with
     page=None, which the official-framework adapter treats as "no citation" and grounding F1 is
-    graded on nothing (PRD §5 ExtractBench row)."""
+    graded on nothing."""
     record = {
         "id": "short/doc1",
         "expected_output": json.dumps(
@@ -268,8 +268,9 @@ def test_gold_extractbench_examples_reject_malformed_bbox_evidence(
 
 @pytest.mark.external
 def test_gold_extractbench_examples_grounding_is_non_vacuous_via_official_framework() -> None:
-    """Proves the fix end to end against the real official framework (not the PRD-spec fallback,
-    which scores grounding on free text and would never notice a missing bbox): gold loaded
+    """Proves the fix end to end against the real official framework
+    (not the -spec fallback, which scores grounding on free text and would never notice a missing
+    bbox): gold loaded
     through `_gold_extractbench_examples` and used as its own prediction must score grounding F1
     1.0, and corrupting one predicted citation's page must lower it -- i.e. the metric is actually
     being computed from real citations, not vacuously passing because none were ever supplied."""

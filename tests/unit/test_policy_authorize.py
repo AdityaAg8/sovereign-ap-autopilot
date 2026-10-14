@@ -1,6 +1,6 @@
 """Property tests for DefaultPolicyEngine.authorize: `allowed` implies every K5 condition holds
 (capability, P1 payee, routing present and not BLOCK, P2 SoD), and a minimal allowed case exists
-(non-vacuous) (PRD §6.2 I3, ADR-0008 K5, M6.5)."""
+(non-vacuous) (I3, ADR-0008 K5)."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 /** Regression spec for the inbox Enter shortcut: picking a status-filter option with Enter must only
  * apply the filter, not also fire the page-level "open highlighted invoice" hotkey, while Enter on
- * the highlighted row still opens it (PRD §10 M5.4 keyboard-first flows). Also covers "?" typed
+ * the highlighted row still opens it. Also covers "?" typed
  * with a real Shift press, which the hotkey matcher must accept. */
 import { test, expect, type Page } from "@playwright/test";
 

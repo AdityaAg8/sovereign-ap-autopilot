@@ -1,5 +1,5 @@
 /** M5.4 acceptance smoke test: login, open a review-queue invoice, fix a field's value, then
- * approve (PRD §10 M5.4 "review queue: approve, fix a field, reject") — against the dev fixture
+ * approve ("review queue: approve, fix a field, reject") — against the dev fixture
  * adapter, complementing smoke.spec.ts's keyboard-only approve path with an explicit field edit. */
 import { test, expect } from "@playwright/test";
 

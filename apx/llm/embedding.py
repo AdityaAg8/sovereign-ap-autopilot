@@ -1,5 +1,5 @@
-"""Page-embedding provider for fraud page similarity (PRD §3 apx/fraud, §4 Qwen3-VL-Embedding-2B,
-§10 M8.1): `HttpPageEmbedder`, structurally an `apx.fraud.interfaces.PageEmbedder`, posts one
+"""Page-embedding provider for fraud page similarity:
+`HttpPageEmbedder`, structurally an `apx.fraud.interfaces.PageEmbedder`, posts one
 rendered page PNG to the local embedding service and returns its vector. Typed errors only: an
 unreachable, busy or failing service raises `PageEmbeddingUnavailableError`, a malformed answer
 `ModelOutputError`, never an empty or made-up vector."""

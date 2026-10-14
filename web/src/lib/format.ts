@@ -1,5 +1,5 @@
 /** Locale-aware formatting helpers for money, dates and confidence values shared by the inbox,
- * invoice detail and vendor screens (PRD §10 M5.4). Keeps AED amounts and timestamps consistent
+ * invoice detail and vendor screens. Keeps AED amounts and timestamps consistent
  * everywhere they render. */
 
 // The one number formatter every amount and count in the app goes through: "en-AE" grouping
@@ -15,7 +15,7 @@ const count = new Intl.NumberFormat(NUMBER_LOCALE, { maximumFractionDigits: 0 })
 
 const ARABIC_INDIC_ZERO = 0x0660;
 const EASTERN_ARABIC_INDIC_ZERO = 0x06f0;
-/** apx.common.normalize._CURRENCY_TOKENS: AED in Latin and Arabic (U+062F . U+0625), and Dhs. */
+/** apx.common.normalize._CURRENCY_TOKENS: AED in Latin and Arabic (U+062F. U+0625), and Dhs. */
 const CURRENCY_TOKENS = ["AED", "aed", "Aed", "د.إ", "Dhs", "DHS", "dhs"] as const;
 /** Canonical form after separators are resolved; at most 2 decimals, since the display shows 2
  * and silently rounding "1,234.567" would misstate the extracted amount. */

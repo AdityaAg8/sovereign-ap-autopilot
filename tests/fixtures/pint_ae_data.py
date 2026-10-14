@@ -1,7 +1,7 @@
 """Shared helper for `tests/unit/` modules that exercise the real, pinned PINT AE artifacts
 under `data/pint_ae/`: resolves the data root relative to the repo root (never a hardcoded host
 path) and, when a selected `artifacts`-marked test finds the bundle missing, fails it loudly
-with the exact fetch command instead of a confusing file-not-found trace (PRD §8, §10 M4)."""
+with the exact fetch command instead of a confusing file-not-found trace."""
 
 from __future__ import annotations
 

@@ -1,11 +1,10 @@
 """Unit tests for evals/pint_ae/compile.py: the sha256-keyed compile cache, the queryBinding
 guard, and the targeted `xsd:` namespace-prefix fixup that pint-ae 1.0.4's own schematron needs
-to compile at all (PRD §10 M1.3). Uses hand-built minimal schematron documents so these don't
+to compile at all. Uses hand-built minimal schematron documents so these don't
 depend on the full PINT AE fetch; only the (small, cached) SchXslt pipeline is needed to
 actually compile and run them end to end. The tests that need that pipeline are marked
-`artifacts` (PRD §8: unit tests must never touch the network) since a cold cache fetches it
-from codeberg.org; run via `uv run python -m evals.pint_ae.fetch && uv run pytest -m artifacts`.
-"""
+`artifacts` (unit tests must never touch the network) since a cold cache fetches it
+from codeberg.org; run via `uv run python -m evals.pint_ae.fetch && uv run pytest -m artifacts`."""
 
 from __future__ import annotations
 

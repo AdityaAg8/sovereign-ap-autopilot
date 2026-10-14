@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Preflight environment check for Sovereign AP Autopilot (PRD §10 M0.1, §2 C1-C3).
+# Preflight environment check for Sovereign AP Autopilot.
 # Runs every host/tooling check independently (never exits early), writes a
 # PASS/WARN/FAIL table to reports/env.md, and files a deduplicated BLOCKED.md
 # entry for each FAIL so a human can unblock the environment without stopping the loop.
@@ -44,7 +44,7 @@ blocked() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# --- 1. Host OS (PRD C3: WSL2 Ubuntu 24.04 or Linux) ---------------------
+# --- 1. Host OS (WSL2 Ubuntu 24.04 or Linux) ---------------------
 os_uname="$(uname -s 2>/dev/null || echo unknown)"
 if printf '%s' "$os_uname" | grep -qi "linux"; then
   if grep -qi microsoft /proc/version 2>/dev/null; then
@@ -239,7 +239,7 @@ else
   record "Free disk space" "WARN" "could not determine free disk space"
 fi
 
-# --- 12. RAM (report only; note >=32 GB needed for M7.2) -------------------------
+# --- 12. RAM (report only; note >=32 GB needed for) -------------------------
 ram_kb=""
 if have free; then
   ram_kb="$(free -k 2>/dev/null | awk '/^Mem:/{print $2}')"

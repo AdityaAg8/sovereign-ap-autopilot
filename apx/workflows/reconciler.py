@@ -1,4 +1,4 @@
-"""Server-side reconciler for lost review signals (REVIEW.md N-02 follow-up, KNOWN_ISSUES): the API
+"""Server-side reconciler for lost review signals (KNOWN_ISSUES): the API
 records a decision and then signals the invoice's workflow, so a signal lost to a Temporal outage
 leaves the database decided (APPROVED with a digest-matched approval, or BLOCKED by a REJECT
 decision) while the workflow waits in review forever. Run periodically in the worker process, it
@@ -6,7 +6,7 @@ finds those invoices and re-sends the decision. Idempotent (the workflow ignores
 holds a decision, and `confirm_review` still backs every signal against the database), audited
 (`review.signal_resent`), and bounded per pass and per invoice. An approval that went stale (payee
 or invoice moved since) is re-sent too, so `confirm_review` ends the invoice FAILED with its typed
-reason instead of leaving it APPROVED forever (REVIEW.md N-13, P3-01)."""
+reason instead of leaving it APPROVED forever."""
 
 from __future__ import annotations
 
@@ -289,10 +289,10 @@ def approval_resend(
     `invoice_digest` (`recorded`), the digest of the invoice and payee now (or why the payee is
     refused) and the invoice's `fields` rows. Always a re-send: when the approval no longer
     holds, `confirm_review` raises `StaleApprovalError` and the workflow ends the invoice FAILED
-    with that reason, the outcome the lost signal would have had (N-13); withholding it would
-    leave the invoice APPROVED and its workflow waiting forever (P3-01). Corrections are those
+    with that reason, the outcome the lost signal would have had; withholding it would
+    leave the invoice APPROVED and its workflow waiting forever. Corrections are those
     a repeated approve would send; when the rows no longer derive complete ones, none are sent
-    and `confirm_review` finds the approval stale on its corrections (N-03)."""
+    and `confirm_review` finds the approval stale on its corrections."""
     stale: str | None = None
     if isinstance(current, PayeeRefusedError):
         stale = f"payee refused: {current.refusal.value}"

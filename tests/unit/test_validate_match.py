@@ -1,6 +1,5 @@
 """Unit and property tests for `apx.validate.match`: the 3-way match between an invoice, its
-purchase order and goods receipts, including tolerance boundaries and partial deliveries
-(PRD §10 M4.2)."""
+purchase order and goods receipts, including tolerance boundaries and partial deliveries."""
 
 from __future__ import annotations
 

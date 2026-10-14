@@ -1,4 +1,4 @@
-"""Unit test for infra/docker/parse/app.py's `_parse_spotting_output` decoder (PRD §10 M3.1):
+"""Unit test for infra/docker/parse/app.py's `_parse_spotting_output` decoder:
 PaddleOCR-VL's `Spotting:` output packs each recognized text zone with 8 `<|LOC_n|>` tokens (the
 four corners of its box, 0-1000 bin fractions); this checks the decode against a fixture
 captured from a real GPU run against models/PaddlePaddle/PaddleOCR-VL-1.6 on a UAE test scan

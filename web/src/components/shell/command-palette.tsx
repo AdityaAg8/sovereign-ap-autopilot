@@ -1,4 +1,4 @@
-/** Global ⌘K command palette entry point (PRD §10 M5.4): owns the Mod+K binding and open state
+/** Global ⌘K command palette entry point: owns the Mod+K binding and open state
  * from anywhere in the authenticated shell, while the palette itself (cmdk + dialog) is a lazy
  * chunk warmed on the first interaction and mounted on first open (Lighthouse budget). Opening
  * holds the keyboard (lib/overlay-guard.ts) until the palette's input has focus, so keys typed

@@ -1,5 +1,5 @@
-"""`BankMasterService`: the product path for changing and verifying vendor bank details (REVIEW.md
-M-01). A change goes PolicyGuard -> `PaymentStateWriter.record_bank_change` and is stored
+"""`BankMasterService`: the product path for changing and verifying vendor bank details.
+A change goes PolicyGuard -> `PaymentStateWriter.record_bank_change` and is stored
 unverified, so P1 never pays it and P2 starts its window; a different admin then records the
 out-of-band verification through `verify_bank_account`, which makes it selectable by
 `select_payee` (ADR-0008 K5, ADR-0014)."""

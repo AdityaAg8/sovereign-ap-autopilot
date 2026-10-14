@@ -1,7 +1,7 @@
 """FastAPI dependencies shared by every router: an async DB session per request, the current
 user decoded from a bearer JWT (no per-request database round trip, see apx.api.security), and
-a capability-requiring dependency factory used by every route that changes state (PRD §10
-M5.3).
+a capability-requiring dependency factory used by every route that changes state.
+
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ IngestSettingsDep = Annotated[IngestSettings, Depends(get_ingest_settings)]
 
 
 def get_document_store(settings: IngestSettingsDep) -> FileDocumentStore:
-    """The shared ingest path's content-addressed store (PRD §10 M5.5)."""
+    """The shared ingest path's content-addressed store."""
     return FileDocumentStore(
         settings.store_dir, max_bytes=settings.max_bytes, max_pages=settings.max_pages
     )
@@ -89,7 +89,7 @@ DocumentStoreDep = Annotated[FileDocumentStore, Depends(get_document_store)]
 
 
 class _UnconfiguredWorkflowStarter:
-    """`WorkflowStarter` used while `API_TEMPORAL_ADDRESS` is unset (PRD §10 M5.2). Raises
+    """`WorkflowStarter` used while `API_TEMPORAL_ADDRESS` is unset. Raises
     rather than silently no-opping, per PRD §8: a misconfigured deployment must fail
     loudly, not pretend a workflow started."""
 
@@ -118,7 +118,7 @@ WorkflowStarterDep = Annotated[WorkflowStarter, Depends(get_workflow_starter)]
 
 def get_ingestor(store: DocumentStoreDep, workflow_starter: WorkflowStarterDep) -> Ingestor:
     """The single `Ingestor.ingest` function shared by the API upload path and the `data/inbox/`
-    watcher (PRD §10 M5.5)."""
+    watcher."""
     return Ingestor(store, workflow_starter)
 
 

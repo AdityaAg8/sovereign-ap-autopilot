@@ -1,11 +1,10 @@
-"""M7.5 gate (ADR-0009 §7 as amended, PRD §6.1): the 500-split known-ground-truth simulation of the
+"""M7.5 gate (ADR-0009 §7 as amended): the 500-split known-ground-truth simulation of the
 whole calibrate + Learn-then-Test chain. Pass iff coverage >= (1 - delta) - 0.02 = 0.93, plus two
 non-degeneracy checks derived from the oracle ceiling: lambda_hat found in >= 450/500 splits and a
 median reference accept rate >= 0.75 x the oracle ceiling computed in code. Seeded, deterministic.
 
 The gated run is shared module-wide (`gated`) and spread over a small process pool: results do
-not depend on the worker count, because each split depends only on its own spawned seed.
-"""
+not depend on the worker count, because each split depends only on its own spawned seed."""
 
 from __future__ import annotations
 
@@ -64,8 +63,8 @@ def test_simulation_reports_elapsed_seconds(
 
 @pytest.mark.perf
 def test_simulation_stays_within_a_perf_budget(gated: _TimedResult) -> None:
-    """ADR-0009 §7.B: the <60s wall-clock bound is real but flaky under host load (measured
-    32-95s across otherwise-identical runs, see §7.B), so it is asserted only under the `perf`
+    """ADR-0009 §7.B: the <60s wall-clock bound is real but flaky under host load
+    (measured 32-95s across otherwise-identical runs), so it is asserted only under the `perf`
     marker (`pytest -m perf`, run on an idle host) and excluded from the default CI suite."""
     assert gated.elapsed_seconds < 60.0, (
         f"simulation took {gated.elapsed_seconds:.1f}s, must stay under 60s on an idle host"

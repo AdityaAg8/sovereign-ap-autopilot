@@ -1,6 +1,6 @@
 """Unit tests for `apx.workflows.workflow.InvoiceWorkflow` using Temporal's time-skipping test
 environment: the workflow itself is the unit under test, `FakeInvoiceActivities` (a canned,
-in-memory stand-in for every pipeline module) is its only dependency (PRD §10 M5.2)."""
+in-memory stand-in for every pipeline module) is its only dependency."""
 
 from __future__ import annotations
 

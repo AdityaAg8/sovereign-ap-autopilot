@@ -1,7 +1,6 @@
 """Concrete mock ASP: implements `AspClient` and `Archive` (apx.asp_mock.interfaces) on top of
 an `AspRepository`, validating each document against the runtime PINT AE schematron gate before
-it is accepted, and stamping every accepted archive record with 5-year retention metadata
-(PRD §3 apx/asp_mock, §6.4 idempotency, §10 M4.4)."""
+it is accepted, and stamping every accepted archive record with 5-year retention metadata."""
 
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from apx.common.types import IdempotencyKey
 from apx.einvoice.interfaces import DocumentTypeCode, EInvoiceDocument, SchematronValidator
 
 _RETENTION_YEARS = 5
-"""Minimum e-invoice archive retention period (PRD §3 apx/asp_mock)."""
+"""Minimum e-invoice archive retention period."""
 
 
 def retain_until(archived_at: datetime, *, years: int = _RETENTION_YEARS) -> date:

@@ -2,7 +2,7 @@
 has. Every statement is a module-level `SQL_*` constant collected in `AGENT_SQL`, runs with
 bound parameters in a `READ ONLY` transaction as the `apx_agent_ro` role, and reads only the
 masked, capped views `v_agent_invoices`, `v_agent_vendor_accounts` and `v_agent_audit` created
-by `db/migrations/versions/0004_agent_ro_role_and_views.py` (PRD §10 M9.2, ADR-0010 D2)."""
+by `db/migrations/versions/0004_agent_ro_role_and_views.py` (ADR-0010 D2)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from apx.common.errors import ConfigError
 
 AGENT_ROLE: Final[str] = "apx_agent_ro"
 """The SELECT-only role migration 0004 creates; its password comes from `AGENT_RO_PASSWORD`
-(migration 0013), never from source (REVIEW L-01)."""
+(migration 0013), never from source."""
 
 
 def get_agent_database_url() -> str:
@@ -30,8 +30,7 @@ def get_agent_database_url() -> str:
     never be confused (ADR-0010 D2: the agent connects as a different, SELECT-only role).
 
     Raises `ConfigError` if neither is set (there is no built-in password), or if the URL does
-    not use the `asyncpg` driver.
-    """
+    not use the `asyncpg` driver."""
     url = os.environ.get("AGENT_DATABASE_URL") or _compose_agent_url()
     if not url.startswith("postgresql+asyncpg://"):
         raise ConfigError(

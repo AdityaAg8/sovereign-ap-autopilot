@@ -1,7 +1,7 @@
 """Guards `apx.workflows.workflow.NON_RETRYABLE_ERRORS`: every listed name is a real `apx`
 exception class (Temporal matches by exact class name, so a typo would silently retry), only
 registered activities are listed, and each `execute_activity` call uses its own activity's
-policy (PRD §6.4, §10 M5.2)."""
+policy."""
 
 from __future__ import annotations
 
@@ -65,12 +65,12 @@ def test_only_registered_activities_are_listed() -> None:
 
 
 def test_parse_never_retries_an_oversized_raster() -> None:
-    """A page too large to render is the same page on every attempt (H-03): fail once."""
+    """A page too large to render is the same page on every attempt: fail once."""
     assert "RasterTooLargeError" in NON_RETRYABLE_ERRORS["parse"]
 
 
 def test_no_rendering_activity_retries_an_oversized_raster() -> None:
-    """Scan and fraud render pages too (N-11): the same oversized page fails every attempt."""
+    """Scan and fraud render pages too: the same oversized page fails every attempt."""
     for name in ("scan", "fraud"):
         assert "RasterTooLargeError" in NON_RETRYABLE_ERRORS[name], name
 

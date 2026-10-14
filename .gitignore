@@ -1,11 +1,11 @@
-# Secrets and local environment (PRD Â§8): never commit these.
+# Secrets and local environment: never commit these.
 .env
 .env.*
 !.env.example
 
-# Generated data, model weights and logs (PRD Â§8): never commit these.
+# Generated data, model weights and logs: never commit these.
 data/
-# Versioned eval inputs (M9.5 chat tasks and fixture world) are source, not generated data.
+# Versioned eval inputs (chat tasks and fixture world) are source, not generated data.
 !evals/chat/data/
 models/
 logs/

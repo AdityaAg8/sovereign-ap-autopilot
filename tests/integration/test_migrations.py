@@ -1,10 +1,9 @@
-"""Integration test for `db/migrations` against a real, throwaway Postgres container (PRD §10
-M5.1): `alembic upgrade head` then `downgrade base` must be clean, the `audit_log` and
+"""Integration test for `db/migrations` against a real, throwaway Postgres container:
+`alembic upgrade head` then `downgrade base` must be clean, the `audit_log` and
 `audit_anchor` append-only triggers (I4) must actually reject UPDATE/DELETE, and the migrated
 schema must not have drifted from `apx/db/models.py` (see `db/migrations/README`). Marked
 `integration` (needs Docker), so it is excluded from the default `make test`/CI selection and
-runs via `pytest -m integration`.
-"""
+runs via `pytest -m integration`."""
 
 from __future__ import annotations
 
@@ -101,10 +100,9 @@ async def _fetch_public_tables(dsn: str) -> set[str]:
 
 @pytest.fixture(scope="module")
 def postgres_url() -> Iterator[str]:
-    """Starts a throwaway `pgvector/pgvector:pg16-trixie` container on a host-only port (the
-    Compose `postgres` service sits on an internal-only network, PRD §3 C1), waits for it to
-    accept connections, and stops it on teardown. `--rm` means `docker stop` also removes it.
-    """
+    """Starts a throwaway `pgvector/pgvector:pg16-trixie` container on a host-only port
+    (the Compose `postgres` service sits on an internal-only network), waits for it to
+    accept connections, and stops it on teardown. `--rm` means `docker stop` also removes it."""
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True, check=False)
     subprocess.run(
         [
@@ -201,7 +199,7 @@ async def _assert_audit_log_is_append_only() -> None:
 
 
 def test_audit_anchor_rejects_update_and_delete(env_database_url: str) -> None:
-    """I4/§6.4: `audit_anchor` (M10.4 head anchoring) is append-only, same as `audit_log`; the
+    """I4/§6.4: `audit_anchor` (head anchoring) is append-only, same as `audit_log`; the
     `0002_audit_anchor` trigger must reject UPDATE and DELETE at the database level."""
     cfg = _alembic_config()
     command.upgrade(cfg, "head")

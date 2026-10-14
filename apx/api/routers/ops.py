@@ -1,4 +1,4 @@
-"""Operations endpoint (PRD §10 M10.3): one live snapshot for the operations view -- KPIs,
+"""Operations endpoint: one live snapshot for the operations view -- KPIs,
 invoices per pipeline stage, recent activity and the models llama-swap holds right now."""
 
 from __future__ import annotations

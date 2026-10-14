@@ -1,4 +1,4 @@
-"""Unit tests for the runtime trust gate (M7.5, `apx.trust.gate.ArtifactTrustGate`): it accepts
+"""Unit tests for the runtime trust gate (`apx.trust.gate.ArtifactTrustGate`): it accepts
 exactly the fields whose calibrated P(correct) reaches the artifact's λ̂, and it refuses (every
 field to review, reason audited) when the artifact is missing, tampered with, invalidated by a
 promotion, or fitted on other A/B builds than the ones served."""

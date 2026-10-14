@@ -1,5 +1,5 @@
-"""Unit tests for evals/scorers/uae.py, UAE field F1 split by EN/AR (PRD §5 scoreboard row,
-§10 M1.3), on hand-computed cases."""
+"""Unit tests for evals/scorers/uae.py, UAE field F1 split by EN/AR,
+on hand-computed cases."""
 
 from __future__ import annotations
 

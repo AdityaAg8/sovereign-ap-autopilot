@@ -1,6 +1,6 @@
 """Unit tests for `factory.build`: deterministic exact-count stratified splits/fractions, plan
 construction, and a small-N (<=5 invoices) end-to-end `generate_dataset` run covering the
-manifest/splits registration path (PRD §10 M2.3)."""
+manifest/splits registration path."""
 
 from __future__ import annotations
 

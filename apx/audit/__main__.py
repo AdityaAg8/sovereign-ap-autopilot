@@ -1,13 +1,12 @@
-"""CLI entry point `python -m apx.audit verify`: runs `PgAuditFullVerifier` (hash chain plus
-head-anchor cross-checks, PRD §6.4) against the configured database and anchor file, prints a
+"""CLI entry point `python -m apx.audit verify`: runs `PgAuditFullVerifier`
+(hash chain plus head-anchor cross-checks) against the configured database and anchor file, prints a
 structured JSON result to stdout and a human-readable summary to stderr. Exit code is a strict
-three-way contract (§10 M10.4): 0 = verified clean, 1 = verify completed and found a real
+three-way contract: 0 = verified clean, 1 = verify completed and found a real
 tamper (a chain or anchor mismatch), 2 = verify could not run at all (any `apx.common.errors.
 ApxError`, including `AuditUnavailableError` for a database or anchor-file failure raised from
 `apx.audit.anchor`). Exit 1 is reserved for a *completed, verified* mismatch so a could-not-run
 condition -- a down database, a network blip -- is never mistaken for a tamper alert.
-`scripts/audit_verify_cron.sh` wraps this for the nightly job.
-"""
+`scripts/audit_verify_cron.sh` wraps this for the nightly job."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """UntrustedText: the only wrapper in which document-derived text may reach the agent or any
-tool-enabled prompt, quoted, spotlighted and length-capped (PRD §6.2 I2, ADR-0003, ADR-0008)."""
+tool-enabled prompt, quoted, spotlighted and length-capped (I2, ADR-0003, ADR-0008)."""
 
 from __future__ import annotations
 

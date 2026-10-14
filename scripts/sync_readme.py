@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rewrites the README.md block between `<!-- SCOREBOARD:START -->` and `<!-- SCOREBOARD:END
 -->` with the current contents of reports/scoreboard.md, so the README never drifts from the
-generated scoreboard (PRD §5, ADR-0005, §10 M1.4)."""
+generated scoreboard (ADR-0005)."""
 
 from __future__ import annotations
 

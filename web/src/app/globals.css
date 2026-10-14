@@ -192,7 +192,7 @@
   }
 }
 
-/* Operations view (M10.3). Motion carries meaning only: tokens ride a pipeline segment while
+/* Operations view. Motion carries meaning only: tokens ride a pipeline segment while
    invoices are in flight, active stations and resident models ping softly, and an activity row
    glows once when its invoice moves. Under reduced motion the tokens are removed and the rest
    collapse to their end state via the global rule above. */
@@ -247,7 +247,7 @@
   }
 }
 
-/* Inbox grid (M5.4). One column set per container width, so the header and the virtualized rows
+/* Inbox grid. One column set per container width, so the header and the virtualized rows
    always share a template and no fixed column is ever squeezed under its content: every column
    but Vendor is sized from its longest real value ("AED 1,234,567.89", "Awaiting review",
    "27 Sep 17:30"). Phone: vendor + amount, with invoice number, received time and status on a

@@ -1,7 +1,7 @@
-"""Unit tests for evals/scoreboard.py: every PRD §5 row takes its value, gate status and source
+"""Unit tests for evals/scoreboard.py: every row takes its value, gate status and source
 stamp from the newest measured report, dummy-predictor runs never pose as model scores, truly
-unmeasured rows stay PENDING with a reason, and report drift fails the run loudly (PRD §5,
-ADR-0005, §10 M1.4/M10.6, .claude/rules/design.md). No network, no GPU, no git."""
+unmeasured rows stay PENDING with a reason, and report drift fails the run loudly
+(ADR-0005). No network, no GPU, no git."""
 
 from __future__ import annotations
 

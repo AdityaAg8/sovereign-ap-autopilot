@@ -2,7 +2,7 @@
 `ProposalSink` only (ADR-0010 D1-D4). Every method scopes the `agent` origin to its scope
 invoice (and that invoice's vendor), applies the contract's row cap, and puts document-derived
 text only in `UntrustedText`; the two propose tools never do more than call `ProposalSink.submit`
-(PRD §6.2 I2, §6.3 P5, §10 M9.2)."""
+(I2, P5)."""
 
 from __future__ import annotations
 

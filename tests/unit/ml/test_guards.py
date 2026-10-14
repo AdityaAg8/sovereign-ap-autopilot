@@ -1,4 +1,4 @@
-"""Tests for the Extractor B pre-run data guards (ADR-0011 §5, design §5): one planted row per
+"""Tests for the Extractor B pre-run data guards (ADR-0011 §5): one planted row per
 quarantine reason, the leak stop, the per-source rate stop (file still written), dev winning a
 near duplicate and stable output order and hashes."""
 

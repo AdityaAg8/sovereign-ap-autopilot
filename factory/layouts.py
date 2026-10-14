@@ -2,7 +2,7 @@
 factory: builds a deterministic per-invoice render context from an `Erp` snapshot (vendor, PO,
 line items, VAT math) and renders it through `factory.render_html` into self-describing HTML
 (`data-field="<name>"` per `apx.extract.interfaces.FieldName` / `RawLineItem`), feeding the M2.3
-Playwright-to-PDF and DOM-box-labelling stage (PRD §10 M2.2)."""
+Playwright-to-PDF and DOM-box-labelling stage."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ LINE_FIELD_NAMES: frozenset[str] = frozenset(PRINTED_LINE_ITEM_KEYS)
 
 
 class TaxCase(StrEnum):
-    """UAE VAT scenarios the factory must cover (PRD §10 M2.2)."""
+    """UAE VAT scenarios the factory must cover."""
 
     STANDARD = "standard"
     ZERO_RATED = "zero_rated"
@@ -156,7 +156,7 @@ EMIRATE_AR: dict[str, str] = {
 
 # Fixed "our company" buyer profile. Deterministic and identical across every generated
 # invoice (a real AP department has one buyer entity), owned entirely by this module since
-# `factory/erp.py` (M2.1) has no buyer concept.
+# `factory/erp.py` has no buyer concept.
 BUYER_NAME_EN = "Sovereign Foods Trading LLC"
 BUYER_NAME_AR = "شركة السيادة للتجارة الغذائية ذ.م.م"
 BUYER_TRN = "100234567800003"
@@ -268,7 +268,7 @@ def _round_money(value: Decimal) -> Decimal:
 
 @dataclass(frozen=True)
 class InvoiceLine:
-    """One rendered invoice line, already VAT-computed (PRD §10 M2.2)."""
+    """One rendered invoice line, already VAT-computed."""
 
     index: int
     description_en: str
@@ -306,8 +306,8 @@ def _generate_lines(rng: random.Random, n_lines: int, tax_case: TaxCase) -> tupl
 
 def compute_totals(lines: tuple[InvoiceLine, ...]) -> tuple[Decimal, Decimal, Decimal]:
     """Subtotal, VAT total and grand total for `lines`: line-level rounding then summed, matching
-    the rounding convention used inside the Jinja2 templates (PRD §10 M2.2 acceptance: "VAT
-    totals in HTML equal ERP math")."""
+    the rounding convention used inside the Jinja2 templates
+    (acceptance: "VAT totals in HTML equal ERP math")."""
     subtotal = sum((line.net_amount for line in lines), start=Decimal("0"))
     vat_total = sum((line.vat_amount for line in lines), start=Decimal("0"))
     total = subtotal + vat_total
@@ -333,7 +333,7 @@ def build_invoice_context(
     """Build the Jinja2 render context for one invoice: pick a vendor and one of its purchase
     orders from `erp`, generate `n_lines` bilingual line items and compute VAT totals for
     `tax_case`. Deterministic for a given `(erp.seed, layout.id, vendor_index, tax_case,
-    n_lines, seed)` (PRD §10 M2.2)."""
+    n_lines, seed)`."""
     if not 1 <= n_lines <= 40:
         raise ValueError(f"n_lines must be between 1 and 40, got {n_lines}")
     if not erp.vendors:
@@ -410,7 +410,7 @@ def render_invoice(
     seed: int | None = None,
 ) -> str:
     """Render one synthetic UAE supplier invoice as a self-contained HTML document, using layout
-    `layout_id` and data derived deterministically from `erp` (PRD §10 M2.2)."""
+    `layout_id` and data derived deterministically from `erp`."""
     layout = _LAYOUTS_BY_ID[layout_id]
     context = build_invoice_context(
         layout, erp, vendor_index=vendor_index, tax_case=tax_case, n_lines=n_lines, seed=seed

@@ -1,6 +1,6 @@
-"""Unit test for the covered-by-image/opaque-shape technique (PRD §6.3 A04): text painted over
+"""Unit test for the covered-by-image/opaque-shape technique (A04): text painted over
 by a later, opaque rectangle is flagged HIDDEN_TEXT even though its declared colour has high
-contrast against the page (M6.2)."""
+contrast against the page."""
 
 from __future__ import annotations
 

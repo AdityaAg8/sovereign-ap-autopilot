@@ -1,4 +1,4 @@
-/** The pipeline drawn as a transit line (PRD §10 M10.3): each processing stage is a station on
+/** The pipeline drawn as a transit line: each processing stage is a station on
  * one track with its live count, invoices in flight ride the segment towards the next station,
  * and the line ends in a terminus bar showing how settled invoices split across outcomes.
  * Horizontal from md up, vertical on phones; tokens are hidden under reduced motion. */

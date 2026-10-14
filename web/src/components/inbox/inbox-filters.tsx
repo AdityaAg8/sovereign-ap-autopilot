@@ -1,4 +1,4 @@
-/** Search + status/route filters above the inbox table (PRD §10 M5.4: "filters"). Pure controlled
+/** Search + status/route filters above the inbox table. Pure controlled
  * inputs — filtering itself runs client-side over the already-fetched page in inbox-table.tsx.
  * The two pickers are `FilterSelect`s, whose Radix select loads on the first interaction. */
 

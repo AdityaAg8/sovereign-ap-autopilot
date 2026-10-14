@@ -1,8 +1,7 @@
 """Unit tests for `apx.db.session`: `get_database_url`'s default/validation logic and
 `get_session`'s commit/rollback/close contract, exercised against a fake `AsyncSession` so no
-database connection is ever opened (PRD §6.4/§8, §10 M5.1). The real Postgres round trip lives
-in `tests/integration/test_migrations.py`.
-"""
+database connection is ever opened. The real Postgres round trip lives
+in `tests/integration/test_migrations.py`."""
 
 from __future__ import annotations
 
@@ -47,7 +46,7 @@ def _patch_session_factory(
 
 
 def test_get_database_url_raises_config_error_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No baked-in default credential (REVIEW C-02): nothing configured is a typed error."""
+    """No baked-in default credential: nothing configured is a typed error."""
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     with pytest.raises(ConfigError, match=r"DATABASE_URL.*POSTGRES_PASSWORD"):

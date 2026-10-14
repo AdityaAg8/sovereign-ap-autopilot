@@ -1,4 +1,4 @@
-"""Developer convenience commands behind `make status|open|dashboard|preview|web-stop` (PRD §8).
+"""Developer convenience commands behind `make status|open|dashboard|preview|web-stop`.
 Every probe is localhost-only (docker, nvidia-smi, 127.0.0.1 sockets/HTTP); a missing tool
 degrades to a one-line explanation instead of a stack trace."""
 
@@ -32,7 +32,7 @@ API_PORT = 8000
 LLAMA_SWAP_PORT = 8080
 # Ops UIs, all published by the `gateway` service in infra/compose.yaml (127.0.0.1 only).
 DASHBOARDS: tuple[tuple[str, int], ...] = (("Phoenix", 6006), ("MLflow", 5000), ("Temporal", 8233))
-# Not published by default (REVIEW C-02/C-03): the Temporal UI is served, read-only, by the
+# Not published by default: the Temporal UI is served, read-only, by the
 # `devports` profile's gateway only.
 DEVPORTS_ONLY: dict[str, str] = {
     "Temporal": "read-only, only with the devports profile: `COMPOSE_PROFILES=devports make up`",

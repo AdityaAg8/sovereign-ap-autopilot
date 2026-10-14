@@ -1,4 +1,4 @@
-"""Prompt builder for the exception agent and ops chat (PRD §10 M9.3, ADR-0008 T3-T5, ADR-0010):
+"""Prompt builder for the exception agent and ops chat (ADR-0008 T3-T5, ADR-0010):
 constant system rules plus the spotlight rule, typed case state as canonical JSON, and document
 text only ever as fenced untrusted blocks within the per-prompt budget."""
 

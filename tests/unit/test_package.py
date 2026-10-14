@@ -1,5 +1,5 @@
 """Smoke test that the apx package and all its subpackages import and expose a version,
-so pytest has a real green test on the bare M0.2 skeleton (PRD §10 M0.2)."""
+so pytest has a real green test on the bare M0.2 skeleton."""
 
 import importlib
 

@@ -1,4 +1,4 @@
-"""Unit tests for evals/guard.py and the prompt-injections fetcher (PRD §10 M6.4): test-split
+"""Unit tests for evals/guard.py and the prompt-injections fetcher: test-split
 metrics use a cal-chosen threshold, per-category recall and hard-negative FPR are computed from
 the scores, blocked models are reported as such, and the fetcher rejects a bad checksum."""
 

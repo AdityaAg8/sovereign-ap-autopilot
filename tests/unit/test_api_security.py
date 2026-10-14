@@ -1,6 +1,5 @@
-"""Unit tests for password hashing and JWT access tokens (PRD §10 M5.3): argon2 verification,
-token round-tripping, expiry and tampering. No database or network needed.
-"""
+"""Unit tests for password hashing and JWT access tokens: argon2 verification,
+token round-tripping, expiry and tampering. No database or network needed."""
 
 from __future__ import annotations
 

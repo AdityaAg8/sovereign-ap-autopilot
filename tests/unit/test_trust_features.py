@@ -1,7 +1,7 @@
 """Unit and property tests for the ADR-0009 §4 trust features: the comparator, agreement, format
-validity, OCR support, the arbiter vote, hard-reject rules and the 28-column encoder (M7.4 proof:
-comparator idempotent, agreement symmetric and within [0, 1], encode length 28, lexicon covers
-EN and AR for every field)."""
+validity, OCR support, the arbiter vote, hard-reject rules and the 28-column encoder
+(proof: comparator idempotent, agreement symmetric and within [0, 1], encode length 28, lexicon
+covers EN and AR for every field)."""
 
 from __future__ import annotations
 
@@ -130,7 +130,7 @@ def test_normalize_for_compare_never_raises(kind: FieldKind, raw: str) -> None:
 # x) for every FieldKind and *arbitrary* Unicode input, not just letters/digits: a case-folding or
 # upper-casing step can itself introduce combining marks (or delete a character that was blocking a
 # composition) that a later NFKC pass would combine differently, changing the string on a second
-# pass through the comparator (ADR-0009 §4.1, M7.4 proof). The strategy below is biased toward the
+# pass through the comparator (ADR-0009 §4.1, proof). The strategy below is biased toward the
 # character classes where that actually happens -- combining marks, Greek Extended (dialytika/tonos
 # precomposed letters), Arabic diacritics/tatweel, NBSP/hyphen -- since uniform sampling over the
 # full codepoint space essentially never reaches them. `derandomize=True` and `database=None` make
@@ -532,7 +532,7 @@ def _single_value_document(printed: str) -> ParsedDocument:
 def test_ocr_support_matches_printed_words_under_the_value_kind(
     field: FieldName, printed: str, extracted: str
 ) -> None:
-    """Regression (M7.5): the grounder's normalised form (e.g. `inv 001`) is not comparable
+    """Regression: the grounder's normalised form (e.g. `inv 001`) is not comparable
     with the printed words under the kind's rule, so the match uses the extracted raw value;
     both sides go through `normalize_for_compare(kind)`."""
     from apx.extract.grounding import WordGrounder

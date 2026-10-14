@@ -1,4 +1,4 @@
-"""Strict readers for the measured reports the PRD §5 scoreboard draws on (ADR-0005: numbers are
+"""Strict readers for the measured reports the scoreboard draws on (ADR-0005: numbers are
 never hand-written): the chat_evals, attacks_e2e, trust_gate, extractor_b_gates and bakeoff JSON
 evidence, the real-data track's JSON reports (ADR-0019), plus the generated extraction_a,
 gold_xml, fraud, guard, smoke, e2e_pipeline, parse, factory_selfcheck and extractor_b markdown
@@ -111,7 +111,7 @@ def _iso(source: str, value: str, what: str) -> datetime:
         raise ReportFormatError(source, f"{what}: {value!r} is not an ISO timestamp") from exc
 
 
-# --- reports/chat_evals.json (M9.5) -----------------------------------------------------------
+# --- reports/chat_evals.json -----------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -182,7 +182,7 @@ def parse_chat_evals(text: str, source: str = "reports/chat_evals.json") -> Chat
     )
 
 
-# --- reports/extraction_a.md (M3.3) -----------------------------------------------------------
+# --- reports/extraction_a.md -----------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -222,7 +222,7 @@ def parse_extraction_a(text: str, source: str = "reports/extraction_a.md") -> Ex
     )
 
 
-# --- reports/gold_xml.md (M2.5) ---------------------------------------------------------------
+# --- reports/gold_xml.md ---------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -244,7 +244,7 @@ def parse_gold_xml(text: str, source: str = "reports/gold_xml.md") -> GoldXmlRep
     return GoldXmlReport(passed=passed, total=total)
 
 
-# --- reports/fraud.md (M8.2) ------------------------------------------------------------------
+# --- reports/fraud.md ------------------------------------------------------------------
 
 FRAUD_HEADER = (
     "| Typology | Recall @ 1% FPR (min) | Gate ≥ 90% | Deployed recall (min) | Rules only (min) |"
@@ -279,7 +279,7 @@ def parse_fraud(text: str, source: str = "reports/fraud.md") -> FraudReport:
     return FraudReport(recall_pct=recall, verdicts=verdicts, overall=overall)
 
 
-# --- reports/guard.md (M6.4) ------------------------------------------------------------------
+# --- reports/guard.md ------------------------------------------------------------------
 
 GUARD_HEADER = (
     "| model | operating point | threshold | precision | recall | F1 | FPR | hard-neg FPR |"
@@ -340,7 +340,7 @@ def parse_guard(text: str, source: str = "reports/guard.md") -> GuardReport:
     return GuardReport(points=tuple(points))
 
 
-# --- reports/smoke.md (M0.5) ------------------------------------------------------------------
+# --- reports/smoke.md ------------------------------------------------------------------
 
 SMOKE_STAGE_HEADER = "| Stage | Peak VRAM (GB) | Within budget |"
 
@@ -365,7 +365,7 @@ def parse_smoke(text: str, source: str = "reports/smoke.md") -> SmokeReport:
     return SmokeReport(generated_at=_iso(source, stamp, "Generated"), stage_peak_gb=peaks)
 
 
-# --- reports/e2e_pipeline*.md (M5.6) ----------------------------------------------------------
+# --- reports/e2e_pipeline*.md ----------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -404,7 +404,7 @@ def parse_e2e(text: str, source: str = "reports/e2e_pipeline.md") -> E2eReport:
     )
 
 
-# --- reports/parse.md (M3.1) ------------------------------------------------------------------
+# --- reports/parse.md ------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -431,7 +431,7 @@ def parse_parse(text: str, source: str = "reports/parse.md") -> ParseReport:
     )
 
 
-# --- reports/factory_selfcheck.md (M2.4) ------------------------------------------------------
+# --- reports/factory_selfcheck.md ------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -458,7 +458,7 @@ def parse_selfcheck(text: str, source: str = "reports/factory_selfcheck.md") -> 
     )
 
 
-# --- reports/extractor_b.md (M7.1) ------------------------------------------------------------
+# --- reports/extractor_b.md ------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -541,7 +541,7 @@ def _count(source: str, obj: Any, key: str) -> int:
     return value
 
 
-# --- reports/attacks_e2e.json (M6.6) ----------------------------------------------------------
+# --- reports/attacks_e2e.json ----------------------------------------------------------
 
 ATTACK_GATE_STATUSES: frozenset[str] = frozenset(
     {"PASS", "PARTIAL", "FAIL_PAYMENT_CHANGED", "FAIL_MASTER_CHANGED", "FAIL_INCOMPLETE"}
@@ -591,7 +591,7 @@ def parse_attacks_e2e(text: str, source: str = "reports/attacks_e2e.json") -> At
     )
 
 
-# --- reports/trust_gate.json (M7.5) -----------------------------------------------------------
+# --- reports/trust_gate.json -----------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -661,7 +661,7 @@ def parse_trust_gate(text: str, source: str = "reports/trust_gate.json") -> Trus
     )
 
 
-# --- reports/extractor_b_gates.json (M7.1 P1-P5) ----------------------------------------------
+# --- reports/extractor_b_gates.json (P1-P5) ----------------------------------------------
 
 EXTRACTOR_B_GATE_IDS: tuple[str, ...] = ("P1", "P2", "P3", "P4", "P5")
 
@@ -731,7 +731,7 @@ def parse_extractor_b_gates(
     )
 
 
-# --- reports/bakeoff.json (M3.4) --------------------------------------------------------------
+# --- reports/bakeoff.json --------------------------------------------------------------
 # The machine-readable twin of reports/bakeoff.md, written by evals/bakeoff/report.py::to_json
 # (extra keys are ignored); without the file the bake-off shows as pending. Schema version 1:
 #   {"schema_version": 1, "generated_at": ISO-8601,

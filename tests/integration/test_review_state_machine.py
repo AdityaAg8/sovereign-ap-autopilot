@@ -1,4 +1,4 @@
-"""M11.1 audit (REVIEW.md F-02, F-03): the review decisions must respect the invoice state
+"""M11.1 audit (F-03): the review decisions must respect the invoice state
 machine. A rejected invoice can never be approved afterwards, and `send_to_review` never pulls
 an invoice out of a terminal or in-flight payment state (SENT, ARCHIVED, BLOCKED, FAILED,
 APPROVED) back into the review queue, where a later approval would write a second payment

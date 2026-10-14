@@ -1,8 +1,7 @@
 """`POST /uploads`: validates an uploaded document (magic bytes, size, PDF page count and
 encryption), dedupes it by sha256 and starts `InvoiceWorkflow` through the shared
 `apx.ingest.ingestor.Ingestor` -- the same function the `data/inbox/` watcher calls -- so the
-same document uploaded twice, watched twice, or both, starts exactly one workflow (PRD §10
-M5.5)."""
+same document uploaded twice, watched twice, or both, starts exactly one workflow."""
 
 from __future__ import annotations
 

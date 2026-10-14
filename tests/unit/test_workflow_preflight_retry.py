@@ -1,4 +1,4 @@
-"""Retry classification of the GPU preflight errors (ADR-0013 addendum, M5.6a): the GPU-stage
+"""Retry classification of the GPU preflight errors (ADR-0013 addendum): the GPU-stage
 activities (parse, extract) never retry a `GpuProbeError`, a deployment fault, but keep
 Temporal's default retries for a transient probe failure and the VRAM/RAM shortfall errors."""
 

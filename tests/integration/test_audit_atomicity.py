@@ -1,9 +1,8 @@
-"""Integration tests for audit atomicity (REVIEW M-02, PRD §6.2 I4, §6.4) on a real, throwaway
+"""Integration tests for audit atomicity (I4) on a real, throwaway
 Postgres: an audit entry appended inside a transaction that rolls back leaves no phantom row, and
 when `send_to_asp` or `archive` fails at its final audit append, the retry writes that event
 exactly once (the idempotency record rolled back with it). The audit log is the real `PgAuditLog`
-behind a wrapper that injects one failure after its row is flushed. Marked `integration`.
-"""
+behind a wrapper that injects one failure after its row is flushed. Marked `integration`."""
 
 from __future__ import annotations
 

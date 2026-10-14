@@ -1,8 +1,7 @@
 """SQLAlchemy 2.0 typed ORM models for the Postgres schema: users/roles, vendor and
 admin-verified bank master data, PO/GRN 3-way-match data, invoices and their grounded fields,
 review decisions/approvals/proposals, the hash-chained audit log, LLM call telemetry and
-training labels. Money is always `Numeric`, never `float` (PRD §6.3, §6.4, §7 apx/db, §10 M5.1).
-"""
+training labels. Money is always `Numeric`, never `float`."""
 
 from __future__ import annotations
 
@@ -224,7 +223,7 @@ class BankDetailHistory(Base):
 
 
 # ---------------------------------------------------------------------------------------
-# Purchase orders and goods-receipt notes (3-way match, PRD §7 apx/validate)
+# Purchase orders and goods-receipt notes (3-way match)
 # ---------------------------------------------------------------------------------------
 
 
@@ -288,7 +287,7 @@ class GrnLine(Base):
 
 
 # ---------------------------------------------------------------------------------------
-# Ingest dedupe (PRD §10 M5.5)
+# Ingest dedupe
 # ---------------------------------------------------------------------------------------
 
 
@@ -381,7 +380,7 @@ class Invoice(Base):
 
 
 class Field(Base, CreatedAtMixin):
-    """One extracted/grounded field value on an invoice (PRD §6.2 I1)."""
+    """One extracted/grounded field value on an invoice (I1)."""
 
     __tablename__ = "fields"
     __table_args__ = (
@@ -408,17 +407,17 @@ class Field(Base, CreatedAtMixin):
     """Pinned model revision (`apx.llm.interfaces.ModelSpec.revision`) that produced this
     value, when known; `None` for rows written before this was tracked or for `source ==
     FieldSource.HUMAN` rows (a reviewer, not a model). Lets a later correction record which
-    model/revision it is correcting (PRD §10 M10.1)."""
+    model/revision it is correcting."""
 
 
 # ---------------------------------------------------------------------------------------
-# Fraud flags (M8.3)
+# Fraud flags
 # ---------------------------------------------------------------------------------------
 
 
 class FraudFlag(Base):
     """One `apx.fraud.interfaces.FraudFlag` raised on an invoice, kept so review can show its
-    plain-language explanation (PRD §10 M8.3). Created by `0006_fraud_flags`."""
+    plain-language explanation. Created by `0006_fraud_flags`."""
 
     __tablename__ = "fraud_flags"
     __table_args__ = (
@@ -461,7 +460,7 @@ class PgVector(UserDefinedType[list[float]]):
 
 class PageEmbedding(Base):
     """One page's Qwen3-VL-Embedding-2B vector, scoped to the invoice's resolved vendor, for
-    learned near-duplicate detection (PRD §3 apx/fraud, §10 M8.1). Created by
+    learned near-duplicate detection. Created by
     `0010_page_embeddings`, which also enables the `vector` extension."""
 
     __tablename__ = "page_embeddings"
@@ -530,12 +529,12 @@ class Approval(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     invoice_digest: Mapped[str | None] = mapped_column(String(64))
     """`apx.policy.writer.approval_digest` of the invoice and vendor payee at approval time. The
-    workflow re-derives it before paying and holds when it does not match (REVIEW.md C-03);
+    workflow re-derives it before paying and holds when it does not match;
     NULL only on rows written before migration 0012, which the workflow treats as unbacked."""
     corrections_digest: Mapped[str | None] = mapped_column(String(64))
     """`apx.review.corrections.corrections_digest` of the review corrections the approver
     approved. The workflow acts on a `review` signal only when its corrections digest to this and
-    the invoice's current `fields` rows still do (REVIEW.md N-03); NULL on rows written before
+    the invoice's current `fields` rows still do; NULL on rows written before
     migration 0014 or by a caller that passed none, and the check then compares the signal with
     the current rows."""
 
@@ -564,7 +563,7 @@ class Proposal(Base):
 
 
 # ---------------------------------------------------------------------------------------
-# Audit chain (I4, §6.4) and idempotency (§6.4)
+# Audit chain (I4) and idempotency
 # ---------------------------------------------------------------------------------------
 
 
@@ -592,7 +591,7 @@ class AuditAnchor(Base):
     `apx.audit.anchor.AuditAnchorRecord`). Its own independent hash chain (`prev_anchor_hash`
     / `anchor_hash`), combined with a copy kept outside this database, lets
     `apx.audit.anchor.verify_anchors` detect tail truncation and whole-chain rewrites that
-    `audit_log`'s internal hash chain alone cannot see (PRD §6.2 I4, §6.4, §10 M10.4).
+    `audit_log`'s internal hash chain alone cannot see (I4).
     `db/migrations` attaches the same append-only trigger as `audit_log`."""
 
     __tablename__ = "audit_anchor"
@@ -636,7 +635,7 @@ class LlmCall(Base):
 
 
 class IdempotencyRecord(Base):
-    """Deterministic `invoice_id:step` key store for side-effecting activities (§6.4); ASP
+    """Deterministic `invoice_id:step` key store for side-effecting activities; ASP
     send and archive look themselves up here before acting, so a retried activity is a no-op."""
 
     __tablename__ = "idempotency_keys"
@@ -661,12 +660,12 @@ class IdempotencyRecord(Base):
 
 
 # ---------------------------------------------------------------------------------------
-# Training labels (PRD §6.2 I5: eval/cal/test data never reach training)
+# Training labels (I5: eval/cal/test data never reach training)
 # ---------------------------------------------------------------------------------------
 
 
 class Label(Base, CreatedAtMixin):
-    """A reviewer's field correction, one row per fix (PRD §10 M10.1). `created_at`
+    """A reviewer's field correction, one row per fix. `created_at`
     (`CreatedAtMixin`) is the correction timestamp and `labeled_by` the reviewer; the
     `previous_*` columns snapshot the field value being corrected (before/after value,
     grounding box and the model/revision that produced it) so the row alone is a complete,

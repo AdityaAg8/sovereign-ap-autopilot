@@ -1,13 +1,12 @@
 """Integration tests for head anchoring (`apx.audit.anchor`) against a real, throwaway
-Postgres container (PRD §6.2 I4, §6.4, §10 M10.4): `PgAuditFullVerifier` must anchor a clean
+Postgres container (I4): `PgAuditFullVerifier` must anchor a clean
 chain's head, detect a deleted middle row (as `verify_chain` already does), detect tail
 truncation after an anchor (which the hash chain alone cannot see), and detect an attacker
 who rewrites both the truncated chain's tail *and* the database's own anchor row to match --
 caught only because the external anchor file still holds the original, un-truncated head --
 and recover from a crash between the DB anchor commit and the file append by healing the file
 on the next run instead of permanently misreporting it as tampering (F2). Marked `integration`,
-so it needs Docker (`pytest -m integration`).
-"""
+so it needs Docker (`pytest -m integration`)."""
 
 from __future__ import annotations
 

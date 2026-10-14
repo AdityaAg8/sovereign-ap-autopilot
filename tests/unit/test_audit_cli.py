@@ -1,9 +1,8 @@
 """Unit tests for `python -m apx.audit verify` (`apx.audit.__main__`): the CLI's JSON output
-shape and exit codes for an ok, a chain-broken, an anchor-broken and an error result (PRD
-§6.4, §10 M10.4). `PgAuditFullVerifier.verify` is monkeypatched -- the verifier itself is
+shape and exit codes for an ok, a chain-broken, an anchor-broken and an error result.
+`PgAuditFullVerifier.verify` is monkeypatched -- the verifier itself is
 exercised by `tests/unit/test_audit_anchor.py` and `tests/integration/test_audit_anchor.py`;
-this file only covers the CLI's own formatting and exit-code logic.
-"""
+this file only covers the CLI's own formatting and exit-code logic."""
 
 from __future__ import annotations
 
@@ -158,8 +157,7 @@ def test_non_apx_db_failure_maps_to_exit_two_not_one(
     other tests here, `PgAuditFullVerifier.verify` itself is left real; only `apx.audit.anchor.
     get_session` (its one point of contact with the database) is made to fail with a plain
     `OSError`, so this exercises `verify`'s own try/except wrapping into `AuditUnavailableError`
-    as well as the CLI's exit-code contract.
-    """
+    as well as the CLI's exit-code contract."""
 
     @asynccontextmanager
     async def _raise_on_connect() -> AsyncIterator[None]:

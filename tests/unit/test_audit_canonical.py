@@ -1,7 +1,6 @@
 """Unit tests for `apx.audit.interfaces.canonical_json` and `entry_hash`: key-order stability,
 UTF-8/no-whitespace output, `Decimal`/`datetime` normalisation and the documented rejections
-(naive datetime, non-finite float) (PRD §6.2 I4, §6.4, §10 M10.4). No database is used.
-"""
+(naive datetime, non-finite float) (I4). No database is used."""
 
 from __future__ import annotations
 

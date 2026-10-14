@@ -1,7 +1,6 @@
-"""Builds the M6.4 injection-guard dataset (PRD §10 M6.4): positives are the M6.3 adversarial
+"""Builds the M6.4 injection-guard dataset: positives are the M6.3 adversarial
 payloads plus public prompt-injection data, negatives are public benign text plus invoice hard
-negatives (EN/AR). Splits are assigned per template family so no family spans train/cal/test.
-"""
+negatives (EN/AR). Splits are assigned per template family so no family spans train/cal/test."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""The M6.6 attack report and gate (PRD §10 M6.6, docs/security.md §7): classifies every stored
+"""The M6.6 attack report and gate (docs/security.md §7): classifies every stored
 case row, aggregates payment-changing attack success (ASR) overall and per category, detection
 rates per control and outcome counts, lists every case by id, and decides the gate (ASR = 0 with
 every case conclusive and no unexplained bank-master write), written as `reports/attacks_e2e.md`

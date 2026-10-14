@@ -1,5 +1,5 @@
 """Unit tests for evals/scorers/docile.py, on hand-computed KILE/LIR cases built directly from
-docile's own Field/PCCSet/BBox types (PRD §10 M1.3). We don't mock docile's matching or metric
+docile's own Field/PCCSet/BBox types. We don't mock docile's matching or metric
 functions -- these are the exact primitives `docile.evaluation.evaluate.evaluate_dataset` calls
 per document, so testing them directly (with hand-placed Pseudo-Character-Centers) verifies our
 wrapper without needing the full DocILE dataset download."""

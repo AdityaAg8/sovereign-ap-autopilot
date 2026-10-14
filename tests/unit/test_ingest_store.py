@@ -1,7 +1,6 @@
 """Unit tests for `apx.ingest.store.FileDocumentStore`: content-addressed storage, idempotent
 writes for the same bytes, `get`/`exists` and that hardening failures propagate as typed errors
-before anything is written to disk (PRD §10 M5.5). No database is used.
-"""
+before anything is written to disk. No database is used."""
 
 from __future__ import annotations
 
@@ -105,7 +104,7 @@ def test_get_raises_typed_error_for_an_unknown_sha256(tmp_path: Path) -> None:
 def test_put_always_returns_the_true_sha256_of_the_bytes_it_stored(
     image_format: str, suffix: bytes, tmp_path: Path
 ) -> None:
-    # PNG/JPEG are accepted on a readable, in-cap header (REVIEW H-03); trailing bytes after
+    # PNG/JPEG are accepted on a readable, in-cap header; trailing bytes after
     # the image are never read, so any suffix reaches `put` and must round-trip its sha256.
     buf = io.BytesIO()
     Image.new("RGB", (4, 4)).save(buf, format=image_format)

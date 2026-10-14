@@ -1,8 +1,7 @@
 """Stdlib-only metrics and threshold selection for the M6.4 injection guard: confusion counts,
 precision/recall/F1/FPR at a threshold, and the cal-split threshold rules (review: max F1, ties
 to the higher threshold; block: the lowest score with zero cal false positives). Shared by the
-fine-tune script (in the toolbox container), evals/guard.py and ml/guard/thresholds.py.
-"""
+fine-tune script (in the toolbox container), evals/guard.py and ml/guard/thresholds.py."""
 
 from __future__ import annotations
 
@@ -76,7 +75,7 @@ def select_threshold(scores: Sequence[float], labels: Sequence[int]) -> float:
 
 
 def select_block_threshold(scores: Sequence[float], labels: Sequence[int]) -> float:
-    """The cal-split block point (PRD §6.3 P4, ADR-0017): the lowest positive score strictly
+    """The cal-split block point (P4, ADR-0017): the lowest positive score strictly
     above every benign score, so no cal negative reaches it. Raises `ThresholdSelectionError`
     when no positive clears the highest benign score (the classifier could then never block)."""
     if not scores:

@@ -1,4 +1,4 @@
-"""Production composition root for the invoice pipeline (PRD §10 M5.6): builds every concrete
+"""Production composition root for the invoice pipeline: builds every concrete
 dependency of `InvoiceActivityDeps`, then runs the Temporal worker and the inbox watcher in one
 process. Start it with `python -m apx.workflows.main`; settings come from `WORKER_*` env vars.
 Every GPU call goes through one `GpuStageScheduler` (parse vs extract models, ADR-0013) and every
@@ -131,15 +131,15 @@ class WorkerSettings(BaseSettings):
     extractor_b_model: str = "extractor-b"
     agent_model: str = "exception-agent"
     page_similarity: bool = True
-    """Learned near-duplicate pages (M8.1): embed each page with the `page-embed` service in its
+    """Learned near-duplicate pages: embed each page with the `page-embed` service in its
     own GPU stage and compare it with the vendor's stored pages in pgvector. Off only by an
     explicit `WORKER_PAGE_SIMILARITY=false`; when on, an unreachable service fails the fraud
     step (retried), it never passes."""
     review_notes: bool = True
-    """Write the exception agent's cited review note on REVIEW-routed invoices (M9.3)."""
+    """Write the exception agent's cited review note on REVIEW-routed invoices."""
     watch_inbox: bool = True
     review_reconciler: bool = True
-    """Re-send review decisions whose signal was lost (`apx.workflows.reconciler`, REVIEW N-02):
+    """Re-send review decisions whose signal was lost (`apx.workflows.reconciler`):
     APPROVED or rejected-BLOCKED invoices whose workflow still waits in review."""
     reconcile_interval_s: float = Field(default=60.0, gt=0)
     reconcile_grace_s: float = Field(default=120.0, ge=0)
@@ -169,7 +169,7 @@ class WorkerSettings(BaseSettings):
     """`WORKER_PARSED_DIR`: content-addressed parse store (page PNGs); every worker must reach
     it, so in Compose it sits under the shared `data/` bind mount."""
     trust_dir: Path = Path("data/trust")
-    """`WORKER_TRUST_DIR`: the calibrator artifacts `make calibrate` writes (M7.5) and the
+    """`WORKER_TRUST_DIR`: the calibrator artifacts `make calibrate` writes and the
     ADR-0015 invalidation marker."""
     llama_swap_config: Path = Path("infra/llama-swap.yaml")
     models_lock: Path = Path("infra/models.lock.json")
@@ -330,7 +330,7 @@ def build_deps(settings: WorkerSettings, gpu: GpuServing | None = None) -> Invoi
 
 
 def trust_gate(settings: WorkerSettings, prompts: dict[ExtractorId, PromptBuilder]) -> TrustGate:
-    """The calibrated gate (M7.5) over the active artifact in `trust_dir`. Its only fallback is
+    """The calibrated gate over the active artifact in `trust_dir`. Its only fallback is
     the interim no-calibrator gate (λ̂ = None, AgreementScore just orders fields for review),
     used when the artifact is missing, invalidated or fitted on other A/B builds."""
     return ArtifactTrustGate(
@@ -425,8 +425,8 @@ def build_reconciler(
 
 def startup_checks() -> None:
     """Process-wide guards that must hold before any activity runs: PIL refuses to decode an
-    image over the raster cap (REVIEW H-03), the learning splits file is readable (H-04) and the
-    shared approval limit parses and agrees with any legacy setting (L-03). A failure raises a
+    image over the raster cap, the learning splits file is readable and the
+    shared approval limit parses and agrees with any legacy setting. A failure raises a
     typed `ConfigError` and the worker does not start."""
     Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
     require_splits()

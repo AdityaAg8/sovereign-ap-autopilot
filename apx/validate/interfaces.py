@@ -1,5 +1,5 @@
 """Interfaces for validation: VAT math, TRN, IBAN, mandatory fields and the invoice/PO/GRN
-3-way match. Violations are data returned to the policy engine (PRD §3)."""
+3-way match. Violations are data returned to the policy engine."""
 
 from __future__ import annotations
 
@@ -142,13 +142,12 @@ def _round_aed(amount: Decimal) -> Decimal:
 
 def check_vat(invoice: Invoice) -> list[Violation]:
     """Line and total VAT math per category (standard 5%, zero-rated, exempt, reverse charge,
-    designated free zone / out-of-scope) with AED rounding (PRD §6.3, §10 M4.1).
+    designated free zone / out-of-scope) with AED rounding.
 
     Reverse-charge (`VatCategory.REVERSE_CHARGE`) lines state 0% or 5% and collect no VAT on
     this invoice (PINT AE 1.0.4 `ibr-162-ae`, `aligned-ibrp-ae-09-ae`). A line whose category or
     rate is None gets a `VAT_CATEGORY_MISSING`/`VAT_RATE_MISSING` error and is skipped by the VAT
-    math, and the VAT total is then not reconciled (it cannot be computed).
-    """
+    math, and the VAT total is then not reconciled (it cannot be computed)."""
     violations: list[Violation] = []
     expected_vat_total = _ZERO
     expected_subtotal = _ZERO
@@ -455,7 +454,7 @@ def check_document_type(invoice: Invoice) -> list[Violation]:
 def check_mandatory_fields(invoice: Invoice, *, buyer_trn: str | None = None) -> list[Violation]:
     """Presence checks for the canonical `Invoice`'s own required business terms. The raw
     51-mandatory-field PINT AE checklist (`apx.extract.schema.HEADER_FIELD_BT`) is extraction's
-    concern; by the time an `Invoice` exists here it has already passed the trust gate (§6.1),
+    concern; by the time an `Invoice` exists here it has already passed the trust gate,
     so this only catches values that type-check as present but are semantically empty, plus the
     invoice-line cardinality rule (an Invoice line group, IBG-25, must occur at least once).
     The supplier address must name a UAE emirate (`apx.validate.address.resolve_emirate`, the
@@ -538,8 +537,8 @@ def check_buyer_trn(invoice: Invoice, buyer_trn: str) -> list[Violation]:
 def validate_invoice(
     invoice: Invoice, *, today: date | None = None, buyer_trn: str | None = None
 ) -> ValidationReport:
-    """Runs every M4.1 field-level check and merges the violations (§10 M4.1). 3-way match
-    (M4.2) is layered on separately via `three_way_match`, once a `PurchasingLookup` is wired
+    """Runs every M4.1 field-level check and merges the violations. 3-way match
+     is layered on separately via `three_way_match`, once a `PurchasingLookup` is wired
     in. `buyer_trn` is our organisation's configured TRN (`WorkerSettings.buyer_trn`); without
     it the document's own buyer TRN is required instead."""
     violations = (

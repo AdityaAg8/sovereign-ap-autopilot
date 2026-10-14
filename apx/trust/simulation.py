@@ -1,10 +1,9 @@
 """M7.5 gate (ADR-0009 §7): a known-ground-truth simulation of the whole calibrate + Learn-then-Test
 chain over 500 cal/test splits, proving the coverage guarantee holds under the exchangeable
-generator that this ADR freezes (PRD §6.2 I6). The generator is deliberately independent of
+generator that this ADR freezes (I6). The generator is deliberately independent of
 apx.trust.features: it draws feature vectors straight from the fixed model in ADR-0009 §7 so that
 `y` (ground truth) is related to the features only through the latent score, exactly as the trust
-gate assumes.
-"""
+gate assumes."""
 
 from __future__ import annotations
 
@@ -108,8 +107,7 @@ def _generate_documents(
     Materialising a `FieldFeatures`/`CalRecord` Pydantic object per row here (tens of millions
     across 500 splits) was benchmarked at ~230k objects/s: far too slow for the CI time budget, so
     this builds the 28-column matrix directly (ADR-0009 §7's own performance note calls out
-    vectorising the walk; the same reasoning applies to the generator that feeds it).
-    """
+    vectorising the walk; the same reasoning applies to the generator that feeds it)."""
     language_ar = rng.random(n_docs) < 0.25
     sigma_u = (
         math.sqrt(icc / (1.0 - icc) * (_FIELD_NOISE_SD**2 + math.pi**2 / 3.0)) if icc > 0.0 else 0.0

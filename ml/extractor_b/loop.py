@@ -1,4 +1,4 @@
-"""Torch-free control logic of the Extractor B loop (ADR-0011, design §4): run-dir resolution and
+"""Torch-free control logic of the Extractor B loop (ADR-0011): run-dir resolution and
 resume checks, the SIGTERM pause flag, the per-step save/eval plan, the spike log and the
 `LoopController` that the thin HF `LoopCallback` delegates to, so every decision is CPU-tested,
 plus the `PhaseClock` that splits wall-clock time into train steps and evals for MLflow."""
@@ -57,7 +57,7 @@ ResumeMode = Literal["new", "auto"] | int
 
 
 def assert_offline_env(env: Mapping[str, str]) -> None:
-    """The runtime makes no outbound calls (PRD §2 C1): every HF offline switch must be "1"."""
+    """The runtime makes no outbound calls: every HF offline switch must be "1"."""
     bad = [name for name in OFFLINE_ENV if env.get(name) != "1"]
     if bad:
         raise TrainingError(f"offline env not set to 1: {', '.join(bad)}")
@@ -430,7 +430,7 @@ def mlflow_run_params(
 
 
 # ---------------------------------------------------------------------------------------------
-# TRL SFTConfig (TrainingArguments + SFT fields; design §4, fixed values) and the probe sample.
+# TRL SFTConfig (TrainingArguments + SFT fields, fixed values) and the probe sample.
 # ---------------------------------------------------------------------------------------------
 
 
@@ -487,7 +487,7 @@ class ProbeResult:
 def probe_samples(
     train: Sequence[TrainingSample], dev: Sequence[TrainingSample], *, n: int = 30
 ) -> tuple[list[TrainingSample], TrainingSample]:
-    """The `n` longest train rows by prompt + target tokens and the longest dev row (design §4)."""
+    """The `n` longest train rows by prompt + target tokens and the longest dev row."""
     if not train or not dev:
         raise TrainingError("probe needs train and dev rows")
 

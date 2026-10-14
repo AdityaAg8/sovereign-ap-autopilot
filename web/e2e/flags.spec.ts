@@ -1,6 +1,6 @@
 /** M8.3 acceptance: every fraud flag on an invoice renders its plain-language explanation, with
  * severity spelled out as a word (not colour alone). Blocked fixture invoices always carry at
- * least one flag, so the first blocked invoice is a stable subject (PRD §10 M8.3). */
+ * least one flag, so the first blocked invoice is a stable subject. */
 import { test, expect } from "@playwright/test";
 
 test("blocked invoice shows a plain-language explanation for every flag", async ({ page }) => {

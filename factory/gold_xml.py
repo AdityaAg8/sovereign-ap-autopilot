@@ -2,7 +2,7 @@
 factory to `apx.extract.schema.InvoiceFields` plus each vendor's admin-verified payment IBAN
 (never the invoice's own claimed IBAN, P1), builds PINT AE gold XML through `apx.einvoice`,
 validates every file against the runtime schematron validator in parallel processes, and reports
-the results to `reports/gold_xml.md` (PRD §10 M2.5)."""
+the results to `reports/gold_xml.md`."""
 
 from __future__ import annotations
 
@@ -68,8 +68,9 @@ fallback buyer address, and to keep the address-parsing helper below self-contai
 
 class GoldXmlError(Exception):
     """A `truth.json` cannot be mapped to `InvoiceFields`, or its ERP snapshot does not agree
-    with the one that generated the dataset. Never caught and silently skipped (CLAUDE.md: no
-    silent fallbacks on the money path) -- a caller must fix the mapping or the ERP parameters."""
+    with the one that generated the dataset. Never caught and silently skipped
+    (no silent fallbacks on the money path) -- a caller must fix the mapping or the ERP
+    parameters."""
 
 
 def _emirate_from_address(address_en: str) -> str | None:
@@ -196,8 +197,8 @@ def truth_to_invoice_fields(
 
 def build_gold_xml(truth: Mapping[str, Any], vendor_by_trn: Mapping[str, VendorRecord]) -> bytes:
     """Builds PINT AE gold Invoice XML for one `truth.json` document. Deterministic: the same
-    `truth` and `vendor_by_trn` always build byte-identical XML (`apx.einvoice.builder`'s own
-    determinism, PRD §10 M4.3, carried through this mapping unchanged)."""
+    `truth` and `vendor_by_trn` always build byte-identical XML
+    (`apx.einvoice.builder`'s own determinism, carried through this mapping unchanged)."""
     fields, verified_iban = truth_to_invoice_fields(truth, vendor_by_trn)
     return build_ubl_xml(
         fields,
@@ -291,7 +292,7 @@ def run(
     `<sha>.gold.xml` next to each source file. `erp_seed`/`erp_vendors`/`erp_users` must match the
     parameters `factory/build.py` used to generate the dataset (defaults: 2026, 20, 8) so the
     reconstructed ERP snapshot's vendors -- and their admin-verified IBANs -- line up with the
-    TRNs recorded in `truth.json` (PRD §10 M2.5)."""
+    TRNs recorded in `truth.json`."""
     erp = generate_erp(erp_seed, n_vendors=erp_vendors, n_users=erp_users)
     erp_json = dump_erp_json(erp)
     tasks = [
@@ -302,7 +303,7 @@ def run(
     # Pre-warm `apx.einvoice.schematron`'s on-disk compiled-XSLT cache once, single-process,
     # before any worker starts: every worker's own `PintAeSchematronValidator` then only ever
     # reads the already-compiled stylesheet from that shared cache instead of every worker racing
-    # to compile it independently (PRD §10 M2.5: "compiled XSLT cache shared").
+    # to compile it independently ("compiled XSLT cache shared").
     PintAeSchematronValidator(DocumentTypeCode.INVOICE, data_root=pint_root).close()
 
     results: list[GoldXmlResult] = []
@@ -333,9 +334,9 @@ def _rate(passed: int, total: int) -> str:
 
 
 def render_report(results: Sequence[GoldXmlResult], *, erp_seed: int) -> str:
-    """Renders `reports/gold_xml.md`: counts per split and tax case, the credit-note count (the
-    M2 factory never generates one), the overall pass rate, and any schematron failures grouped
-    by rule ID (PRD §10 M2.5 acceptance)."""
+    """Renders `reports/gold_xml.md`: counts per split and tax case, the credit-note count
+    (the factory never generates one), the overall pass rate, and any schematron failures grouped
+    by rule ID."""
     total = len(results)
     passed = sum(1 for r in results if r.passed)
 

@@ -1,4 +1,4 @@
-/** Open/close state for the ops assistant panel (PRD §10 M9.3), shared by the topbar button, the
+/** Open/close state for the ops assistant panel, shared by the topbar button, the
  * `c` shortcut and the panel itself. The conversation lives here too, so closing the panel and
  * reopening it keeps the thread. */
 

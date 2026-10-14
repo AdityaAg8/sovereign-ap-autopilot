@@ -2,7 +2,7 @@
  * `activity:<step>`, `authorize:<cap>`, `decision.<action>`, `proposal.submit|accept`,
  * `payment_state:<...>`, `field_edit`, `agent.review_note*`, `chat.unverifiable`, `mcp.read|refusal`),
  * used by the invoice
- * Audit tab (PRD §10 M9.3). An action this table doesn't know yet still gets a readable label. */
+ * Audit tab. An action this table doesn't know yet still gets a readable label. */
 
 /** Workflow steps, in pipeline order (apx.workflows.activities `_audit` step names: the
  * `activity.defn` names plus the out-of-band `parse_cache_miss`, `payee_changed` and `failed`). */

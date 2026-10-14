@@ -1,5 +1,5 @@
-"""Predictors the eval harness can score (PRD §10 M1.4): a small name-keyed registry so
-evals/run.py's `--predictor` flag can grow beyond `dummy` (e.g. a real extractor in M3) without
+"""Predictors the eval harness can score: a small name-keyed registry so
+evals/run.py's `--predictor` flag can grow beyond `dummy` (e.g. a real extractor in) without
 changing its CLI shape or call sites."""
 
 from __future__ import annotations

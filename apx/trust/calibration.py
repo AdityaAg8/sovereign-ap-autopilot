@@ -1,7 +1,6 @@
 """Calibration of the trust gate (ADR-0009 §5): the label-independent FIT/LTT split of the cal
 split, the logistic-scorer + out-of-fold-isotonic `Calibrator` with its logistic fallback, and the
-equal-mass reliability diagram used for M7.4's ECE report. Only apx.trust reads the cal split.
-"""
+equal-mass reliability diagram used for M7.4's ECE report. Only apx.trust reads the cal split."""
 
 from __future__ import annotations
 
@@ -93,8 +92,7 @@ class IsotonicCalibrator:
     `FieldFeatures` Pydantic object per synthetic row for the 500-split coverage simulation (tens
     of millions of rows) would blow the CI time budget, so the simulation builds the 28-column
     matrix straight from its generator. `test_trust_calibration.py` proves the two entry points
-    agree bit-for-bit on the same data.
-    """
+    agree bit-for-bit on the same data."""
 
     def __init__(
         self,

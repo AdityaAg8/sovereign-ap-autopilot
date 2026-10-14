@@ -1,6 +1,6 @@
 """Tests for DefaultPolicyGuard: every authorize outcome is audited (I4), an allowed request
 returns a Grant bound to subject_digest, and denials raise the right typed error
-(ADR-0008 K6, M6.5)."""
+(ADR-0008 K6)."""
 
 from __future__ import annotations
 

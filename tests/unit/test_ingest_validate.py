@@ -1,8 +1,7 @@
 """Unit tests for `apx.ingest.validate`, the upload hardening shared by the watcher and the API
-upload path (PRD §10 M5.3 limits, M5.5): magic-byte sniffing ignores the claimed content type,
+upload path: magic-byte sniffing ignores the claimed content type,
 the size and page caps are enforced, and an encrypted or malformed PDF is rejected. No database
-or network is needed.
-"""
+or network is needed."""
 
 from __future__ import annotations
 
@@ -59,7 +58,7 @@ def test_detect_media_type_uses_magic_bytes_not_extension() -> None:
 def test_detect_media_type_rejects_tiff_not_yet_supported() -> None:
     # apx.ingest.interfaces.IngestedDocument reserves "image/tiff" for a future parser; no
     # magic-byte sniffing is implemented for it yet, so it must be rejected as unsupported
-    # rather than silently mis-detected as something else (PRD §8: no silent fallbacks).
+    # rather than silently mis-detected as something else (no silent fallbacks).
     tiff_magic = b"II*\x00"
     assert detect_media_type(tiff_magic + b"rest") is None
 
@@ -140,13 +139,13 @@ def test_validate_checks_size_before_media_type() -> None:
 
 
 def test_validate_checks_pdf_pages_only_for_pdfs() -> None:
-    # A PNG never opens pdfium; only its header dimensions are checked (REVIEW H-03).
+    # A PNG never opens pdfium; only its header dimensions are checked.
     buf = io.BytesIO()
     Image.new("RGB", (4, 4)).save(buf, format="PNG")
     assert validate(buf.getvalue(), max_bytes=20 * 1024 * 1024, max_pages=1) == "image/png"
 
 
 def test_validate_rejects_magic_bytes_without_a_readable_image_header() -> None:
-    # Size unknown, so never accepted (fail closed; before H-03 these passed on magic alone).
+    # Size unknown, so never accepted (fail closed; before these passed on magic alone).
     with pytest.raises(UnsupportedMediaTypeError):
         validate(PNG_MAGIC + b"rest", max_bytes=20 * 1024 * 1024, max_pages=1)

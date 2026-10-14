@@ -1,5 +1,5 @@
-"""Unit test for the zero-width character technique (PRD §6.3 A05): zero-width spaces stitched
-into Latin text are flagged ZERO_WIDTH, and plain text is not (M6.2)."""
+"""Unit test for the zero-width character technique (A05): zero-width spaces stitched
+into Latin text are flagged ZERO_WIDTH, and plain text is not."""
 
 from __future__ import annotations
 

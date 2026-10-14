@@ -1,7 +1,6 @@
 """Unit tests for scripts/resolve_models.py: manifest parsing, per-entry Hub resolution
 (full snapshot vs pinned files, license lookup, missing-file failure) and the CLI, all
-against fake Hub clients -- no network (PRD §8, §10 M0.4).
-"""
+against fake Hub clients -- no network."""
 
 from __future__ import annotations
 

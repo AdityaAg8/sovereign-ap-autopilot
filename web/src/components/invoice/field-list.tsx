@@ -1,4 +1,4 @@
-/** Scrollable list of extracted fields backing the invoice-detail review pane (PRD §10 M5.4).
+/** Scrollable list of extracted fields backing the invoice-detail review pane.
  * Header fields come first, then the ADR-0012 `line_items[N].*` rows grouped under "Line N".
  * Exposes `focusFirstNeedsReview` (the "f" shortcut) and `focusField` (a rejected approval moves
  * focus to the first field it names) via ref. */

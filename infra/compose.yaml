@@ -1,7 +1,7 @@
-# Local Docker Compose stack for Sovereign AP Autopilot (PRD §3 cross-cutting, §10 M0.4):
+# Local Docker Compose stack for Sovereign AP Autopilot:
 # Postgres+pgvector, a Temporal dev server, Arize Phoenix, MLflow, llama-swap/CUDA, the parse
 # placeholder, the `gateway` reverse proxy and the opt-in `toolbox` dev container. Every
-# runtime service sits on the `app` network, which has no egress (PRD C1) -- model download
+# runtime service sits on the `app` network, which has no egress -- model download
 # (scripts/download_models.py, `make models`) runs on the host, never through this file or
 # the `app` network. `app` is `internal: true`, so Docker does not publish ports for anything
 # on it (verified empirically, not just in theory -- see docs/adr/0001's amendment): `gateway`
@@ -11,12 +11,12 @@ name: sovereign-ap-autopilot
 
 networks:
   # Runtime services only. `internal: true` means containers on this network cannot reach
-  # the internet (PRD C1's automated test proves that) -- and, as a side effect, Docker never
+  # the internet ('s automated test proves that) -- and, as a side effect, Docker never
   # sets up host port publishing for a container whose only network is internal. `gateway` is
   # the sole container that bridges this to the host, via `edge` below.
   app:
     internal: true
-  # Host-reachable side of `gateway` only (PRD §10 M0.4, docs/adr/0001 amendment). No other
+  # Host-reachable side of `gateway` only (docs/adr/0001 amendment). No other
   # service joins this network; `gateway` proxies into `app` and runs no application code.
   edge:
     internal: false
@@ -36,7 +36,7 @@ services:
     image: pgvector/pgvector:pg16-trixie
     restart: unless-stopped
     environment:
-      # User and database name default to `apx`; the password has no default (REVIEW C-02):
+      # User and database name default to `apx`; the password has no default:
       # `make env` (scripts/init_env.py) generates it into `.env`, and compose refuses to start
       # without it. Existing volumes created with the old default: `make rotate-db-password`.
       POSTGRES_USER: ${POSTGRES_USER:-apx}
@@ -81,7 +81,7 @@ services:
       - temporal-data:/home/temporal
     # No `ports:` here: `app` is internal, so a direct publish never worked (see the network
     # comment above). The Web UI (8233) is not reachable from the host by default: its signal,
-    # reset and terminate actions bypass the review API's approvals (REVIEW C-03). The opt-in
+    # reset and terminate actions bypass the review API's approvals. The opt-in
     # `devports` service proxies it read-only (GET only, write actions hidden). The gRPC
     # frontend (7233) is for in-network clients only (the `api` and `worker` services).
     networks: [app]
@@ -151,7 +151,7 @@ services:
   llama-swap:
     # CUDA build; models/ is downloaded and checksum-verified on the host by `make models`
     # (never inside this network) and mounted read-only. See infra/llama-swap.yaml.
-    # Pinned by digest (PRD §10 M0.5's "next verified build" rule): v93-cuda-b4879 (llama.cpp
+    # Pinned by digest ('s "next verified build" rule): v93-cuda-b4879 (llama.cpp
     # b4879, ~early 2025) predates the Qwen3.5/Gemma-4 architectures §4 pins, and failed every
     # chat-completions request with "unable to start process: can not start(), upstream proxy
     # missing". Re-resolved 2026-09-22 to the newest tagged CUDA build, v257-cuda-b11096 (same
@@ -160,7 +160,7 @@ services:
     restart: unless-stopped
     command: ["-config", "/config/llama-swap.yaml", "-listen", ":8080"]
     # No `ports:` here (see the network comment above): reachable from the host through
-    # `gateway`; `toolbox` (M0.5 `make smoke`) reaches it directly over `app` by service name.
+    # `gateway`; `toolbox` (`make smoke`) reaches it directly over `app` by service name.
     volumes:
       - ./llama-swap.yaml:/config/llama-swap.yaml:ro
       - ../models:/models:ro
@@ -185,7 +185,7 @@ services:
       start_period: 20s
 
   parse:
-    # Real PaddleOCR-VL-1.6 GPU service (PRD §3, §4, §10 M3.1), replacing the M0.4 placeholder.
+    # Real PaddleOCR-VL-1.6 GPU service, replacing the M0.4 placeholder.
     # Serves the scan path only: born-digital PDFs are parsed host-side by apx.parse.digital
     # (pdfplumber), so the ≥98% IoU gate never depends on this container being up. GPU memory
     # is capped in-process (PADDLE_GPU_MEM_FRACTION, default 0.35 of the card, ~4.3 GB on 12 GB
@@ -196,7 +196,7 @@ services:
     restart: unless-stopped
     environment:
       PADDLE_GPU_MEM_FRACTION: ${PADDLE_GPU_MEM_FRACTION:-0.35}
-      # /parse and /unload require this bearer token (REVIEW N-06).
+      # /parse and /unload require this bearer token.
       PARSE_SERVICE_TOKEN: ${PARSE_SERVICE_TOKEN:?PARSE_SERVICE_TOKEN is not set -- run `make env`}
     volumes:
       # Same read-only model mount pattern as llama-swap; only the one checkpoint this
@@ -221,7 +221,7 @@ services:
       start_period: 60s
 
   page-embed:
-    # Qwen3-VL-Embedding-2B for fraud near-duplicate pages (PRD §3 apx/fraud, §10 M8.1). Not a
+    # Qwen3-VL-Embedding-2B for fraud near-duplicate pages. Not a
     # llama-swap model: the pinned checkpoint is safetensors (no GGUF), so it is served like
     # `parse`, by transformers in a child process the worker stops through POST /unload. It is
     # the worker's own GPU stage (`page-similarity`, ADR-0013), so it never shares the card with
@@ -250,7 +250,7 @@ services:
       start_period: 30s
 
   gateway:
-    # Static nginx reverse proxy (PRD §2 C1, §10 M0.4; docs/adr/0001 amendment): the only
+    # Static nginx reverse proxy (docs/adr/0001 amendment): the only
     # container on both `app` and `edge`, so it is the only way a host tool or browser
     # reaches llama-swap/Phoenix/MLflow/the API (Postgres and the Temporal UI only through the
     # opt-in `devports` service below). Runs no application code -- config is a
@@ -285,7 +285,7 @@ services:
       retries: 20
       start_period: 5s
 
-  # apx application services (PRD §10 M5.6), one image: the REST/SSE API and the invoice
+  # apx application services, one image: the REST/SSE API and the invoice
   # worker (Temporal activities + inbox watcher). Both stay on `app`, so every model, OCR and
   # database call is in-network; the host reaches the API only through `gateway`. `data/` is
   # shared so an upload stored by the API is the same file the worker reads. `migrate` is the
@@ -301,7 +301,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-apx}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set -- run `make env`}
       POSTGRES_DB: ${POSTGRES_DB:-apx}
-      # The read-only agent role's password (REVIEW L-01): migration 0013 sets it on the role and
+      # The read-only agent role's password: migration 0013 sets it on the role and
       # apx.agent.sql builds the agent's URL from it (with POSTGRES_HOST/POSTGRES_DB).
       AGENT_RO_PASSWORD: ${AGENT_RO_PASSWORD:?AGENT_RO_PASSWORD is not set -- run `make env`}
       API_JWT_SECRET: ${API_JWT_SECRET:?API_JWT_SECRET is not set -- run `make env`}
@@ -357,7 +357,7 @@ services:
     command: ["python", "-m", "apx.workflows.main"]
     environment:
       <<: *apx-env
-      # The trust gate (M7.5) checks that the calibrator was fitted on the A/B builds llama-swap
+      # The trust gate checks that the calibrator was fitted on the A/B builds llama-swap
       # serves: it reads the served --model paths, the pinned sha256s and the Extractor B export
       # manifests from these read-only mounts (apx.extract.identity.served_gguf_sha256).
       WORKER_LLAMA_SWAP_CONFIG: /repo/infra/llama-swap.yaml
@@ -398,7 +398,7 @@ services:
 
   toolbox:
     # Linux Python 3.12 + uv + CUDA torch/transformers environment for `make smoke`, evals
-    # and training (PRD §10 M0.4/M0.5; docs/adr/0006 addendum): the Windows host blocks
+    # and training (docs/adr/0006 addendum): the Windows host blocks
     # native DLLs from these wheels under Smart App Control, so this work runs in Docker
     # instead. Opt-in only (`--profile dev`); never started by `make up`. Repo mounted
     # read-write for `reports/`; `models/` mounted read-only, same as llama-swap.
@@ -476,7 +476,7 @@ services:
       dockerfile: infra/docker/exporter/Dockerfile
 
   devports:
-    # Opt-in host access for dev tools only (REVIEW C-02/C-03): Postgres on 127.0.0.1:5432 (a
+    # Opt-in host access for dev tools only: Postgres on 127.0.0.1:5432 (a
     # raw TCP passthrough) and a read-only Temporal Web UI on 127.0.0.1:8233 (GET only, write
     # actions hidden). Never started by `make up`; enable with `COMPOSE_PROFILES=devports make up`
     # (needed by host-run DB tools such as `make eval-attacks`). Same static-nginx design as

@@ -1,4 +1,4 @@
-"""Tool-free LLM extractor (PRD §3, §10 M3.3): sends one schema-constrained request, parses the
+"""Tool-free LLM extractor: sends one schema-constrained request, parses the
 JSON into `RawField`s and line items, and derives per-field confidence from the token logprobs
 of each field's value (byte-aligned to the JSON text). Output that does not match the schema is
 reported as `valid_json=False` with every field null -- never repaired or retried silently."""

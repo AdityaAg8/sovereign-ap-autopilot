@@ -1,5 +1,5 @@
-"""Shared field-level precision/recall/F1 core used by the FATURA and UAE scorers (PRD §5,
-§10 M1.3): both compare a predicted (doc_id, field_name) -> value mapping against gold on
+"""Shared field-level precision/recall/F1 core used by the FATURA and UAE scorers:
+both compare a predicted (doc_id, field_name) -> value mapping against gold on
 normalized exact match. Kept as one pure, typed function so both scorers report identically
 comparable numbers for the scoreboard. For a UAE header field (`apx.common.compare.
 FIELD_KIND_BY_NAME`), normalization delegates to the same comparator as the M7 trust gate

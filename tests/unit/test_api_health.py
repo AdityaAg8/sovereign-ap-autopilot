@@ -1,4 +1,4 @@
-"""The API's unauthenticated liveness probe (PRD §10 M5.6): the Compose healthcheck for the
+"""The API's unauthenticated liveness probe: the Compose healthcheck for the
 `api` service calls it, so it must answer without a token and without touching the database."""
 
 from __future__ import annotations

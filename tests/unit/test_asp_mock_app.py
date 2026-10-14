@@ -2,9 +2,9 @@
 ASGI: a duplicate `POST /v1/documents` returns the same receipt, a different payload under the
 same key is a 409, invalid XML is rejected with the schematron rule IDs, an XXE/DOCTYPE-bearing
 payload is rejected outright with no file-content disclosure, and 20 concurrent duplicate sends
-yield exactly one archive record (PRD §3 apx/asp_mock, §6.4 idempotency, §10 M4.4). The cases
+yield exactly one archive record. The cases
 that validate real invoice content use the real PINT AE schematron validator and official pinned
-sample invoices (marked `artifacts`, PRD §8) -- no mocking of the validation gate itself; the
+sample invoices (marked `artifacts`) -- no mocking of the validation gate itself; the
 request-shape cases (bad idempotency key, malformed/oversized/XXE payloads) reject before the
 validator is ever built, so they need no pinned data and run in the default suite."""
 

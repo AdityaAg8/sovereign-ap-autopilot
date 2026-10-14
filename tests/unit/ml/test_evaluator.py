@@ -1,5 +1,5 @@
 """Tests for the Extractor B dev evaluator (ADR-0011 §2) with a deterministic fake generator
-(the model is faked, the M1.3 scorer is real): micro field F1 in points, normalised matches,
+(the model is faked, the scorer is real): micro field F1 in points, normalised matches,
 invalid JSON failing every field, the dev-loss mean, batched generation (longest target
 first and minimal decode steps, outputs keyed to sample_ids, env batch size, three-quarter OOM
 backoff that carries over to later evals, progress lines) and the persisted
@@ -117,7 +117,7 @@ def test_empty_dev_set_is_an_error(tmp_path: Path) -> None:
         score_generations([], {})
 
 
-# ---- batched generation (M7.1-perf) --------------------------------------------------------
+# ---- batched generation (-perf) --------------------------------------------------------
 
 
 class _FakeOom(Exception):

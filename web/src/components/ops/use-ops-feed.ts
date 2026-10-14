@@ -1,4 +1,4 @@
-/** Live feed behind the operations view (PRD §10 M10.3): polls the ops snapshot every 2 s while
+/** Live feed behind the operations view: polls the ops snapshot every 2 s while
  * the tab is visible (never stacking requests) and derives, per tick, a short rolling history for
  * the sparklines, which activity rows just changed, and since when each model has been resident. */
 

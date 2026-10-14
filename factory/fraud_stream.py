@@ -1,4 +1,4 @@
-"""Seeded synthetic AP invoice stream with labelled fraud typologies (PRD §10 M8.2): a year of
+"""Seeded synthetic AP invoice stream with labelled fraud typologies: a year of
 clean invoices from ERP vendors with their own amount and cadence profiles (train = Jan-Jul,
 cal = Aug-Oct, test = Nov-Dec), plus injected cases of every `FraudTypology` in cal and test
 only. Each case is one or more invoices sharing a case id, so a split invoice counts as caught

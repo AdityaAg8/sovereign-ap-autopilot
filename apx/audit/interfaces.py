@@ -1,5 +1,5 @@
 """Interfaces for the hash-chained audit log: entry model, canonical JSON, hash computation,
-append and verification (PRD §6.2 I4, §6.4)."""
+append and verification (I4)."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ class AuditVerifier(Protocol):
 
 
 def canonical_json(value: CanonicalValue) -> bytes:
-    """Deterministic JSON encoding used as the audit hash pre-image (§6.4): object keys sorted
+    """Deterministic JSON encoding used as the audit hash pre-image: object keys sorted
     at every level, no whitespace, UTF-8 bytes. `Decimal` is rendered fixed-point (`format(x,
     "f")`, never scientific notation) and a timezone-aware `datetime` is converted to UTC and
     rendered `isoformat()`; both become JSON strings so the result is stable across equal
@@ -72,8 +72,7 @@ def canonical_json(value: CanonicalValue) -> bytes:
     still differ deliberately -- callers must normalise scale themselves before hashing money).
 
     Raises `ValueError` for a naive `datetime` or a non-finite `float` (`nan`/`inf`), and
-    `TypeError` for any other type -- both would make the hash irreproducible.
-    """
+    `TypeError` for any other type -- both would make the hash irreproducible."""
     return json.dumps(
         _normalize(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
@@ -102,6 +101,6 @@ def _normalize(value: CanonicalValue) -> JsonValue:
 
 
 def entry_hash(prev_hash: str, row_without_hash: Mapping[str, CanonicalValue]) -> Sha256Hex:
-    """sha256(prev_hash || canonical_json(row without hash)) as lowercase hex (§6.4)."""
+    """sha256(prev_hash || canonical_json(row without hash)) as lowercase hex."""
     body = canonical_json(dict(row_without_hash))
     return hashlib.sha256(prev_hash.encode("ascii") + body).hexdigest()

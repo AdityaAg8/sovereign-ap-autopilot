@@ -1,14 +1,15 @@
 """add corrections-store metadata: `fields.model_revision` (the pinned model/revision that
 produced a value) and, on `labels`, `previous_value`/`previous_boxes`/`previous_source`/
 `previous_model_revision` (the before-snapshot of the value a reviewer corrected), so every
-row in `labels` is a self-contained audit record of a fix (PRD §10 M10.1).
+row in `labels` is a self-contained audit record of a fix.
 
 `fields` and `labels` are both owned by `0001_initial_schema`, which (per `db/migrations/
 README`) derives its DDL from *live* `apx.db.models` at run time rather than from a frozen
 snapshot -- so on a brand-new database, `alembic upgrade head` already creates both tables
 with these columns during `0001`, before this revision ever runs. On an already-migrated
-database (one that ran the pre-M10.1 `0001` in the past, when neither table had these
-columns), `0001` is not re-executed, so these `ALTER TABLE` statements are what actually adds
+database
+(one that ran the pre- `0001` in the past, when neither table had these columns), `0001` is not
+re-executed, so these `ALTER TABLE` statements are what actually adds
 them. `IF NOT EXISTS`/`IF EXISTS` make the DDL idempotent across both cases instead of
 `op.add_column`/`op.drop_column`, which would fail with a duplicate-column error the moment
 `0001`'s live-model `create_all()` already produced the column (verified by

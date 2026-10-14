@@ -1,4 +1,4 @@
-/** Login form for the dev-fixture auth flow (PRD §1 roles). Any password authenticates a listed
+/** Login form for the dev-fixture auth flow. Any password authenticates a listed
  * fixture email; in fixture mode the three role accounts are shown so a reviewer/approver/admin
  * can sign in without hunting for credentials in a README. In http mode those `@sovereign.local`
  * accounts don't exist on the real backend, so we point at `data/seed_credentials.json` instead

@@ -1,6 +1,6 @@
 """Segregation-of-duties matrix tests (P2): the user who changed a vendor's bank details is
 barred from approving that vendor's payments for `sod_cooldown_days`, including through the
-proposal-execution path and for users holding several roles (PRD §6.3 P2, ADR-0008 K5, M6.5)."""
+proposal-execution path and for users holding several roles (P2, ADR-0008 K5)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Collects the text spans the injection classifier scores (PRD §3 apx/scan, §6.3 P4): every
+"""Collects the text spans the injection classifier scores (P4): every
 text line of the PDF's text layer, visible or hidden, plus the text the hidden-content detector
 found in metadata, annotations and attachments. Text is cut down to the guard's validated domain:
 NFKC, controls removed (flagged separately), and Arabic-script runs removed (ADR-0017 §5)."""

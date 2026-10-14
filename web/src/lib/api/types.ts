@@ -1,5 +1,5 @@
 /** Wire types for the review UI's data layer. Mirrors apx/api/interfaces.py, apx/common/types.py,
- * apx/trust/interfaces.py and apx/policy/interfaces.py (PRD §3, §10 M5.3/M5.4) so the fixture
+ * apx/trust/interfaces.py and apx/policy/interfaces.py so the fixture
  * adapter and the future HTTP adapter share one contract with the FastAPI service. Fields marked
  * "UI extension" are not yet on the Python `Frozen` models above but are the values M5.3 will
  * attach once the trust gate and policy engine are wired into the API responses; the fixture
@@ -65,7 +65,7 @@ export interface InvoiceSummary {
   status: InvoiceStatus;
   route: RouteDecision | null;
   /** Null when the backend hasn't resolved a vendor for this invoice.
-   * apx.api.interfaces.InvoiceSummary.vendor_id (PRD §10 M5.3/M5.4) — populated by the http
+   * apx.api.interfaces.InvoiceSummary.vendor_id — populated by the http
    * adapter now that the field exists on the wire. */
   vendorId: string | null;
   /** Null for the same reasons as `vendorId` — apx.api.interfaces.InvoiceSummary calls this
@@ -91,7 +91,7 @@ export interface InvoiceDetail {
   language: "en" | "ar" | "bilingual";
   /** URL of the source document for the pdf.js viewer, or null when none is available. The
    * fixture adapter always serves a bundled sample PDF; the http adapter points this at
-   * `GET /invoices/{id}/document` (PRD §10 M5.3/M5.4), which needs the same bearer token as
+   * `GET /invoices/{id}/document`, which needs the same bearer token as
    * every other apx/api route — callers pass the session token through to `PdfPane`/`PdfCanvas`,
    * which forward it as pdf.js's `httpHeaders` (see pdf-canvas.tsx). */
   documentUrl: string | null;
@@ -131,7 +131,7 @@ export interface SseEvent {
 export interface BankDetail {
   id: string;
   /** Masked to the last 4 characters, always — apx.api.interfaces.VendorBankDetailView.iban_masked
-   * (PRD §10 M5.4): the vendor master-data view never returns a full IBAN to any role, unlike
+   *: the vendor master-data view never returns a full IBAN to any role, unlike
    * the per-invoice field view's admin exception (ADR-0008 T2). */
   ibanMasked: string;
   /** UI-only decoration. apx.db.models.BankDetail has no bank-name column — the http adapter
@@ -188,7 +188,7 @@ export interface ListInvoicesParams {
   limit?: number;
 }
 
-/** apx.observability.dashboard.OpsSnapshot (PRD §10 M10.3): the live operations view. */
+/** apx.observability.dashboard.OpsSnapshot: the live operations view. */
 export interface OpsKpis {
   stpRate: number | null;
   routedInvoices: number;
@@ -223,7 +223,7 @@ export interface OpsSnapshot {
   modelsReachable: boolean;
 }
 
-/** apx.api.routers.chat (PRD §10 M9.3): one audit_log event on an invoice's audit tab. `facts`
+/** apx.api.routers.chat: one audit_log event on an invoice's audit tab. `facts`
  * holds only scalar, system-written values; `note` is the exception agent's review note. */
 export interface AuditEventView {
   id: number;

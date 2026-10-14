@@ -1,7 +1,7 @@
 """add `audit_anchor`: an independent, append-only checkpoint chain over the `audit_log`
 head, used by `apx.audit.anchor.PgAuditFullVerifier` to detect tail truncation and
-whole-chain rewrites that `audit_log`'s own hash chain alone cannot see (PRD §6.2 I4, §6.4,
-§10 M10.4).
+whole-chain rewrites that `audit_log`'s own hash chain alone cannot see
+(I4).
 
 Per `db/migrations/README`, `0001_initial_schema` is the only revision allowed to derive its
 DDL from live `apx.db.models`; every later table ships explicit DDL here. The `CREATE TABLE`

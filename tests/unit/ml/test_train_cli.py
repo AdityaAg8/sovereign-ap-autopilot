@@ -1,4 +1,4 @@
-"""Tests for the Extractor B training CLI (design §4) up to the GPU boundary: argument parsing,
+"""Tests for the Extractor B training CLI up to the GPU boundary: argument parsing,
 exit code 2 for typed errors, the offline-env check, the guards run under the GPU lock, and the
 fingerprint inputs. The GPU job itself is replaced by a recording stub."""
 

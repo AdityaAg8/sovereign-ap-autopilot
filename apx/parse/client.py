@@ -2,10 +2,10 @@
 gets back PaddleOCR-VL text-spotting words, lines and tables. Used only for scanned pages; a
 born-digital page never reaches this client (apx.parse.digital handles it host-side). Typed
 errors only, no silent fallback: any transport, timeout or malformed-response failure raises
-`ParseError` so the caller decides what to do (PRD §3 apx/parse, §8). An optional `gate` wraps
+`ParseError` so the caller decides what to do. An optional `gate` wraps
 every page call (the worker passes its GPU stage hold, ADR-0013), and `unload()` asks the service
 to free its GPU memory before another stage needs the card. Every call carries the service's
-bearer token when one is configured (REVIEW N-06)."""
+bearer token when one is configured."""
 
 from __future__ import annotations
 

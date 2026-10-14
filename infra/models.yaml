@@ -1,6 +1,6 @@
-# Model manifest for Sovereign AP Autopilot (PRD §4): every runtime and offline model,
+# Model manifest for Sovereign AP Autopilot: every runtime and offline model,
 # by intent, with a Hugging Face repo id and filenames already located by searching the
-# Hub API (§10 M0.4 rule: never guess an id). scripts/resolve_models.py re-verifies each
+# Hub API (rule: never guess an id). scripts/resolve_models.py re-verifies each
 # entry's revision, per-file sha256/size and license live against the Hub and writes the
 # result to infra/models.lock.json; nothing here is trusted without that re-check.
 

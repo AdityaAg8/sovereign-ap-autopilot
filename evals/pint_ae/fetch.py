@@ -1,9 +1,8 @@
 """Fetches and pins the PINT AE (UAE) schematron/codelist/sample-XML bundle from
 docs.peppol.eu and the SchXslt XSLT-only release from codeberg.org, verifying each download's
-sha256 against evals/pint_ae/pin.json before extracting into data/pint_ae/<version>/ (PRD §5,
-§10 M1.3). Idempotent: skips the network call once a correctly-shaped extraction already
-exists on disk, so repeat eval/test runs are offline.
-"""
+sha256 against evals/pint_ae/pin.json before extracting into data/pint_ae/<version>/.
+Idempotent: skips the network call once a correctly-shaped extraction already
+exists on disk, so repeat eval/test runs are offline."""
 
 from __future__ import annotations
 

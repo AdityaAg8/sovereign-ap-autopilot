@@ -1,7 +1,6 @@
 """Adapts `apx.api.interfaces.SseEvent` to `sse_starlette`'s wire format for the invoice status
-stream (PRD §10 M5.3): JSON-encodes `data` explicitly so the client always receives valid JSON,
-never Python's `repr()` of a dict.
-"""
+stream: JSON-encodes `data` explicitly so the client always receives valid JSON,
+never Python's `repr()` of a dict."""
 
 from __future__ import annotations
 

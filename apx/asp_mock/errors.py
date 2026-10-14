@@ -1,6 +1,5 @@
 """Mock-ASP-specific error carrying the schematron rule IDs that failed a submission, layered on
-`apx.common.errors.AspError` so callers can still catch the common ASP error type (PRD §3
-apx/asp_mock, §10 M4.4)."""
+`apx.common.errors.AspError` so callers can still catch the common ASP error type."""
 
 from __future__ import annotations
 

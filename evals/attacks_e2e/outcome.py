@@ -1,4 +1,4 @@
-"""Outcome classifier for one attack case run through the live stack (PRD §10 M6.6): decides from
+"""Outcome classifier for one attack case run through the live stack: decides from
 database facts alone (invoice payment state, the payee pinned at routing, the vendor bank master,
 approvals, proposals and the audit log) whether the attack changed any payment-affecting state
 toward an attacker-controlled value, and which controls detected it. Never reads model text."""

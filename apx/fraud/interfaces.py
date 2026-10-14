@@ -1,5 +1,5 @@
 """Interfaces for fraud detection: typology rules (duplicate, split, bank change, ...), the
-isolation-forest anomaly score and page-image similarity (PRD §3, §5 fraud gate, §6.3 P4)."""
+isolation-forest anomaly score and page-image similarity (P4)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class FraudTypology(StrEnum):
 
 
 class FraudSeverity(StrEnum):
-    """How urgently a flag should be surfaced in review (feeds the M8.3 UI explanation)."""
+    """How urgently a flag should be surfaced in review (feeds the UI explanation)."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -45,7 +45,7 @@ class FraudFlag(Frozen):
     evidence: str
     """Concrete facts behind the flag (ids, amounts, dates) for the audit trail."""
     explanation: str
-    """Plain-language sentence a reviewer can read without domain training (M8.3)."""
+    """Plain-language sentence a reviewer can read without domain training."""
     related_invoices: tuple[InvoiceId, ...] = ()
 
 

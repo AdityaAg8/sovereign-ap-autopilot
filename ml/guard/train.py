@@ -1,8 +1,7 @@
 """Fine-tunes ModernBERT-base into the M6.4 injection guard on data/guard/train.jsonl, then sets
 its review (max F1) and block (zero cal false positives) thresholds on cal.jsonl and saves the
 checkpoint + guard.json. Runs in the toolbox container; `--max-steps`/`--subset` give a quick
-CPU smoke run of the same pipeline.
-"""
+CPU smoke run of the same pipeline."""
 
 from __future__ import annotations
 

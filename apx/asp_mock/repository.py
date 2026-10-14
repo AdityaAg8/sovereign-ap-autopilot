@@ -1,7 +1,7 @@
 """Small storage interface behind the mock ASP: one `AspRecord` (receipt + archive) per
 idempotency key, created at most once even under concurrent duplicate calls for the same key.
 Ships an in-memory implementation for tests and a SQLite-backed implementation as the default,
-file-persisted store (PRD §3 apx/asp_mock, §6.4 idempotency)."""
+file-persisted store."""
 
 from __future__ import annotations
 
@@ -41,8 +41,8 @@ class AspRepository(Protocol):
         """Returns the existing record for `key` if one exists and its `xml_sha256` matches;
         raises `IdempotencyConflictError` if one exists with a *different* `xml_sha256`.
         Otherwise calls `build()` exactly once and stores its result, even when many callers
-        race on the same key concurrently (exactly-once under concurrent duplicate sends,
-        PRD §6.4)."""
+        race on the same key concurrently
+        (exactly-once under concurrent duplicate sends)."""
         ...
 
 
@@ -90,7 +90,7 @@ class SqliteAspRepository:
     """File-backed default `AspRepository`: one SQLite table keyed by idempotency key, storing
     the receipt and archive as canonical JSON. All access is serialised by one `asyncio.Lock` so
     that, within the single-process mock ASP, concurrent duplicate calls for the same key still
-    build the record exactly once (PRD §6.4); `sqlite3`'s own PRIMARY KEY constraint guards the
+    build the record exactly once; `sqlite3`'s own PRIMARY KEY constraint guards the
     on-disk table against a second, independent process writing the same key concurrently."""
 
     def __init__(self, db_path: Path) -> None:

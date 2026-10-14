@@ -1,5 +1,5 @@
 """Loads `config.yaml` into a `TrainConfig`, hashes it canonically for the run fingerprint and
-holds the ADR-0009 §1.6 VRAM ladder plus the derived step counts (ADR-0011, design §3). Torch-free,
+holds the ADR-0009 §1.6 VRAM ladder plus the derived step counts (ADR-0011). Torch-free,
 so config handling is tested on CPU in CI."""
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def warmup_steps(cfg: TrainConfig, n_train: int) -> int:
 
 def generative_eval_steps(cfg: TrainConfig, n_train: int) -> tuple[int, ...]:
     """Evenly spaced generative-eval steps, `per_epoch` per epoch, the last of each epoch on the
-    epoch end: `{round(k x steps_per_epoch / per_epoch) : k = 1..per_epoch·epochs}`, keeping only
+    epoch end: `{round(k x steps_per_epoch / per_epoch): k = 1..per_epoch·epochs}`, keeping only
     the steps of epoch `first_generative_eval_epoch` onwards."""
     spe = steps_per_epoch(n_train, cfg.optim.grad_accum_steps)
     per_epoch = cfg.cadence.generative_evals_per_epoch

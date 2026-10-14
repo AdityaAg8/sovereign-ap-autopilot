@@ -567,7 +567,7 @@ def promote(
         applied.append(stage)
         stage = STAGE_ALIAS
         moved = registry.alias("champion")
-        if moved != current:  # compare-and-set again right before the commit point (M2)
+        if moved != current:  # compare-and-set again right before the commit point
             raise ChampionMovedDuringApplyError(
                 evaluated=before, current=moved or "<unset>", applied=tuple(applied)
             )
@@ -673,9 +673,9 @@ def score_row_files(
     b_identity: RowIdentity,
     parser_id: str | None = None,
 ) -> UaeScores:
-    """P1/P3 inputs. Every row of each file must carry the expected identity (review H2/M1)
+    """P1/P3 inputs. Every row of each file must carry the expected identity (review H2)
     and, given `parser_id` (the snapshot the P2 run reads), that parse snapshot, so A, B and P2
-    are measured on the same parses (REVIEW.md P5-02)."""
+    are measured on the same parses."""
     scored = {}
     loaded = {}
     for name, path, identity in (("A", a_rows, a_identity), ("B", b_rows, b_identity)):

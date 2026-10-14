@@ -1,4 +1,4 @@
-"""Fraud eval (PRD §10 M8.2, §2 "fraud recall at 1% FPR >= 90% per typology"): replays the
+"""Fraud eval ("fraud recall at 1% FPR >= 90% per typology"): replays the
 factory's labelled invoice stream through the M8.1 rules and the isolation forests (fitted on
 clean train months after a history warm-up), gates on case-level recall per typology at 1% FPR
 on the test ROC, and also reports the cal-chosen (deployed) threshold's recall and realised

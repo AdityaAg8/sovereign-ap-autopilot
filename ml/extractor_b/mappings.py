@@ -49,7 +49,7 @@ def _line_item(
 
 
 # ---------------------------------------------------------------------------------------------
-# UAE factory (`<sha>.labels.json`, factory M2.3).
+# UAE factory (`<sha>.labels.json`, factory).
 # ---------------------------------------------------------------------------------------------
 
 UAE_HEADER_LABELS: Final[frozenset[str]] = frozenset(HEADER_KEYS)
@@ -344,7 +344,7 @@ def fatura_target(annotation: Mapping[str, Any]) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------------------------
 # CORD v2 (naver-clova-ix/cord-v2 `ground_truth.gt_parse`, ADR-0019 §2). Receipts annotate only
-# the three header totals and four line keys; every other target key is loss-masked (§9.3).
+# the three header totals and four line keys; every other target key is loss-masked.
 # ---------------------------------------------------------------------------------------------
 
 CORD_V2_LABELS: Final[frozenset[str]] = frozenset(

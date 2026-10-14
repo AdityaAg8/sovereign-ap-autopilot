@@ -3,7 +3,7 @@ produced, extracts the pdfplumber text within each DOM-derived labeled box (unio
 lines back into logical reading order, reversing right-to-left/Arabic runs and normalizing digit
 scripts on both sides) and compares it exactly to the label's ground-truth value, reporting an
 exact-match rate overall and broken down by field, layout and EN/AR to
-`reports/factory_selfcheck.md` (PRD §10 M2.4)."""
+`reports/factory_selfcheck.md`."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ _STRIP_TABLE = str.maketrans("", "", _STRIP_CHARS)
 def normalize_digits(text: str) -> str:
     """Maps Arabic-Indic (U+0660-0669) and Extended Arabic-Indic/Persian (U+06F0-06F9) digits to
     ASCII 0-9, so a value written with one digit script compares equal to the same value rendered
-    or extracted with the other (PRD §10 M2.4: "digits normalized consistently on both sides")."""
+    or extracted with the other ("digits normalized consistently on both sides")."""
     return text.translate(_DIGIT_TRANSLATION)
 
 
@@ -53,8 +53,9 @@ def normalize_for_compare(text: str) -> str:
     presentation-form glyphs (the isolated/initial/medial/final shapes pdfplumber reads back out
     of a PDF's ToUnicode CMap, plus ligatures such as lam-alef) to their plain base letters, digit
     scripts are normalized, bidi-control and NUL filler characters are dropped, and whitespace
-    runs collapse to a single space (a value that wraps across `Label.line_boxes` is rejoined with
-    a literal space that has no rendered glyph of its own, PRD §10 M2.4)."""
+    runs collapse to a single space
+    (a value that wraps across `Label.line_boxes` is rejoined with a literal space that has no
+    rendered glyph of its own)."""
     text = unicodedata.normalize("NFKC", text)
     text = normalize_digits(text)
     text = text.translate(_STRIP_TABLE)
@@ -68,7 +69,7 @@ def value_is_rtl(value: str) -> bool:
     """True if `value`'s strongly-directional characters are majority right-to-left (Arabic or
     other RTL script). Decides which visual-to-logical reordering the glyphs pdfplumber reads out
     of one line box need: RTL text is laid out on the page starting at the highest x-coordinate,
-    so pdfplumber's ascending-x order is the reverse of the logical string (PRD §10 M2.4)."""
+    so pdfplumber's ascending-x order is the reverse of the logical string."""
     rtl = sum(1 for c in value if unicodedata.bidirectional(c) in _RTL_BIDI_CLASSES)
     ltr = sum(1 for c in value if unicodedata.bidirectional(c) == "L")
     return rtl > ltr
@@ -88,7 +89,7 @@ def _bbox_to_points(
 ) -> tuple[float, float, float, float]:
     """Converts one `[0, 1]`-normalized `BBox` fraction into absolute PDF-point coordinates on a
     page of size `page_width` x `page_height` points, padded outward by `pad` and clamped to the
-    page (PRD §10 M2.4)."""
+    page."""
     x0f, y0f, wf, hf = bbox
     x0 = x0f * page_width - pad
     top = y0f * page_height - pad
@@ -113,7 +114,7 @@ def _char_num(char: _CharDict, key: str) -> float:
     """`float()` one numeric field of a pdfplumber char dict. pdfplumber types every char as
     `dict[str, Any]` (`T_obj` in its own `_typing.py`), but `top`/`bottom`/`x0`/`x1` are always
     `T_num` (`int | float`) in practice; the assert gives mypy --strict a real narrowing instead
-    of an unchecked `cast` (PRD §10 M2.4)."""
+    of an unchecked `cast`."""
     value = char[key]
     assert isinstance(value, (int, float)), f"pdfplumber char[{key!r}] was {type(value)!r}"
     return float(value)
@@ -122,7 +123,7 @@ def _char_num(char: _CharDict, key: str) -> float:
 def _char_is_rtl(text: str) -> bool | None:
     """One character's own bidi strength: `True` for a strong-RTL letter, `False` for a strong-LTR
     letter or digit, `None` for a weak/neutral character (space, punctuation) that carries no
-    direction of its own (PRD §10 M2.4)."""
+    direction of its own."""
     bidi_class = unicodedata.bidirectional(text)
     if bidi_class in _RTL_BIDI_CLASSES:
         return True
@@ -146,7 +147,7 @@ def _row_chars(page: Page, bbox_pts: tuple[float, float, float, float]) -> list[
     never has to clip a true bbox, see above), NUL filler glyphs dropped, clustered into visual
     rows (a wide query can catch a neighboring row's text, which would otherwise interleave with
     the intended row once both get sorted by x-position), keeping only the row closest to the
-    crop's own vertical center, sorted left-to-right by on-page position (PRD §10 M2.4)."""
+    crop's own vertical center, sorted left-to-right by on-page position."""
     x0, top, x1, bottom = bbox_pts
     if x1 <= x0 or bottom <= top:
         return []
@@ -197,7 +198,7 @@ def _cluster_marks(chars: Sequence[_CharDict]) -> list[list[_CharDict]]:
     *other* side's neighbor than to its true base (font hinting/rounding on a zero-width glyph),
     as observed on this same value rendered by two different layouts. Comparing the mark's own
     center to both its immediately preceding and following non-mark neighbors' centers and picking
-    whichever is nearer is resilient to that rounding either way (PRD §10 M2.4)."""
+    whichever is nearer is resilient to that rounding either way."""
     is_mark = [unicodedata.category(str(c["text"])).startswith("M") for c in chars]
     base_indices = [i for i, mark in enumerate(is_mark) if not mark]
     clusters: dict[int, list[_CharDict]] = {i: [chars[i]] for i in base_indices}
@@ -228,7 +229,7 @@ def _chars_to_text(chars: Sequence[_CharDict], *, default_rtl: bool) -> str:
     character at all, e.g. a run made purely of digits and punctuation already classified as LTR)
     -- a run majority-classified RTL gets its base+combining-mark clusters reversed (see
     `_cluster_marks`), since a contiguous RTL run's on-page ascending-x order is the reverse of its
-    own logical order; otherwise its ascending-x order is already correct (PRD §10 M2.4)."""
+    own logical order; otherwise its ascending-x order is already correct."""
     if not chars:
         return ""
     strengths = [_char_is_rtl(str(c["text"])) for c in chars]
@@ -275,8 +276,7 @@ def extract_label_text(page: Page, label: Label, *, page_width: float, page_heig
     except when the wrap point is a hyphen with no space in the value at all (e.g. "PO-2026-" /
     "000001"), where the hyphen itself is the visible glue and no space ever belonged. So a space is
     inserted between consecutive lines unless the previous line's captured text already ends with
-    one (the wrap's space did survive, rare but harmless to not double) or with a hyphen (PRD §10
-    M2.4)."""
+    one (the wrap's space did survive, rare but harmless to not double) or with a hyphen."""
     rtl = value_is_rtl(label.value)
     raw_boxes = [
         _bbox_to_points(box, page_width=page_width, page_height=page_height, pad=0.0)
@@ -338,14 +338,13 @@ def extract_label_text(page: Page, label: Label, *, page_width: float, page_heig
 
 def label_matches(label: Label, extracted: str) -> bool:
     """True if `extracted` (pdfplumber's reading of `label`'s box) exactly matches `label.value`
-    once both sides go through the same `normalize_for_compare` canonicalization (PRD §10 M2.4)."""
+    once both sides go through the same `normalize_for_compare` canonicalization."""
     return normalize_for_compare(label.value) == normalize_for_compare(extracted)
 
 
 def check_label_set(pdf: PDF, label_set: LabelSet) -> list[bool]:
     """Checks every label in `label_set` against `pdf`'s text layer; returns one bool per label,
-    in `label_set.labels` order. The primitive the unit tests and `check_document` both use (PRD
-    §10 M2.4)."""
+    in `label_set.labels` order. The primitive the unit tests and `check_document` both use."""
     results: list[bool] = []
     for label in label_set.labels:
         page = pdf.pages[label.page]
@@ -397,7 +396,7 @@ class DocSummary:
 
 def check_document(pdf_path: Path, labels_path: Path, *, split: str) -> DocSummary:
     """Runs the self-check for one rendered invoice: every label in `labels_path` against the text
-    layer of `pdf_path` (PRD §10 M2.4)."""
+    layer of `pdf_path`."""
     label_set = LabelSet.model_validate_json(labels_path.read_text(encoding="utf-8"))
     sha256 = pdf_path.stem
     field_totals: Counter[str] = Counter()
@@ -459,7 +458,7 @@ def check_document(pdf_path: Path, labels_path: Path, *, split: str) -> DocSumma
 
 
 def discover_documents(data_dir: Path) -> list[tuple[Path, Path, str]]:
-    """Every `(pdf_path, labels_path, split)` under `data_dir/<split>/*.pdf` (PRD §10 M2.4)."""
+    """Every `(pdf_path, labels_path, split)` under `data_dir/<split>/*.pdf`."""
     documents: list[tuple[Path, Path, str]] = []
     for split_dir in sorted(p for p in data_dir.iterdir() if p.is_dir()):
         for pdf_path in sorted(split_dir.glob("*.pdf")):
@@ -475,7 +474,7 @@ def run_self_check(
 ) -> list[DocSummary]:
     """Runs `check_document` over every document `discover_documents` finds under `data_dir`,
     optionally capped to the first `limit` documents (debugging), in parallel across `workers`
-    processes (PRD §10 M2.4)."""
+    processes."""
     documents = discover_documents(data_dir)
     if limit is not None:
         documents = documents[:limit]
@@ -514,8 +513,8 @@ class SelfCheckSummary:
 def aggregate(
     summaries: Sequence[DocSummary], *, max_failures: int = _MAX_FAILURES_IN_REPORT
 ) -> SelfCheckSummary:
-    """Merges every document's `DocSummary` into one dataset-wide `SelfCheckSummary` (PRD §10
-    M2.4: "exact-match rate overall and per field / per layout / EN vs AR")."""
+    """Merges every document's `DocSummary` into one dataset-wide `SelfCheckSummary`
+    ("exact-match rate overall and per field / per layout / EN vs AR")."""
     field_total: Counter[str] = Counter()
     field_matched: Counter[str] = Counter()
     layout_total: Counter[str] = Counter()
@@ -565,7 +564,7 @@ def _rate_cell(matched: int, total: int) -> str:
 
 
 def format_report(summary: SelfCheckSummary, *, threshold: float) -> str:
-    """Renders `summary` as a small Markdown report (PRD §10 M2.4)."""
+    """Renders `summary` as a small Markdown report."""
     status = "PASS" if summary.overall_rate >= threshold else "FAIL"
     lines = [
         "# Factory label self-check (M2.4)",
@@ -619,7 +618,7 @@ def format_report(summary: SelfCheckSummary, *, threshold: float) -> str:
 
 
 def write_report(summary: SelfCheckSummary, path: Path, *, threshold: float) -> None:
-    """Writes `format_report(summary)` to `path` as UTF-8 with LF line endings (PRD §10 M2.4)."""
+    """Writes `format_report(summary)` to `path` as UTF-8 with LF line endings."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(format_report(summary, threshold=threshold))

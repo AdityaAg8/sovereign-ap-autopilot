@@ -2,8 +2,7 @@
 per technique, plus per-document timing. Used to check the factory's clean invoice corpus
 against the "zero flags on 750 clean invoices" gate and for ad hoc scanning; `--details` dumps
 every individual flag (file, page, bbox, text, and -- for invisible-fill -- the measured
-foreground/background colours and contrast ratio) to diagnose a false positive or negative
-(PRD §3, §6.3 SEC-02, M6.2)."""
+foreground/background colours and contrast ratio) to diagnose a false positive or negative."""
 
 from __future__ import annotations
 

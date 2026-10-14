@@ -1,4 +1,4 @@
-"""Unit tests for ml/guard/metrics.py (PRD §10 M6.4): confusion counts and the cal-split
+"""Unit tests for ml/guard/metrics.py: confusion counts and the cal-split
 threshold rule (max F1, ties to the higher threshold, typed errors on bad input)."""
 
 from __future__ import annotations

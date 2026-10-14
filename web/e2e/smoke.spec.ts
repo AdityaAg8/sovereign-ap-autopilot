@@ -1,5 +1,5 @@
 /** M5.4 acceptance smoke test: login, land on the inbox, open an invoice and approve it with the
- * keyboard — all against the dev fixture adapter (PRD §10 M5.4). Runs against a production build
+ * keyboard — all against the dev fixture adapter. Runs against a production build
  * via playwright.config.ts's webServer. */
 import { test, expect } from "@playwright/test";
 
@@ -30,7 +30,7 @@ test("login -> inbox -> open invoice -> keyboard approve", async ({ page }) => {
   await expect(page).toHaveURL(/\/invoices\//);
   await expect(page.getByRole("button", { name: /Approve/ })).toBeEnabled();
 
-  // Approve with the "a" shortcut (PRD §10 M5.4 review queue keyboard shortcuts). Navigating here
+  // Approve with the "a" shortcut (review queue keyboard shortcuts). Navigating here
   // unmounted the row that had focus, so the keystroke lands on the page, not a stale control.
   await page.keyboard.press("a");
 

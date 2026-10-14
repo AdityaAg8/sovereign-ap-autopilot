@@ -1,4 +1,4 @@
-# Top-level developer entry points for Sovereign AP Autopilot (PRD §8). Targets not yet
+# Top-level developer entry points for Sovereign AP Autopilot. Targets not yet
 # implemented by the current milestone print a message and exit 1 rather than silently
 # no-op, so `make verify-mN` and CI fail loudly on unimplemented work.
 
@@ -40,8 +40,8 @@ help:
 	@echo "Dev helpers:    status open dashboard preview web-stop"
 	@echo "Extractor B:    train-b-data train-b-probe train-b train-b-new train-b-pause"
 	@echo "                report-b export-b-image export-b smoke-b test-export"
-	@echo "                register-b eval-b gates-b promote-b (M7.1 promotion, docs/training.md)"
-	@echo "Trust gate:     cal-rows-a cal-rows-b (GPU) calibrate (CPU) verify-m7 (M7.4/M7.5)"
+	@echo "                register-b eval-b gates-b promote-b (promotion, docs/training.md)"
+	@echo "Trust gate:     cal-rows-a cal-rows-b (GPU) calibrate (CPU) verify-m7"
 	@echo "All targets, grouped: docs/commands.md"
 
 ## --- Implemented -------------------------------------------------------------------
@@ -102,13 +102,13 @@ else
 endif
 
 factory:
-	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py, PRD §10 M2.3)"
+	@echo "==> generating the UAE synthetic invoice dataset into $(OUT_DIR) (factory/build.py)"
 	uv run python -m factory.build --out-dir "$(OUT_DIR)" --seed $(SEED) --n-total $(N_TOTAL)
 
 # Adds the planned 30% Augraphy scan variants to an existing corpus without changing its PDFs,
 # labels, splits or sha256s (ADR-0012 amendment 3). Idempotent: re-running skips finished docs.
 restore-scans:
-	@echo "==> restoring scan variants under $(OUT_DIR) (factory/restore_scans.py, PRD §10 M2.3)"
+	@echo "==> restoring scan variants under $(OUT_DIR) (factory/restore_scans.py)"
 	uv run python -m factory.restore_scans --data-dir "$(OUT_DIR)" --seed $(SEED)
 
 ## --- Stack, models and tests ------------------------------------------------------
@@ -134,7 +134,7 @@ down:
 	cd infra && $(COMPOSE) down
 
 # One-time (idempotent) for installs whose Postgres volume was created with the old default
-# password (REVIEW C-02/L-01): `make env` adds the generated secrets to .env, this sets both
+# password: `make env` adds the generated secrets to .env, this sets both
 # roles' passwords to them over the container's local socket, then `make up` recreates the app.
 .PHONY: rotate-db-password
 rotate-db-password: env
@@ -144,7 +144,7 @@ rotate-db-password: env
 models:
 	@echo "==> resolving infra/models.yaml against the Hugging Face Hub"
 	uv run python scripts/resolve_models.py
-	@echo "==> downloading + verifying models into models/ (PRD C1: runs on the host, not the app network)"
+	@echo "==> downloading + verifying models into models/ (runs on the host, not the app network)"
 	uv run python scripts/download_models.py
 
 smoke:
@@ -495,7 +495,7 @@ eval-attacks:
 	@echo "    review-routed cases approved via the API; payment state read from Postgres"
 	@echo "    ~4.2 h for 312 cases + 24 clean baseline (16 in flight); resumable -> reports/attacks_e2e.md"
 	@echo "    Postgres is read on 127.0.0.1:5432 through the devports service: started here for the run,"
-	@echo "    stopped afterwards unless it was already up (docs/runbook.md, REVIEW N-10)"
+	@echo "    stopped afterwards unless it was already up (docs/runbook.md)"
 	@was_up="$$(cd infra && $(COMPOSE) --profile devports ps -q --status running devports)"; \
 	(cd infra && $(COMPOSE) --profile devports up -d --wait devports); \
 	status=0; \
@@ -550,7 +550,7 @@ verify-m2:
 	@echo "verify-m2 OK"
 
 verify-m3:
-	@echo "not implemented yet (M3.4)"; exit 1
+	@echo "not implemented yet"; exit 1
 
 verify-m4:
 	@echo "==> verify-m4: lint + typecheck + unit tests + PINT AE schematron (validators, 3-way match, builder, ASP)"
@@ -565,10 +565,10 @@ verify-m5: fresh-clone
 	uv run python scripts/e2e_pipeline.py
 
 verify-m6:
-	@echo "not implemented yet (M6.6)"; exit 1
+	@echo "not implemented yet"; exit 1
 
 verify-m7:
-	@echo "==> verify-m7: trust unit tests + LTT coverage simulation (M7.5) + real-data gate (reports/trust_gate.json)"
+	@echo "==> verify-m7: trust unit tests + LTT coverage simulation + real-data gate (reports/trust_gate.json)"
 	uv run python -m pytest -q --no-cov tests/test_ltt_simulation.py tests/unit/test_trust_features.py \
 		tests/unit/test_trust_calibration.py tests/unit/test_trust_ltt.py tests/unit/test_trust_artifact.py \
 		tests/unit/test_trust_gate_runtime.py tests/unit/test_trust_rows.py tests/unit/test_trust_gate_job.py
@@ -584,22 +584,22 @@ verify-m8:
 	@echo "verify-m8 OK"
 
 verify-m9:
-	@echo "not implemented yet (M9.5)"; exit 1
+	@echo "not implemented yet"; exit 1
 
 verify-m10:
-	@echo "not implemented yet (M10.6)"; exit 1
+	@echo "not implemented yet"; exit 1
 
 verify-m11:
-	@echo "not implemented yet (M11)"; exit 1
+	@echo "not implemented yet"; exit 1
 
 verify-m12:
-	@echo "not implemented yet (M12)"; exit 1
+	@echo "not implemented yet"; exit 1
 
 # Every milestone gate in order; a milestone whose gate is not built yet fails loudly.
 verify-all:
 	@for n in 0 1 2 3 4 5 6 7 8 9 10 11 12; do $(MAKE) verify-m$$n || exit 1; done
 
-# PRD §11.2 resilience scenarios (REVIEW.md H-06): llama-swap killed mid-extraction (fake server)
+# resilience scenarios: llama-swap killed mid-extraction (fake server)
 # and Postgres stopped/restarted mid-workflow; needs Docker only. The live llama-swap container
 # variant is marked gpu and runs with the command in its docstring.
 .PHONY: test-resilience

@@ -1,9 +1,8 @@
 """Audit chain verifier: `ChainWalker` / `verify_chain` is the pure, DB-free walk that recomputes
 every hash and reports the first broken link (edit, delete, reorder or insert all break the
 chain); `iter_chain_entries` streams `audit_log` in id-ordered pages from one snapshot, so
-`PgAuditVerifier` runs in bounded memory however long the chain grows (PRD §6.2 I4, §6.4,
-§10 M10.4; REVIEW L-05).
-"""
+`PgAuditVerifier` runs in bounded memory however long the chain grows
+(I4)."""
 
 from __future__ import annotations
 

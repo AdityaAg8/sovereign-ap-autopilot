@@ -3,10 +3,10 @@ turns an AUTO route into REVIEW when a reviewer sent the invoice to review befor
 `confirm_review` checks that a `review` signal is backed by the database before the workflow acts
 on it (an approval row whose digest matches the current invoice, or a recorded rejection). A raw
 Temporal signal with no such record never leads to payment: it is audited and the workflow keeps
-waiting (REVIEW.md C-03, H-01, H-02). The corrections inside an approval signal must digest to
-the ones recorded with the approval, or it is unbacked too (N-03). A recorded approval that went
+waiting. The corrections inside an approval signal must digest to
+the ones recorded with the approval, or it is unbacked too. A recorded approval that went
 stale (payee, invoice digest, or corrections edited since) fails the invoice instead
-(`StaleApprovalError`, N-13)."""
+(`StaleApprovalError`)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ class StaleApprovalError(ApxError):
     invoice or its vendor payee moved since, so the digest no longer matches (or the payee is
     now refused). Deterministic for the same rows: non-retryable, and the workflow ends the
     invoice FAILED with this reason instead of waiting for a decision the API cannot take
-    again (an APPROVED invoice can be neither rejected nor re-approved; REVIEW.md N-13)."""
+    again (an APPROVED invoice can be neither rejected nor re-approved)."""
 
 
 class StaleVerdict:
@@ -61,7 +61,7 @@ class ReviewGuardActivities:
         self, session: AsyncSession, action: str, invoice_id: str, payload: dict[str, JsonValue]
     ) -> None:
         """Audits inside `session`'s transaction, so the event and any status write it explains
-        commit together (M-02)."""
+        commit together."""
         await append_in_transaction(
             self._audit,
             session,
@@ -93,7 +93,7 @@ class ReviewGuardActivities:
             # APPROVED with an approvals row is a reviewer's approval (this is a retry after the
             # first attempt committed and the reviewer then approved) and is never reopened, nor
             # is any other status (AWAITING_REVIEW from that first attempt, BLOCKED after a
-            # rejection, FAILED). Audited only when this attempt moved the row (N-09).
+            # rejection, FAILED). Audited only when this attempt moved the row.
             human_approval = (
                 select(ApprovalRow.id).where(ApprovalRow.invoice_id == invoice_id).exists()
             )
@@ -127,10 +127,10 @@ class ReviewGuardActivities:
         status is then made BLOCKED if the API's write has not landed). Otherwise the signal is
         audited as `review.signal_unbacked` and False returned, and the workflow keeps waiting.
         An approval the API recorded (with a digest) that no longer matches the invoice or payee
-        is audited as `review.approval_stale` and raises `StaleApprovalError` (N-13).
+        is audited as `review.approval_stale` and raises `StaleApprovalError`.
 
         With `check_corrections` (every workflow run carrying the `m11-review-signal-corrections`
-        patch), an approval is also checked against the review corrections (N-03, KI-02): the
+        patch), an approval is also checked against the review corrections (KI-02): the
         corrections derived from the invoice's current `fields` rows must digest to the
         approval's `corrections_digest` (an edit since the approval makes it stale, as above),
         and the signal's `corrections` must digest to it too (else unbacked). An approval row

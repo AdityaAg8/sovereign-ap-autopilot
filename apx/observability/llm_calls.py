@@ -1,4 +1,4 @@
-"""Model-call telemetry (PRD §10 M10.3): `RecordingLlmClient` wraps any `LlmClient`, opens an
+"""Model-call telemetry: `RecordingLlmClient` wraps any `LlmClient`, opens an
 OpenTelemetry span per call and writes one `llm_calls` row (model, version, stage, latency,
 tokens, trace id). Recording failures are logged and never fail the model call itself: the
 telemetry row is a side channel, not part of the money path."""

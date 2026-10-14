@@ -176,7 +176,7 @@ def test_open_urls_reports_browser_failure(capsys: pytest.CaptureFixture[str]) -
 def test_temporal_ui_down_points_at_the_devports_profile(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The Temporal UI is published only by the `devports` profile (REVIEW C-02/C-03)."""
+    """The Temporal UI is published only by the `devports` profile."""
     rows = devx.port_rows(lambda _p: False)
     temporal = next(r for r in rows if r.name == "Temporal")
     assert temporal.detail.endswith("down (devports profile)")

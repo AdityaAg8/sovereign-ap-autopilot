@@ -1,6 +1,6 @@
 """Interfaces for extraction: the invoice field schema, tool-free Extractor A/B and arbiter
 clients, and grounding of values onto parse words. Model output carries no boxes; boxes are
-attached only by the Grounder (PRD §3, §4, §6.2 I1/I2, ADR-0003). Classified values (BT-3 type
+attached only by the Grounder (ADR-0003). Classified values (BT-3 type
 code, per-line VAT category) are enum-constrained and resolved by A/B agreement (ADR-0012)."""
 
 from __future__ import annotations

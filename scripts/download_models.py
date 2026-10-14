@@ -1,8 +1,7 @@
 """Resumable downloader for the models pinned in infra/models.lock.json, with sha256
-verification (PRD §10 M0.4); this is what `make models` runs. It talks to the public
+verification; this is what `make models` runs. It talks to the public
 Hugging Face CDN over the host's normal internet path -- never over the `app` Docker
-network, which is `internal: true` at runtime (PRD C1).
-"""
+network, which is `internal: true` at runtime."""
 
 from __future__ import annotations
 

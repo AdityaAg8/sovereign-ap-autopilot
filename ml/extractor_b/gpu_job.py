@@ -1,4 +1,4 @@
-"""GPU half of the Extractor B run flow (design §4 steps 4-8 and the probe): check VRAM/RAM
+"""GPU half of the Extractor B run flow (design steps 4-8 and the probe): check VRAM/RAM
 headroom (ADR-0013), resolve the run, cap VRAM, load the base with LoRA via Unsloth, train with
 `GuardedSFTTrainer` and log to MLflow. A model whose Gated DeltaNet layers are off the fast kernels
 is refused at load (ADR-0011 amendment 6).

@@ -1,4 +1,4 @@
-/** Vendor detail route: identity, bank history and recent invoices (PRD §10 M5.4). */
+/** Vendor detail route: identity, bank history and recent invoices. */
 
 "use client";
 

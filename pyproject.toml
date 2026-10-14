@@ -1,5 +1,5 @@
 # uv project for Sovereign AP Autopilot: Python 3.12 runtime (apx/, factory/, evals/, ml/,
-# attacks/) plus ruff, mypy, pytest and coverage configuration (PRD §8).
+# attacks/) plus ruff, mypy, pytest and coverage configuration.
 
 [project]
 name = "sovereign-ap-autopilot"
@@ -112,7 +112,7 @@ module = ["scipy.*", "sklearn.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# The Extractor B trainer stack exists only in the trainer image (ADR-0011, design §1); the
+# The Extractor B trainer stack exists only in the trainer image (ADR-0011); the
 # torch-importing modules load it lazily, and jsonschema ships no stubs in this environment.
 module = ["torch.*", "transformers.*", "trl.*", "unsloth.*", "mlflow.*", "peft.*", "jsonschema.*", "pyarrow.*"]
 ignore_missing_imports = true

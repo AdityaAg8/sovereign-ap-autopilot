@@ -1,11 +1,10 @@
-"""Integration proof for M3.1's parse pipeline (PRD §10 M3.1, §6.2 I1): the pdfplumber
+"""Integration proof for M3.1's parse pipeline (I1): the pdfplumber
 born-digital fast path's boxes are scored at IoU>=0.5 against every labeled field in the UAE
 test split, gated at >=98% overall (reported for EN and AR separately too); the PaddleOCR-VL
 service is smoke-tested against a small sample of scanned pages for latency/VRAM, informational
-only per the PRD. Writes reports/parse.md. Needs data/uae/test (M2 factory output) for the gate
+only per the PRD. Writes reports/parse.md. Needs data/uae/test (factory output) for the gate
 and, for the service sample, a live `make up` stack with `parse` running; marked `integration`,
-so it never runs in CI or the default `pytest`/`make test` invocation (PRD §8).
-"""
+so it never runs in CI or the default `pytest`/`make test` invocation."""
 
 from __future__ import annotations
 
@@ -153,7 +152,7 @@ def _run_digital_gate() -> tuple[list[FieldScore], int, list[float]]:
             }
             labels_doc = json.loads(labels_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            # data/uae/test is M2 factory output regenerated out-of-band (PRD §2); a document
+            # data/uae/test is M2 factory output regenerated out-of-band; a document
             # can be deleted or rewritten between the is_file() check above and the read on a
             # shared checkout, so a transient race here is skipped rather than failing the gate.
             continue
@@ -204,7 +203,7 @@ def _run_scan_sample() -> dict[str, float | int] | None:
             "parse",
             "sh",
             "-c",
-            # The service token lives in the container's env (REVIEW N-06); expanded in there.
+            # The service token lives in the container's env; expanded in there.
             'curl -s -X POST -H "Authorization: Bearer $PARSE_SERVICE_TOKEN" '
             f"-F image=@{remote} http://localhost:8000/parse",
             timeout=900,

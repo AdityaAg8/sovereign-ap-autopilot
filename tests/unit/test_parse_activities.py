@@ -1,7 +1,7 @@
 """Unit tests for the parse-handoff activities of `DefaultInvoiceActivities`: `parse` stores the
 document and returns only a ref; `extract`, `trust_gate` and `fraud` load the full parse (page
 PNGs included) from the store; a wiped store is audited and re-parsed, and a re-parse that does
-not reproduce the ref, or a corrupt entry, raises a typed error (PRD §6.4, §10 M5.2)."""
+not reproduce the ref, or a corrupt entry, raises a typed error."""
 
 from __future__ import annotations
 

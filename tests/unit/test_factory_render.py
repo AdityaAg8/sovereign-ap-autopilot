@@ -1,7 +1,7 @@
 """Unit tests for `factory.render`: small-N (<=5 invoices) Playwright-driven rendering covering
 every canonical field getting a label, boxes staying inside their page, multi-page pagination
-via the inserted-spacer simulation, the clean per-page screenshot path, and PDF/label determinism
-(PRD §10 M2.3)."""
+via the inserted-spacer simulation, the clean per-page screenshot path, and PDF/label
+determinism."""
 
 from __future__ import annotations
 

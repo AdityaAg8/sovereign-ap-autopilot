@@ -1,6 +1,5 @@
 """Unit tests for `factory.labels`: pure geometry (no Playwright) covering per-page assignment,
-multi-line union boxes, unknown/empty field rejection, bounds checking and JSON round-tripping
-(PRD §10 M2.3)."""
+multi-line union boxes, unknown/empty field rejection, bounds checking and JSON round-tripping."""
 
 from __future__ import annotations
 

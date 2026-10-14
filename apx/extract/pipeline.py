@@ -1,4 +1,4 @@
-"""Dual extraction (PRD §4, §6.1): Extractors A and B read the same document concurrently, the
+"""Dual extraction: Extractors A and B read the same document concurrently, the
 fields they disagree on go to the arbiter when one is configured, and the final values are
 grounded onto parse words. Satisfies `apx.workflows.ports.ExtractionPipeline`."""
 

@@ -1,4 +1,4 @@
-"""PINT AE (UAE) schematron validation for the evaluation harness (PRD §5, §10 M1.3): fetches
+"""PINT AE (UAE) schematron validation for the evaluation harness: fetches
 and pins the official OpenPeppol validation artifacts, compiles the schematron to XSLT with
 SchXslt on saxonche, and exposes a typed validator that returns SVRL failed-asserts."""
 

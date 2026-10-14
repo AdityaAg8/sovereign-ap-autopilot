@@ -1,8 +1,7 @@
 """Unit tests for `apx.audit.verify.verify_chain`: builds valid in-memory chains and confirms
 edit, delete, reorder and insert tampering are all caught, each reporting the first broken id
-(PRD §6.2 I4, §6.4, §10 M10.4). No database is used; `PgAuditVerifier` is exercised by
-`tests/integration/test_audit_chain.py`.
-"""
+(I4). No database is used; `PgAuditVerifier` is exercised by
+`tests/integration/test_audit_chain.py`."""
 
 from __future__ import annotations
 
@@ -181,7 +180,7 @@ def test_any_single_field_edit_anywhere_in_the_chain_is_caught(
 
 
 # ------------------------------------------------------------------------------------------
-# Streaming (REVIEW L-05): same results from an iterator or an async stream, no list needed
+# Streaming: same results from an iterator or an async stream, no list needed
 # ------------------------------------------------------------------------------------------
 
 

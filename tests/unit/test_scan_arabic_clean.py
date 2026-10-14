@@ -1,7 +1,7 @@
-"""Arabic false-positive tests for the control-character technique (PRD §6.3 A05/A06): normal
+"""Arabic false-positive tests for the control-character technique: normal
 RTL text, ZWJ inside an Arabic word, and RLM bracketing a number in Arabic-script context must
 never flag; the same code points outside that context (or a bidi override, in any context)
-still do (M6.2)."""
+still do."""
 
 from __future__ import annotations
 

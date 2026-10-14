@@ -1,5 +1,5 @@
 """Adapter between our own ExtractBench field records (evals/scorers/extractbench.py) and the
-official run-llama/ExtractBench scoring framework (PRD §5 ExtractBench row, §10 M1.3). The
+official run-llama/ExtractBench scoring framework. The
 framework pins its own dependency set (parse-bench, pydantic, scikit-learn, ...) via
 data/external/ExtractBench/pyproject.toml + uv.lock; rather than adding that to this project's
 own dependencies, we run its real `compute_unified_evidence_metrics` scorer -- the same function

@@ -1,7 +1,7 @@
 """add `ingested_documents.failed_at` and `.failure`: the durable record of an `InvoiceWorkflow`
 that failed before its `invoices` row existed (e.g. `build_invoice` refusing an extraction with
 no totals), written by the `mark_failed` activity so the API can report the document as failed
-instead of 404 forever (PRD §10 M5.6, I4). Both nullable and set together (CHECK). Shape kept in
+instead of 404 forever (I4). Both nullable and set together (CHECK). Shape kept in
 sync with `apx.db.models.IngestedDocument` by the migration drift test.
 
 Revision ID: 0011_document_failure

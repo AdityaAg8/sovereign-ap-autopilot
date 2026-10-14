@@ -1,5 +1,5 @@
 """Tests for Extractor B config loading, canonical hashing, the VRAM ladder and derived step
-counts (ADR-0011, design §3)."""
+counts (ADR-0011)."""
 
 from __future__ import annotations
 

@@ -1,8 +1,7 @@
 """Fetches the FATURA template-generated invoice dataset from Zenodo record 8261508 into
 data/fatura/, extracting the archive and listing one manifest entry per invoice image with its
 official Strat#1 train/test split, or a seeded deterministic fallback for any image the
-official CSVs omit (PRD §5 data table, §6.2 I5, §10 M1.1/M1.2).
-"""
+official CSVs omit (I5)."""
 
 from __future__ import annotations
 

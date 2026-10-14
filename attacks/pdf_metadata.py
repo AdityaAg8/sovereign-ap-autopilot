@@ -1,6 +1,6 @@
 """attacks/pdf_metadata.py: injects a payload into a rendered invoice's PDF /Info dictionary
-(Keywords, Subject) and a newly attached XMP metadata stream on the document catalog (PRD §10
-M6.3 "PDF metadata/XMP injection"; docs/security.md A10). No PDF-editing library (pypdf,
+(Keywords, Subject) and a newly attached XMP metadata stream on the document catalog
+("PDF metadata/XMP injection"; docs/security.md A10). No PDF-editing library (pypdf,
 pikepdf) is available in this project's environment, so this rewrites the classic cross-
 reference table directly: Chromium's `page.pdf()` output is a simple, single-generation,
 classic-xref PDF (verified empirically -- no object streams), so the original file's bytes are
@@ -21,14 +21,15 @@ _XREF_SUBSECTION_HEADER_RE = re.compile(rb"(\d+) (\d+)\r?\n")
 
 class PdfStructureError(ValueError):
     """Raised when `pdf_bytes` is not the simple, classic-xref, single-generation PDF this
-    module assumes (PRD §8: no silent fallbacks on the money/document path)."""
+    module assumes (no silent fallbacks on the money/document path)."""
 
 
 def _parse_xref(pdf_bytes: bytes, *, xref_start: int) -> dict[int, tuple[int, int, bytes]]:
     """Parses one classic xref section starting right after the `xref` keyword into
     `{object_number: (offset, generation, b"n" | b"f")}`, following however many `start
-    count` subsections it declares (PRD §10 M6.3: Chromium always writes a single `0 N`
-    subsection in practice, but nothing here assumes exactly one)."""
+    count` subsections it declares
+    (Chromium always writes a single `0 N` subsection in practice, but nothing here assumes exactly
+    one)."""
     entries: dict[int, tuple[int, int, bytes]] = {}
     cursor = xref_start
     while True:
@@ -89,8 +90,8 @@ def _extract_dict_bytes(pdf_bytes: bytes, *, offset: int, obj_num: int) -> bytes
 
 
 def _pdf_text_string(value: str) -> bytes:
-    """A PDF text string literal for `value`, as a UTF-16BE hex string with a byte-order mark
-    (ISO 32000-1 §7.9.2.2), which is valid for any Unicode text -- including the Arabic payload
+    """A PDF text string literal for `value`, as a UTF-16BE hex string with a byte-order mark,
+    which is valid for any Unicode text -- including the Arabic payload
     variants -- and needs no escaping."""
     encoded = value.encode("utf-16-be")
     return b"<FEFF" + encoded.hex().encode("ascii").upper() + b">"
@@ -195,7 +196,7 @@ def _finalize(
 def inject(pdf_bytes: bytes, *, payload: str) -> bytes:
     """Returns `pdf_bytes` with `payload` injected into the /Info dictionary's /Keywords and
     /Subject and into a new XMP metadata stream attached to the catalog's /Metadata entry
-    (PRD §10 M6.3 "PDF metadata/XMP injection"). Deterministic and pure: same
+    ("PDF metadata/XMP injection"). Deterministic and pure: same
     `(pdf_bytes, payload)` always produces the same output bytes."""
     parsed = _parse(pdf_bytes)
     catalog_dict = _extract_dict_bytes(

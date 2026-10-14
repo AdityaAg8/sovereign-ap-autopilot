@@ -1,6 +1,6 @@
 """Caps a scan's flags per kind so an adversarial PDF (thousands of zero-width or hidden
 characters) cannot inflate `ScanReport` past Temporal's payload limit, while keeping every
-kind's highest-scoring flags so P4 routing is unchanged (PRD §6.3 P4, §10 M6.2)."""
+kind's highest-scoring flags so P4 routing is unchanged (P4)."""
 
 from __future__ import annotations
 

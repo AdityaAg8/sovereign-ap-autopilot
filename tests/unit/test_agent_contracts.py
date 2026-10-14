@@ -1,6 +1,5 @@
 """Unit tests for apx.agent.contracts: role/origin scoping (authorize_tool), IBAN masking and
-the audit-actor id normalisation reviewer M9.1 flagged as F4 (PRD §10 M9.2, ADR-0010 D1, D3, D4).
-"""
+the audit-actor id normalisation reviewer M9.1 flagged as F4 (ADR-0010 D1, D3, D4)."""
 
 from __future__ import annotations
 
@@ -140,7 +139,7 @@ def test_masked_iban_type_rejects_a_raw_iban_string(raw: str) -> None:
         TypeAdapter(MaskedIban).validate_python(f"AE07{raw}0331234567890123456")
 
 
-# -- audit_actor (reviewer M9.1 F4) --------------------------------------------------------
+# -- audit_actor --------------------------------------------------------
 
 
 def test_audit_actor_for_agent_origin_is_the_literal_agent() -> None:
@@ -168,7 +167,7 @@ def test_audit_actor_strips_surrounding_whitespace() -> None:
 def test_audit_actor_rejects_a_user_id_with_illegal_characters() -> None:
     """A JWT `sub` can be anything (UserId has no format constraint); an id like an email
     address would corrupt the AuditActor pattern if silently rewritten, so this must fail
-    loudly instead (reviewer M9.1 F4)."""
+    loudly instead."""
     caller = ToolCaller(origin="chat", user=_reviewer("someone@example.com"), session_id="s" * 8)
     with pytest.raises(ConfigError):
         audit_actor(caller)

@@ -1,5 +1,5 @@
 """Interfaces for the REST + SSE API: JWT claims, request/response bodies and the service
-boundary the FastAPI routes call (PRD §3, §10 M5.3)."""
+boundary the FastAPI routes call."""
 
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ class InvoiceSummary(Frozen):
 
 
 class InvoiceFieldView(Frozen):
-    """One field as shown to a reviewer: value, confidence, grounding box and provenance
-    (PRD §10 M5.3). `value` is masked for `name == "iban"` unless the caller is an admin
+    """One field as shown to a reviewer: value, confidence, grounding box and provenance.
+    `value` is masked for `name == "iban"` unless the caller is an admin
     (docs/security.md B5, ADR-0008 T2: IBANs are always shown masked to the last 4 characters
     except to the role that manages vendor bank master data)."""
 
@@ -46,8 +46,8 @@ class InvoiceFieldView(Frozen):
 
 
 class FlagView(Frozen):
-    """A stored fraud flag as review shows it: which rule, how severe, and why in plain words
-    (PRD §10 M8.3). Evidence stays in the audit trail, not the review card."""
+    """A stored fraud flag as review shows it: which rule, how severe, and why in plain words.
+    Evidence stays in the audit trail, not the review card."""
 
     id: int
     rule_id: str
@@ -70,8 +70,7 @@ class InvoiceDetail(Frozen):
 
 
 class InvoicePage(Frozen):
-    """One page of `InvoiceSummary` rows plus the total match count, for list/filter/paginate
-    (PRD §10 M5.3)."""
+    """One page of `InvoiceSummary` rows plus the total match count, for list/filter/paginate."""
 
     items: tuple[InvoiceSummary, ...]
     total: int
@@ -80,7 +79,7 @@ class InvoicePage(Frozen):
 
 
 class VendorBankDetailView(Frozen):
-    """One `bank_details` row as shown on the vendor view (PRD §10 M5.4): the IBAN is always
+    """One `bank_details` row as shown on the vendor view: the IBAN is always
     masked to its last 4 characters here regardless of role -- unlike the admin exception on
     `InvoiceFieldView.value` above, this is the vendor master-data screen, not the one-off
     document-verification view ADR-0008 T2 carves the exception for (ADR-0008 line 85: "always
@@ -114,8 +113,7 @@ class VendorDetail(Frozen):
 
 
 class VendorPage(Frozen):
-    """One page of `VendorSummary` rows plus the total match count, for list/search/paginate
-    (PRD §10 M5.4)."""
+    """One page of `VendorSummary` rows plus the total match count, for list/search/paginate."""
 
     items: tuple[VendorSummary, ...]
     total: int
@@ -124,8 +122,8 @@ class VendorPage(Frozen):
 
 
 class InvoiceDocument(Frozen):
-    """A stored source document ready to be served by `GET /invoices/{id}/document` (PRD §10
-    M5.3/M5.4). `media_type` is sniffed from the stored bytes' magic number, never trusted from
+    """A stored source document ready to be served by `GET /invoices/{id}/document`.
+    `media_type` is sniffed from the stored bytes' magic number, never trusted from
     a stale database column, so the `Content-Type` the client sees always matches what is
     actually inside the response body -- required for `X-Content-Type-Options: nosniff` (set by
     `apx.api.app`) to be safe rather than misleading. `filename` is built only from the
@@ -171,7 +169,7 @@ class TokenResponse(Frozen):
 class UploadResponse(Frozen):
     """Response body of `POST /uploads`: the stored document's content address and, for a new
     (non-duplicate) document, the `InvoiceWorkflow` id `apx.ingest.ingestor.Ingestor` started
-    for it (PRD §10 M5.5). `workflow_id` is `None` when `duplicate` is `True`: the document was
+    for it. `workflow_id` is `None` when `duplicate` is `True`: the document was
     already ingested, so no new workflow was started."""
 
     sha256: Sha256Hex

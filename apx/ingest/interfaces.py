@@ -1,5 +1,5 @@
 """Interfaces for ingest: content-addressed document storage, sha256 dedupe and starting one
-InvoiceWorkflow per new document (PRD §3)."""
+InvoiceWorkflow per new document."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class IngestResult(Frozen):
 
 
 class DocumentStore(Protocol):
-    """Content-addressed blob store under data/ (never committed; §2 C5)."""
+    """Content-addressed blob store under data/ (never committed)."""
 
     def put(
         self, data: bytes, filename: str, source: Literal["watch", "upload"]

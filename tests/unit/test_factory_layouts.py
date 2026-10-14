@@ -1,7 +1,6 @@
 """Unit tests for `factory.layouts` / `factory.render_html`: every layout renders for every UAE
 tax case, Arabic-first layouts declare RTL, every canonical extraction field is tagged with
-`data-field`, and the VAT totals baked into the HTML equal independently recomputed ERP math
-(PRD §10 M2.2)."""
+`data-field`, and the VAT totals baked into the HTML equal independently recomputed ERP math."""
 
 from __future__ import annotations
 

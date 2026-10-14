@@ -1,5 +1,5 @@
-"""Performance test for the M6.2 hidden-content scan (PRD §6.3, §10 M6.2): a 3-page invoice
-with realistic line-item volume must scan in under 1 second (orchestrator budget, not a PRD gate).
+"""Performance test for the M6.2 hidden-content scan: a 3-page invoice
+with realistic line-item volume must scan in under 1 second (orchestrator budget, not a gate).
 Wall-clock best-of-3 (rendering is multi-threaded, so CPU time overstates it); opt-in via the `perf`
 marker: timing is only meaningful on an idle target host, run by the milestone verify step."""
 

@@ -1,6 +1,6 @@
 """Hypothesis property tests for `apx.validate.interfaces.check_vat`: for any UAE VAT category
 and any quantity/price, a correctly computed invoice has no VAT violations, and perturbing the
-stated VAT or the stated total by a nonzero amount is always caught (PRD §10 M4.1 acceptance)."""
+stated VAT or the stated total by a nonzero amount is always caught."""
 
 from __future__ import annotations
 

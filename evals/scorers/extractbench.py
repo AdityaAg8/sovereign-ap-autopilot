@@ -1,5 +1,6 @@
-"""ExtractBench value F1 + grounding F1 scorer (PRD §5 "Value F1 + grounding F1 / ExtractBench
-short", §10 M1.3). Value F1 checks whether an extracted field's value matches gold; grounding F1
+"""ExtractBench value F1 + grounding F1 scorer
+("Value F1 + grounding F1 / ExtractBench short"). Value F1 checks whether an extracted field's value
+matches gold; grounding F1
 checks whether the page/bbox citation offered as evidence for that value actually covers the
 annotated evidence location. Delegates to the official `run-llama/ExtractBench` framework's own
 `compute_unified_evidence_metrics` scorer whenever its clone is present at `external_repo` --

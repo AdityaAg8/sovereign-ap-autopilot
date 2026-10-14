@@ -1,5 +1,5 @@
 """Unit tests for evals/scoreboard_sources.py: each strict report parser reads its generator's
-format and raises ReportFormatError on drift instead of guessing (PRD §5, ADR-0005, M10.6), and
+format and raises ReportFormatError on drift instead of guessing (ADR-0005), and
 SourceReader stamps every source with the best available timestamp. No network, no git."""
 
 from __future__ import annotations

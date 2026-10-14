@@ -1,4 +1,4 @@
-"""HF/TRL glue for the Extractor B loop (design §4): `GuardedSFTTrainer` (NaN micro-batch skip,
+"""HF/TRL glue for the Extractor B loop: `GuardedSFTTrainer` (NaN micro-batch skip,
 skippable optimizer, atomic checkpoint save) and `LoopCallback`, both thin shells over the
 torch-free `LoopController`. torch/transformers/trl are imported lazily inside the builders."""
 

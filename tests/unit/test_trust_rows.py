@@ -1,4 +1,4 @@
-"""Unit tests for `evals.trust_rows` (M7.4): features rebuilt from eval rows equal the runtime
+"""Unit tests for `evals.trust_rows`: features rebuilt from eval rows equal the runtime
 `ExtractionFeatureBuilder` features on the same outputs and parse, the trust label uses the shared
 comparator, and incomplete, stale or mixed-build row files fail loudly instead of shrinking."""
 

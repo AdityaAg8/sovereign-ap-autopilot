@@ -1,5 +1,5 @@
 /** Next.js build configuration for the review UI: sends a Content-Security-Policy and the standard
- * security headers on every route (PRD §11.4, REVIEW M-03), sized for the pdf.js workers served
+ * security headers on every route, sized for the pdf.js workers served
  * from /pdfjs and the apx API's REST + SSE origin.
  *
  * Tried and reverted: `experimental.inlineCss` (inlines each page's CSS as `<style>` instead of

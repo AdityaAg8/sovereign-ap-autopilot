@@ -1,5 +1,5 @@
-"""Collects per-call latency (p50/p95) and peak VRAM across an eval run (PRD §5 "p50/p95
-seconds per invoice, peak VRAM per stage", §10 M1.3). Reuses `scripts/smoke.py`'s VRAM sampler
+"""Collects per-call latency (p50/p95) and peak VRAM across an eval run
+("p50/p95 seconds per invoice, peak VRAM per stage"). Reuses `scripts/smoke.py`'s VRAM sampler
 (nvidia-smi polled on a background thread) rather than reimplementing it; adds the timing and
 percentile bookkeeping an eval run needs across many invoices that smoke.py, which times single
 one-off requests, does not."""

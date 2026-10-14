@@ -1,4 +1,4 @@
-/** Operations view (PRD §10 M10.3): a live dispatch board for the pipeline -- what is moving
+/** Operations view: a live dispatch board for the pipeline -- what is moving
  * now, the operating KPIs with their recent trend, the pipeline as a transit line, the models
  * holding the GPU and the latest activity. Data comes from the 2 s polling feed. */
 

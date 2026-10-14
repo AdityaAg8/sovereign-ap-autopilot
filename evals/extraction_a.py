@@ -1,4 +1,4 @@
-"""Extractor A eval (PRD §10 M3.3): runs the live Extractor A over the UAE factory test split
+"""Extractor A eval: runs the live Extractor A over the UAE factory test split
 (document ids from evals/splits.json, files from a factory output dir), grounds each field onto
 the parse words and writes `reports/extraction_a.md`: valid-JSON rate (gate ≥ 99%), grounding
 rate, field accuracy against the factory labels, box agreement and latency. Per-document rows go
@@ -6,7 +6,7 @@ to a resumable JSONL under logs/ so an interrupted GPU run continues where it st
 carries the run identity (alias, served GGUF sha256, prompt version) and the serving identity
 (llama-swap args of the alias, parser build), and a resume refuses a file written by another
 build, prompt, server config or parser. Rows also record the client concurrency they were run at,
-so a consumer of their latency (the M3.4 bake-off's arm a reuse) can check it was measured one
+so a consumer of their latency (the bake-off's arm a reuse) can check it was measured one
 request at a time. Parses come from the shared `evals.parse_cache`
 (`--no-parse-cache` parses inline), so a resume or a later eval never re-OCRs a scan.
 `--extractor b --model <alias>` runs the same harness for Extractor B (image-only prompt, any
@@ -285,7 +285,7 @@ async def extract_row(
 ) -> dict[str, Any]:
     """One eval row for an already-parsed factory document (parsed from the `kind` input that
     `evals.scan_input.document_input` gives): extract, ground, score against its
-    `*.labels.json` / `*.truth.json` (the M3.4 bake-off reuses it on cached parses)."""
+    `*.labels.json` / `*.truth.json` (the bake-off reuses it on cached parses)."""
     truth = load_truth(data_dir, sha)
     output = await extractor.extract(document)
     grounded = WordGrounder().ground(document, output.fields)

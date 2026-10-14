@@ -1,4 +1,4 @@
-"""Unit tests for `PgAgentToolbox` result shape (PRD §10 M9.2, ADR-0010 D1-D4): IBAN masking,
+"""Unit tests for `PgAgentToolbox` result shape (ADR-0010 D1-D4): IBAN masking,
 single-entity scope for the `agent` origin, row caps with `truncated`, a canary placed in any
 free-text column appearing only in `UntrustedText`, and citation faithfulness for
 `explain_decision`'s `CitedReason.audit_ids`."""
@@ -174,8 +174,9 @@ async def test_vendor_history_caps_accounts_and_sets_truncated() -> None:
 
 async def test_vendor_history_bank_change_audit_id_is_always_none_today() -> None:
     """F2 pin: `bank_details_history` has no column linking a change row back to the
-    `audit_log` id that recorded it (schema gap noted in `PgAgentToolbox.vendor_history` and
-    ADR-0010's M9.3 follow-ups), so `BankChangeView.audit_id` is always None even when the
+    `audit_log` id that recorded it
+    (schema gap noted in `PgAgentToolbox.vendor_history` and ADR-0010's follow-ups), so
+    `BankChangeView.audit_id` is always None even when the
     reader returns a change row. Update this test, not just the toolbox, once that join exists."""
     header = [
         {

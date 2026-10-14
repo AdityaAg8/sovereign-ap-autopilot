@@ -4,10 +4,9 @@ session fails at the database level; every one of the six tools is run through t
 `PgSqlReader` and `PgAgentToolbox`, proving their SQL is parameterised (a SQL-injection-style
 `vendor_query` neither errors nor changes any row) and that no tool call changes payment or bank
 state (row counts and full-row snapshots of `invoices`/`bank_details` are identical before and
-after, and only the propose tools add exactly one `proposals` row) (PRD §10 M9.2). Marked
+after, and only the propose tools add exactly one `proposals` row). Marked
 `integration` (needs Docker), so it is excluded from the default `make test`/CI selection and
-runs via `pytest -m integration`.
-"""
+runs via `pytest -m integration`."""
 
 from __future__ import annotations
 

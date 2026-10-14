@@ -3,8 +3,7 @@ vocabulary used to find the line that labels an extracted value, never mined fro
 
 Phrases are given in their natural EN/AR spelling; callers compare them against a line's TEXT
 canonical form (apx.trust.features.normalize_for_compare), which already casefolds, strips
-diacritics and collapses punctuation, so the raw phrases below do not need to be pre-normalised.
-"""
+diacritics and collapses punctuation, so the raw phrases below do not need to be pre-normalised."""
 
 from __future__ import annotations
 

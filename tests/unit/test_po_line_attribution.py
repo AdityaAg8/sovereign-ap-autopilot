@@ -1,7 +1,7 @@
 """Invoice-line -> PO-line attribution (`apx.common.purchasing.attribute_po_line`) and its use by
 the grounded invoice builder and the `price_variance_po` fraud rule: no positional links, a clean
 seeded-ERP invoice raises no variance, a real price change does, an unmatchable line is reported
-as low-severity `po_line_unmatched` (PRD §10 M4.2 / M8.1, ADR-0012 no money-path defaults)."""
+as low-severity `po_line_unmatched` (ADR-0012 no money-path defaults)."""
 
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ def test_unmatchable_line_is_unmatched_not_a_variance() -> None:
     assert "Diesel generator service" in flags[0].evidence
 
 
-# --- builder + seeded ERP (the M6.6 smoke finding) ----------------------------------------
+# --- builder + seeded ERP (the smoke finding) ----------------------------------------
 
 
 def _db_shaped(po: PurchaseOrder) -> PurchaseOrder:

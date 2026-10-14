@@ -1,5 +1,5 @@
 /** Invoice detail: PDF pane with grounded field boxes, the field list and flags panel, and the
- * approve/fix/reject review action bar (PRD §10 M5.4). The whole screen doubles as the "review
+ * approve/fix/reject review action bar. The whole screen doubles as the "review
  * queue" interaction for a single invoice. */
 
 "use client";
@@ -27,7 +27,7 @@ import type { FieldEdit, InvoiceDetail, InvoiceStatus } from "@/lib/api/types";
 type Decision = "approve" | "reject";
 
 // A decision the API recorded but whose workflow signal failed (503). Kept per invoice in
-// tab-scoped sessionStorage so a reload still offers "Resend" (REVIEW.md N-02); the API re-sends
+// tab-scoped sessionStorage so a reload still offers "Resend"; the API re-sends
 // idempotently. Storage can be unavailable (private mode, blocked site data): then the offer only
 // lasts until the page is left, which is no worse than before.
 const UNDELIVERED_KEY = "apx.undelivered-decision:";
@@ -79,7 +79,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   // The record lands as a transition: React renders the whole detail tree (field rows, tabs,
-  // action bar) in yielding slices instead of one long main-thread task (TBT, M5.4a). The skeleton
+  // action bar) in yielding slices instead of one long main-thread task (TBT). The skeleton
   // (same layout) stays up until that render commits, so nothing shifts.
   // Every load takes a fresh token and only the latest may commit: navigating from one invoice to
   // another (or reloading after an edit) must never let an older response land on the screen

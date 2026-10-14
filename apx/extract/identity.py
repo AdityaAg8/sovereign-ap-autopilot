@@ -1,8 +1,8 @@
-"""Identity of an extractor build (M7.1 review H2, M7.5): the llama-swap alias, the sha256 of the
+"""Identity of an extractor build (review H2): the llama-swap alias, the sha256 of the
 GGUF that alias serves (infra/models.lock.json for Hub builds, the export manifest for local
 Extractor B builds) and a hash of the prompt contract (ADR-0012). Eval rows, the calibrator
-artifact and the runtime trust gate all compare these, so a result is never used for another build.
-"""
+artifact and the runtime trust gate all compare these, so a result is never used for another
+build."""
 
 from __future__ import annotations
 
@@ -151,8 +151,8 @@ def _manifest_sha256(manifest_path: Path, name: str) -> str | None:
 
 
 class ServedBuilds(NamedTuple):
-    """The builds the runtime serves: Extractor A, Extractor B and the arbiter (None while no
-    arbiter is served, M7.3)."""
+    """The builds the runtime serves: Extractor A, Extractor B and the arbiter
+    (None while no arbiter is served)."""
 
     a: ExtractorIdentity
     b: ExtractorIdentity

@@ -1,8 +1,7 @@
-"""Upload-hardening tests for the raster caps (REVIEW H-03, PRD §11.4): hand-built PDFs of a few
+"""Upload-hardening tests for the raster caps: hand-built PDFs of a few
 hundred bytes that declare huge pages or huge embedded images, and PNG headers that declare huge
 dimensions, are rejected at ingest with a typed error, and every renderer refuses them before
-allocating a bitmap. Nothing here decodes a large image, so a regression fails fast, not by OOM.
-"""
+allocating a bitmap. Nothing here decodes a large image, so a regression fails fast, not by OOM."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
-"""Unit test for the embedded-attachment technique (PRD §6.3 A10): a file in the document's
-`/Names/EmbeddedFiles` tree is flagged PDF_ATTACHMENT (M6.2)."""
+"""Unit test for the embedded-attachment technique (A10): a file in the document's
+`/Names/EmbeddedFiles` tree is flagged PDF_ATTACHMENT."""
 
 from __future__ import annotations
 

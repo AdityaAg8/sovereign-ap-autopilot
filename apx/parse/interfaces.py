@@ -1,6 +1,6 @@
 """Interfaces for parsing: pages, words, lines, tables and reading order with boxes, plus the
 small `ParsedDocumentRef` handle that stands in for a stored parse across Temporal activity
-boundaries. Parse words are the sole source of field boxes (PRD §3, §6.2 I1)."""
+boundaries. Parse words are the sole source of field boxes (I1)."""
 
 from __future__ import annotations
 

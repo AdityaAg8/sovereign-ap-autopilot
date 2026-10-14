@@ -1,12 +1,11 @@
 """Integration test for `apx.workflows.workflow.InvoiceWorkflow`'s crash-recovery guarantee
-(PRD §10 M5.2: "kill the worker mid-invoice, restart: completes exactly once"): a real Temporal
+("kill the worker mid-invoice, restart: completes exactly once"): a real Temporal
 dev server plus a real, throwaway Postgres container back `DefaultInvoiceActivities`'s
 idempotency-guarded `send_to_asp`/`archive` steps; every other pipeline stage is a fake (those
 modules live on their own branches). Worker 1 is shut down while `archive` is in flight; worker
 2 resumes it. Also checks `mark_failed` against the same Postgres: FAILED lands on the row
 unless it is already terminal. Marked `integration` (needs Docker), like
-`tests/integration/test_migrations.py`.
-"""
+`tests/integration/test_migrations.py`."""
 
 from __future__ import annotations
 
@@ -168,7 +167,7 @@ async def session_factory(postgres_url: str) -> AsyncIterator[SessionFactory]:
 
 @pytest.fixture
 async def seeded_invoice(session_factory: SessionFactory) -> None:
-    """The `invoices` row `apx.ingest` (M5.5) would have created before starting the
+    """The `invoices` row `apx.ingest` would have created before starting the
     workflow; `archive` updates its `status`, so the FK requires it to already exist."""
     async with session_factory() as session:
         session.add(
@@ -337,7 +336,7 @@ class FakePolicyEngine:
 
     def authorize(self, request: ActionRequest) -> AuthorizationDecision:  # pragma: no cover
         """Never exercised: the workflow only calls `route`; `authorize` backs the future
-        human-approval API layer (M5.3)."""
+        human-approval API layer."""
         raise NotImplementedError
 
 

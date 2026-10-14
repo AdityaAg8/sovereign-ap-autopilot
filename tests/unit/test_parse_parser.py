@@ -1,6 +1,6 @@
 """Tests for `apx.parse.parser.PaddleOcrDocumentParser`: routing born-digital pages to
 pdfplumber and scanned pages to the (faked) parse service client, on a mixed-page PDF, plus
-language detection and non-PDF image input (PRD §10 M3.1). No GPU, no network: the service
+language detection and non-PDF image input. No GPU, no network: the service
 client is a stand-in, never `apx.parse.client.ParseServiceClient` itself."""
 
 from __future__ import annotations

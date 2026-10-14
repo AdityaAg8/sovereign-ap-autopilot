@@ -1,4 +1,4 @@
-"""Pure M10.2 promotion decider (PRD §10 M10.2, ADR-0015): compares champion and challenger
+"""Pure M10.2 promotion decider (ADR-0015): compares champion and challenger
 `ShadowEval`s from one session on gates G1-G11 and returns PROMOTE only if every absolute rule
 holds, no relative gate regressed and pooled UAE F1 gained at least 0.5 points. Anything that
 makes the evidence incomplete or incomparable raises a typed `PromotionError`; nothing promotes
@@ -97,7 +97,7 @@ _SESSION_FIELDS: Final[tuple[str, ...]] = (
 
 
 class GateExclusion(BaseModel):
-    """A PRD §5 row or eval set the decider does not gate, with the reason (never dropped
+    """A row or eval set the decider does not gate, with the reason (never dropped
     silently: it lands in the audit payload)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")

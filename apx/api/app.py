@@ -1,8 +1,7 @@
 """FastAPI application factory: wires the auth/invoices/proposals/uploads/vendors routers, CORS
 locked to the single web origin, security response headers and the typed-error exception
-handlers (PRD §10 M5.3, M5.4, docs/security.md B8/B9). Typed OpenAPI comes free from the pydantic
-models on every route.
-"""
+handlers (docs/security.md B8/B9). Typed OpenAPI comes free from the pydantic
+models on every route."""
 
 from __future__ import annotations
 
@@ -40,7 +39,7 @@ def create_app() -> FastAPI:
     """Builds the API app. Settings are only read here, inside the factory, so importing this
     module never fails on a missing `API_JWT_SECRET`; only calling `create_app()` (or a route's
     own `Depends(get_settings)`) does. Refuses to build (`SplitsUnavailableError`) without a
-    readable learning splits file, so corrections are never silently left unassigned (H-04)."""
+    readable learning splits file, so corrections are never silently left unassigned."""
     require_splits()
     dummy_hash()  # warm it now, so the first unknown-email login costs what any other does
     app = FastAPI(

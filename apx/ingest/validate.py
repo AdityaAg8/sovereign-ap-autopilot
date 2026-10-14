@@ -1,9 +1,9 @@
 """Upload hardening shared by every ingest path (watcher and API upload): magic-byte media-type
 sniffing (never the client's declared content type or a filename extension), the size cap, the
-PDF page/encryption checks and the raster caps (PRD §10 M5.3 limits, M5.5; docs/security.md B1;
-REVIEW H-03). The only home of this logic: the API upload route and the inbox watcher both reach
-it through `Ingestor`.
-"""
+PDF page/encryption checks and the raster caps
+(docs/security.md B1). The only home of this logic: the API upload route and the inbox watcher both
+reach
+it through `Ingestor`."""
 
 from __future__ import annotations
 
@@ -60,8 +60,8 @@ class EncryptedDocumentError(IngestError):
 
 def detect_media_type(data: bytes) -> MediaType | None:
     """Sniffs the media type from magic bytes only -- never from a filename extension or a
-    client-supplied `Content-Type` header, both of which are attacker-controlled (§6.2 I1
-    spirit: provenance comes from the bytes, not from a claim)."""
+    client-supplied `Content-Type` header, both of which are attacker-controlled
+    (I1 spirit: provenance comes from the bytes, not from a claim)."""
     if data.startswith(_PDF_MAGIC):
         return "application/pdf"
     if data.startswith(_PNG_MAGIC):

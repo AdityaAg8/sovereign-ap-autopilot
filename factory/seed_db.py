@@ -1,6 +1,6 @@
 """Loads the factory's deterministic ERP snapshot (users, roles, vendors, admin-verified bank
 accounts and recent bank-detail changes, POs and GRNs) into Postgres, so the worker matches the
-same vendors the generated invoices name and the web app has users to sign in as (PRD §10 M5.6).
+same vendors the generated invoices name and the web app has users to sign in as.
 Re-running replaces the ERP tables (and, by cascade, any invoices). `make seed` runs it."""
 
 from __future__ import annotations

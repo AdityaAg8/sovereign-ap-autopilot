@@ -1,10 +1,9 @@
 """Integration tests for the hash-chained audit log against a real, throwaway Postgres
-container (PRD §6.2 I4, §6.4, §10 M10.4): 50 concurrent `PgAuditLog.append` calls must produce
+container (I4): 50 concurrent `PgAuditLog.append` calls must produce
 one valid, unforked chain, and editing a past row after bypassing the append-only trigger (as
 a superuser would have to) must be caught by `PgAuditVerifier`. Marked `integration`, so it
 needs Docker and does not run as part of the plain unit-test sweep unless explicitly selected
-(`pytest -m integration`).
-"""
+(`pytest -m integration`)."""
 
 from __future__ import annotations
 
@@ -64,8 +63,7 @@ def postgres_url() -> Iterator[str]:
     """Starts a throwaway `pgvector/pgvector:pg16-trixie` container on a host-only port, waits
     for it to accept connections, and stops it on teardown (`--rm` means `docker stop` also
     removes it). Its default role (`POSTGRES_USER`) is a superuser, needed by the tamper test
-    below to disable the append-only trigger the way a real DBA intrusion would have to.
-    """
+    below to disable the append-only trigger the way a real DBA intrusion would have to."""
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True, check=False)
     subprocess.run(
         [
@@ -100,8 +98,7 @@ def audit_schema(postgres_url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator
     """Points `apx.db.session` at the throwaway container, migrates it to `head`, and forces a
     fresh `AsyncEngine` (each test owns its own asyncio event loop via `asyncio.run` below, and
     an `AsyncEngine`'s asyncpg pool cannot be reused across loops) so every test starts from an
-    identical, empty `audit_log` table on a connection bound to its own loop.
-    """
+    identical, empty `audit_log` table on a connection bound to its own loop."""
     monkeypatch.setenv("DATABASE_URL", postgres_url)
     db_session.get_engine.cache_clear()
     db_session._session_factory.cache_clear()

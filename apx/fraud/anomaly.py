@@ -1,4 +1,4 @@
-"""Isolation-forest anomaly detector (PRD §3, §10 M8.2): amount, timing and vendor features of
+"""Isolation-forest anomaly detector: amount, timing and vendor features of
 an invoice computed against that vendor's prior invoices, scored by a seeded scikit-learn
 IsolationForest fitted on clean history. The score is the forest's own anomaly score in [0, 1]
 (Liu et al. s(x, n); ~0.5 is ordinary, toward 1 is isolated quickly)."""

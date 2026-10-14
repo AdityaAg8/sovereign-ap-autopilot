@@ -1,6 +1,6 @@
 """Create the read-only `apx_agent_ro` role and the three masked, joined views it may SELECT
 from -- `v_agent_invoices`, `v_agent_vendor_accounts` and `v_agent_audit` -- so `apx.agent`
-(PRD §10 M9.2, ADR-0010 D2) never has a grant on a raw IBAN column, a payment-state table, or
+(ADR-0010 D2) never has a grant on a raw IBAN column, a payment-state table, or
 anything outside these views. IBANs are masked to their last 4 characters inside the view
 definitions (`'****' || right(iban, 4)`), never in application code, so the role's own grants
 are the enforcement, not caller discipline.

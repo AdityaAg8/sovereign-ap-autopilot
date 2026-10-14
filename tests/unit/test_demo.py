@@ -1,4 +1,4 @@
-"""Unit tests for `scripts/demo.py` (PRD §10 M10.5): each scenario's expected-outcome check,
+"""Unit tests for `scripts/demo.py`: each scenario's expected-outcome check,
 scenario selection against the seeded factory ERP, the aligned table and NO_COLOR, and the
 runner's per-scenario deadline, approvals and typed failures over a fake HTTP transport."""
 

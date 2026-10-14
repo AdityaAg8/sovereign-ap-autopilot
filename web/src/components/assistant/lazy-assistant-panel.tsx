@@ -1,4 +1,4 @@
-/** Mounts the ops assistant panel (PRD §10 M9.3) only once it is first opened, from a lazy chunk
+/** Mounts the ops assistant panel only once it is first opened, from a lazy chunk
  * warmed on the first interaction, so the sheet, chat UI and citation code stay off every
  * signed-in page's critical path. The `c` shortcut and the topbar button keep working because
  * they only flip the open flag in `AssistantProvider`, which is always mounted. */

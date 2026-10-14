@@ -1,8 +1,7 @@
-"""Persisted trust-gate calibrator (M7.4/M7.5, ADR-0009 §5-§6, ADR-0015 §5): the versioned
+"""Persisted trust-gate calibrator (ADR-0009 §5-§6, ADR-0015 §5): the versioned
 artifact under data/trust/ (calibrator parameters, λ̂ per alpha, and the A/B build identities it
 was fitted on), the active pointer the runtime gate loads, and the ADR-0015 invalidation marker that
-a promotion writes and only a refit on the current champions clears. Never committed (data/).
-"""
+a promotion writes and only a refit on the current champions clears. Never committed (data/)."""
 
 from __future__ import annotations
 

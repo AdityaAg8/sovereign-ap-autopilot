@@ -1,11 +1,10 @@
 """Integration tests for `apx.ingest.ingestor.Ingestor` against a real, throwaway Postgres
-container (PRD §10 M5.5): the sha256 unique constraint on `ingested_documents` is the atomic
+container: the sha256 unique constraint on `ingested_documents` is the atomic
 gate proving the acceptance criterion verbatim -- the same file ingested twice, whether through
 the watcher, the upload path, or both, including concurrently, starts exactly one
 `InvoiceWorkflow`. Also covers the `WorkflowStartError` rollback path: a failed workflow start
 frees the sha256 for a later retry rather than wedging it as a permanent phantom duplicate.
-Marked `integration`, so it needs Docker (`pytest -m integration`).
-"""
+Marked `integration`, so it needs Docker (`pytest -m integration`)."""
 
 from __future__ import annotations
 
@@ -334,7 +333,7 @@ async def test_a_failed_workflow_start_frees_the_sha256_for_retry(ingest_schema:
 
 
 # ------------------------------------------------------------------------------------------
-# The real `POST /uploads` route, wired through `apx.api.deps.get_ingestor` (M5.5)
+# The real `POST /uploads` route, wired through `apx.api.deps.get_ingestor`
 # ------------------------------------------------------------------------------------------
 
 

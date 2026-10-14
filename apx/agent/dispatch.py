@@ -2,7 +2,7 @@
 up the contract, authorises the caller, validates arguments into the params model, runs the
 toolbox method, enforces the `TOOL_RESULT_MAX_BYTES` cap and turns every `AgentToolError` or
 `PolicyDeniedError` into a `ToolRefusal` the model can recover from; anything else propagates
-(PRD §10 M9.2, ADR-0010 D1, D3, D7)."""
+(ADR-0010 D1, D3, D7)."""
 
 from __future__ import annotations
 
@@ -98,8 +98,8 @@ def _refs_for(tool: ToolName, result: object) -> tuple[Citation, ...]:
 class PgToolDispatcher:
     """The `ToolDispatcher` implementation. Its only dependencies are an `AgentToolbox` and the
     `TOOL_CONTRACTS` table (ADR-0010 D2 K3: no `AuditLog`, `Grant`, `PolicyGuard` or payment
-    writer). MCP-read and refusal auditing (D7, D8) is wired by the MCP server entrypoint
-    (M9.4), which sits above this class and already holds its own `AuditLog`."""
+    writer). MCP-read and refusal auditing (D7, D8) is wired by the MCP server entrypoint,
+    which sits above this class and already holds its own `AuditLog`."""
 
     def __init__(
         self,

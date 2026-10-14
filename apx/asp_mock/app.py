@@ -2,7 +2,7 @@
 against the runtime schematron gate and returns an idempotent receipt, archiving the document
 with 5-year retention metadata; `GET /v1/receipts/{key}` and `GET /v1/archive/{key}` replay the
 stored records. Makes no outbound calls: the schematron rule set is loaded once from the pinned
-local artifacts under `data/pint_ae` (PRD §3 apx/asp_mock, §6.4 idempotency, §10 M4.4)."""
+local artifacts under `data/pint_ae`."""
 
 from __future__ import annotations
 

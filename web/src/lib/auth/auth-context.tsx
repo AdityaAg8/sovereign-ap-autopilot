@@ -1,10 +1,10 @@
-/** Client-side session state (PRD §1 roles). The session is kept in tab-scoped sessionStorage —
+/** Client-side session state. The session is kept in tab-scoped sessionStorage —
  * never localStorage, so a short-lived apx/api JWT does not outlive the tab or leak to other tabs
  * — and on reload it is handed back to the API adapter (`restoreSession`), which re-attaches the
  * bearer token only if it has not expired; otherwise the user is signed out instead of every
  * request failing with a silent 401. The API client is imported on demand, not statically, so
  * routes that only render this provider (/login) do not download and evaluate the adapter and its
- * fixture data before first paint (Lighthouse performance budget, .claude/rules/design.md). */
+ * fixture data before first paint (Lighthouse performance budget). */
 
 "use client";
 
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           if (ok) {
             // A transition, so React mounts the signed-in shell and the route's page in yielding
-            // slices rather than one long task right after hydration (TBT, M5.4a).
+            // slices rather than one long task right after hydration (TBT).
             startTransition(() => {
               setSession(candidate);
               setStatus("authenticated");

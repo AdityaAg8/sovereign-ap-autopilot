@@ -1,7 +1,7 @@
 """Unit tests for `apx.asp_mock.repository`: both the in-memory and SQLite-backed
 `AspRepository` implementations return the same record for a replayed key, raise on a
 conflicting payload, and build a record exactly once under 20 concurrent duplicate calls for the
-same key (PRD §3 apx/asp_mock, §6.4 idempotency, §10 M4.4)."""
+same key."""
 
 from __future__ import annotations
 

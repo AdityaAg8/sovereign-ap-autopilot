@@ -1,7 +1,7 @@
 """Tests for `apx.parse.client.ParseServiceClient` against a fake HTTP transport
 (`httpx.MockTransport`, not a live parse service): success mapping into `Page`, and typed
-`ParseError` on every failure mode -- timeout, bad status, and a malformed response (PRD §3
-apx/parse client: "typed errors, no silent fallback")."""
+`ParseError` on every failure mode -- timeout, bad status, and a malformed response
+(apx/parse client: "typed errors, no silent fallback")."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""In-memory `InvoiceHistory` (PRD §10 M8.2): an append-only invoice stream with vendor bank
+"""In-memory `InvoiceHistory`: an append-only invoice stream with vendor bank
 changes, vendor-master IBANs and purchase orders, answering every query "as of" a date so a rule
 or the anomaly detector only ever sees invoices issued on or before the one being assessed. Used
 by the fraud eval and tests; the production history reads the same facts from Postgres."""

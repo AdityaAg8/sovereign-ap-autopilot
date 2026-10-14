@@ -40,7 +40,7 @@ def test_an_explicit_folder_wins_over_the_environment(tmp_path: Path) -> None:
         "apx/inbox",
         r"data\inbox_attacks",  # one directory name in the Linux container
         "data",
-        "data/C:x",  # a drive letter: Windows resolves it outside data/ (REVIEW.md P7-01)
+        "data/C:x",  # a drive letter: Windows resolves it outside data/
         "data/C:/x",
         "data/x:y",
     ],

@@ -1,4 +1,4 @@
-/** ApiClient adapter that calls the real apx/api REST + SSE service (PRD §3, §10 M5.3/M5.4),
+/** ApiClient adapter that calls the real apx/api REST + SSE service,
  * selected over the fixture adapter via NEXT_PUBLIC_API_MODE=http (see client.ts). Every method
  * maps apx/api/interfaces.py's wire shapes — snake_case, no camelCase alias_generator anywhere in
  * that module — onto this app's ApiClient contract, and is explicit via a typed ApiError, never a
@@ -110,7 +110,7 @@ interface ProposalDto {
   status: Proposal["status"];
 }
 
-/** apx.api.interfaces.FlagView (PRD §10 M8.3). */
+/** apx.api.interfaces.FlagView. */
 interface FlagViewDto {
   id: number;
   rule_id: string;
@@ -129,7 +129,7 @@ interface InvoiceDetailDto {
   flags: readonly FlagViewDto[];
 }
 
-/** apx.observability.dashboard.OpsSnapshot as JSON (snake_case, M10.3). */
+/** apx.observability.dashboard.OpsSnapshot as JSON (snake_case). */
 interface OpsSnapshotDto {
   generated_at: string;
   kpis: {
@@ -172,7 +172,7 @@ interface TokenResponseDto {
   expires_in: number;
 }
 
-// ---- apx.api.interfaces vendor wire DTOs (PRD §10 M5.4) ----
+// ---- apx.api.interfaces vendor wire DTOs ----
 
 interface VendorBankDetailViewDto {
   id: number;
@@ -233,7 +233,7 @@ function mapSummary(dto: InvoiceSummaryDto): InvoiceSummary {
     // Mean field confidence isn't aggregated server-side, and computing it here would mean an
     // extra round trip per row on a list endpoint that isn't built for that.
     confidence: null,
-    // apx/fraud (M8) hasn't landed yet, so there is genuinely no flag data anywhere in the system
+    // apx/fraud hasn't landed yet, so there is genuinely no flag data anywhere in the system
     // — 0 is the accurate count today, not a guess standing in for missing data.
     flagCount: 0,
     receivedAt: dto.received_at,
@@ -280,7 +280,7 @@ function mapVendorSummary(dto: VendorSummaryDto): Vendor {
   return {
     id: dto.id,
     nameEn: dto.name,
-    // apx.db.models.Vendor has no Arabic-name column (PRD §10 M5.4 gap) — null, not a guess.
+    // apx.db.models.Vendor has no Arabic-name column — null, not a guess.
     nameAr: null,
     trn: dto.trn,
     verified: dto.verified,
@@ -485,7 +485,7 @@ class HttpApiClient implements ApiClient {
   }
 
   async logout(_token: string): Promise<void> {
-    // apx/api issues short-lived, non-revocable JWTs (PRD §10 M5.3) and has no `/auth/logout`
+    // apx/api issues short-lived, non-revocable JWTs and has no `/auth/logout`
     // route — the token simply expires. Clearing the local copy is the entire contract here, not
     // a fallback standing in for a failed server call.
     bearerToken = null;
@@ -528,7 +528,7 @@ class HttpApiClient implements ApiClient {
       pageCount: pageCountFromFields(dto.fields),
       // Not exposed by apx/api yet; nothing in the UI reads InvoiceDetail.language today.
       language: "en",
-      // apx.api.routers.invoices.get_invoice_document (PRD §10 M5.4). Requires the same bearer
+      // apx.api.routers.invoices.get_invoice_document. Requires the same bearer
       // token as every other route here — the caller (invoice detail page) passes the session
       // token through to PdfPane/PdfCanvas, which attach it as pdf.js's `httpHeaders`.
       documentUrl: `${BASE_URL}/invoices/${id}/document`,

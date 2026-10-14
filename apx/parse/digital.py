@@ -1,7 +1,7 @@
 """Born-digital PDF fast path: word/line/table boxes straight from the PDF's own text layer via
-pdfplumber, with no model call (PRD §3, §10 M3.1). This is the only path the IoU≥0.5 gate on
+pdfplumber, with no model call. This is the only path the IoU≥0.5 gate on
 ≥98% of labeled fields runs against; PaddleOCR-VL (apx.parse.client) is for scanned pages only.
-Field boxes built this way satisfy I1 (PRD §6.2): they come from parse words, never a model.
+Field boxes built this way satisfy I1: they come from parse words, never a model.
 Word text is emitted in logical reading order (Arabic un-reversed, apx.parse.bidi)."""
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ word's top/bottom from the embedded font's declared ascent/descent, not the glyp
 ink extent -- for some embedded fonts (observed on the UAE factory's PDFs, reports/parse.md)
 that under- or over-shoots the real text height enough to fail the IoU gate on its own, even
 though the horizontal (x0/x1) extent pdfplumber reports is accurate. This refinement keeps
-pdfplumber as the source of words/text/x-position (I1, PRD §6.2) and only corrects the
+pdfplumber as the source of words/text/x-position (I1) and only corrects the
 vertical extent against the same raster already rendered for `Page.image_png`."""
 
 

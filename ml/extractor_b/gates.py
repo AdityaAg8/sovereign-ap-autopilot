@@ -275,7 +275,7 @@ class GateResult(BaseModel):
 
 
 def evaluate_gates(report: ExtractorGateReport) -> tuple[GateResult, ...]:
-    """P1-P5 with the ADR-0009 §1.8 thresholds (shared with the M10.2 decider, never moved)."""
+    """P1-P5 with the ADR-0009 §1.8 thresholds (shared with the decider, never moved)."""
     f1, f1_a = _dec(report.uae_f1_overall), _dec(report.reference_a_f1_overall)
     p50, p50_a = _dec(report.latency_p50_s), _dec(report.reference_a_p50_s)
     valid, vram = _dec(report.valid_json_rate), _dec(report.extract_peak_vram_gb)
@@ -355,7 +355,7 @@ class GateEvidence(BaseModel):
     a_rows_identity: RowIdentity
     b_rows_identity: RowIdentity
     parser_identity: str | None = None
-    """The one parse snapshot A's rows, B's rows and the P2 run read (REVIEW.md P5-02); None
+    """The one parse snapshot A's rows, B's rows and the P2 run read; None
     only in evidence written before it was recorded."""
     leakage_detail: str
     results: tuple[GateResult, ...]

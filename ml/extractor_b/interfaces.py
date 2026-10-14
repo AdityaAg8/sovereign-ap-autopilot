@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from apx.common.errors import ApxError
 
 # ---------------------------------------------------------------------------------------------
-# Errors: the loop never falls back silently (PRD §8).
+# Errors: the loop never falls back silently.
 # ---------------------------------------------------------------------------------------------
 
 
@@ -29,11 +29,11 @@ class GpuBusyError(TrainingError):
 
 
 class VramBudgetError(TrainingError):
-    """Peak reserved memory reached `VramConfig.cap_gb` (PRD §2 C2). Raised after a checkpoint."""
+    """Peak reserved memory reached `VramConfig.cap_gb`. Raised after a checkpoint."""
 
 
 class DataLeakError(TrainingError):
-    """A train or dev row has a sha256 outside the train split (PRD §6.2 I5). Never quarantined."""
+    """A train or dev row has a sha256 outside the train split (I5). Never quarantined."""
 
 
 class QuarantineRateError(TrainingError):

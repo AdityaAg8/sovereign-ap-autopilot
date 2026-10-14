@@ -1,5 +1,5 @@
 /** The `ApiClient` contract every adapter (fixture, HTTP) implements, matching the REST surface
- * apx/api will expose (PRD §3, §10 M5.3). Kept separate from client.ts so adapters can implement
+ * apx/api will expose. Kept separate from client.ts so adapters can implement
  * this interface without importing the factory, avoiding a circular module graph. */
 import type {
   AuditEventView,
@@ -41,11 +41,11 @@ export interface ApiClient {
   decide(invoiceId: string, request: DecisionRequest): Promise<void>;
   listVendors(): Promise<readonly Vendor[]>;
   getVendor(id: string): Promise<Vendor>;
-  /** One live operations snapshot (GET /ops/snapshot, PRD §10 M10.3). */
+  /** One live operations snapshot (GET /ops/snapshot). */
   getOpsSnapshot(): Promise<OpsSnapshot>;
-  /** An invoice's audit trail, newest first (GET /invoices/{id}/audit, PRD §10 M9.3). */
+  /** An invoice's audit trail, newest first (GET /invoices/{id}/audit). */
   getInvoiceAudit(id: string): Promise<readonly AuditEventView[]>;
-  /** Asks the ops assistant (POST /chat, PRD §10 M9.3). `onStep` receives each tool call as it
+  /** Asks the ops assistant (POST /chat). `onStep` receives each tool call as it
    * happens; resolves with the cited reply, rejects with ApiError when it cannot answer. */
   askAssistant(
     history: readonly ChatTurn[],

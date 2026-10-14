@@ -1,5 +1,5 @@
 """Property tests for DefaultPolicyEngine.route: P1-P4 + trust gate + validation routing is
-deterministic, and the most severe reason wins (PRD §6.3 P1-P4, ADR-0008 K7, M6.5)."""
+deterministic, and the most severe reason wins (P1-P4, ADR-0008 K7)."""
 
 from __future__ import annotations
 

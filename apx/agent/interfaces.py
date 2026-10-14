@@ -1,6 +1,6 @@
 """Interfaces for the exception agent, ops chat, MCP server and their typed tool contracts. Document
 text reaches the agent only as UntrustedText, and tools can only read state or create proposals
-(PRD §6.2 I2, §6.3 P5, ADR-0003, ADR-0008, ADR-0010)."""
+(I2, P5, ADR-0003, ADR-0008, ADR-0010)."""
 
 from __future__ import annotations
 
@@ -850,7 +850,7 @@ class OpsChat(Protocol):
 
 
 # --------------------------------------------------------------------------------------------
-# Pure helpers (M9.2 / M9.3 implement)
+# Pure helpers (implement)
 # --------------------------------------------------------------------------------------------
 
 

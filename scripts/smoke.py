@@ -1,8 +1,8 @@
-"""Smoke-tests every runtime model pinned in infra/models.lock.json (PRD §4, §10 M0.5): the
+"""Smoke-tests every runtime model pinned in infra/models.lock.json: the
 extract/arbitrate LLMs through llama-swap's OpenAI-compatible API, the guard/parse models
 directly through transformers, and the two embedding models through sentence-transformers
 (both ship in that format, not a plain `AutoModel` checkpoint). For each it loads the model,
-samples peak GPU memory every 200 ms, times one request, and checks the PRD §4 extraction-
+samples peak GPU memory every 200 ms, times one request, and checks the extraction-
 call rules (JSON schema output, one tool call, logprobs, thinking disabled) or embedding
 dimensions. Writes reports/smoke.md and exits nonzero if any runtime model fails; an
 unreachable model or a missing optional dependency (torch/transformers/sentence-transformers
@@ -10,8 +10,7 @@ are not pinned in pyproject.toml -- they belong to a later milestone's `ml/` wor
 installed instead in infra/docker/toolbox/Dockerfile's image) is reported as a FAIL with a
 reason, never skipped. Intended to run inside that `toolbox` container (`make smoke`), which
 has a real GPU and those packages; running it directly on the host is also safe, it just
-reports every transformers-backed model as FAIL with "not installed".
-"""
+reports every transformers-backed model as FAIL with "not installed"."""
 
 from __future__ import annotations
 
@@ -53,7 +52,7 @@ LLAMA_SWAP_SERVED_NAME = {
 }
 # infra/models.lock.json `intent` -> apx.common.types.Stage value, for the per-stage VRAM
 # budget table. extractor_a and extractor_b_base share the "extract" llama-swap group
-# (swap: false, exclusive: true, PRD §4): llama-swap keeps both resident once either is
+# (swap: false, exclusive: true): llama-swap keeps both resident once either is
 # called, so the max of their two independently-sampled peaks approximates the group's
 # combined peak without needing a dedicated "call both at once" harness.
 MODEL_STAGE = {
@@ -226,7 +225,7 @@ def build_invoice_png_data_url(image: Image.Image | None = None) -> str:
 
 
 def evaluate_structured_response(data: dict[str, Any]) -> list[CheckResult]:
-    """Checks a /v1/chat/completions body against the PRD §4 extraction-call rules: JSON-
+    """Checks a /v1/chat/completions body against the extraction-call rules: JSON-
     schema-shaped content, logprobs present, and thinking disabled (no <think> leakage)."""
     try:
         choice = data["choices"][0]
@@ -373,7 +372,7 @@ def _unload_llama_swap_model(client: httpx.Client, base_url: str, served_name: s
     unloading one costs the next check a redundant group reload -- acceptable here, since a
     smoke run isn't latency-sensitive. Without this, a later stage's VRAM sample would include
     this model's memory too (PyTorch's cache isn't the only thing that lingers -- llama-swap's
-    own subprocess does too), which is exactly the PRD C2 per-stage budget this script proves.
+    own subprocess does too), which is exactly the C2 per-stage budget this script proves.
     Best-effort: a failed unload just means the next check's peak might run a bit high, not a
     reason to fail this one."""
     with contextlib.suppress(httpx.HTTPError):
@@ -388,7 +387,7 @@ def _empty_cuda_cache() -> None:
     gone out of scope. Without this, nvidia-smi keeps counting a freed model against this
     process for the rest of the run (PyTorch's caching allocator never gives memory back on
     its own) -- every later check's peak would include every earlier one's model too, and
-    this toolbox process would keep competing with llama-swap for the one shared GPU (PRD C2)
+    this toolbox process would keep competing with llama-swap for the one shared GPU
     long after each check is actually done with it."""
     try:
         import torch

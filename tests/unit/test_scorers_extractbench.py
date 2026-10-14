@@ -1,4 +1,4 @@
-"""Unit tests for evals/scorers/extractbench.py (PRD §10 M1.3): the PRD-spec fallback on
+"""Unit tests for evals/scorers/extractbench.py: the PRD-spec fallback on
 hand-computed cases, the official-framework aggregation path against a hand-built fixture of the
 official scorer's own metric shape (`framework_available` made True by a tiny stub clone,
 `run_official_scorer` stubbed rather than the unit under test), and one `external`-marked

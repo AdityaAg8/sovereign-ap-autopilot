@@ -1,4 +1,4 @@
-/** Stage vocabulary for the operations view (PRD §10 M10.3): the ordered processing stations an
+/** Stage vocabulary for the operations view: the ordered processing stations an
  * invoice passes through and the outcomes it settles into, with the token each outcome is drawn in. */
 import type { InvoiceStatus, OpsSnapshot } from "@/lib/api/types";
 

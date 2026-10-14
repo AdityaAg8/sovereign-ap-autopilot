@@ -1,6 +1,6 @@
-"""UAE TRN and IBAN identity validators. Reused by the synthetic ERP factory (M2.1) to build
-IDs that already pass validation and by `apx.validate.interfaces` (M4.1 extends this module
-with the full mandatory-field checklist, PRD §6.3, §10 M4.1)."""
+"""UAE TRN and IBAN identity validators. Reused by the synthetic ERP factory to build
+IDs that already pass validation and by `apx.validate.interfaces`
+(extends this module with the full mandatory-field checklist)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ AE_BBAN_LENGTH = AE_IBAN_LENGTH - 4  # country code (2) + check digits (2)
 def is_valid_trn(trn: str) -> bool:
     """UAE TRN: exactly 15 digits, starting with "1" and ending with "03" (PINT AE rule
     ibr-132-ae, e.g. "100xxxxxxxxx003"). There is no published check-digit scheme, so beyond that
-    shape this is a format check only (PRD §6.3)."""
+    shape this is a format check only."""
     return bool(_TRN_RE.fullmatch(trn))
 
 
@@ -60,7 +60,7 @@ def is_valid_iban(iban: str) -> bool:
 
 def is_valid_ae_iban(iban: str) -> bool:
     """AE IBANs are exactly 23 characters: AE + 2 check digits + 3-digit bank code +
-    16-digit account number (PRD §3; §10 M4.1 extends the mandatory-field list)."""
+    16-digit account number (extends the mandatory-field list)."""
     return iban.startswith(AE_COUNTRY_CODE) and len(iban) == AE_IBAN_LENGTH and is_valid_iban(iban)
 
 

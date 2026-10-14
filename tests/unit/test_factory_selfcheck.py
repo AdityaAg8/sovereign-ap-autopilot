@@ -1,8 +1,7 @@
 """Unit tests for `factory.selfcheck`: the pure text-normalization helpers in isolation, plus
 label-vs-pdfplumber-text extraction on small Playwright-rendered fixtures covering an exact-match
 plain value, a value that genuinely wraps across two physical PDF lines, and an Arabic value with
-an embedded left-to-right digit run (PRD §10 M2.4).
-"""
+an embedded left-to-right digit run."""
 
 from __future__ import annotations
 

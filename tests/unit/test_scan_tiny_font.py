@@ -1,5 +1,5 @@
-"""Unit test for the tiny-font technique (PRD §6.3 A02): text below 4pt is flagged HIDDEN_TEXT,
-and normal 12pt body text is not (M6.2)."""
+"""Unit test for the tiny-font technique (A02): text below 4pt is flagged HIDDEN_TEXT,
+and normal 12pt body text is not."""
 
 from __future__ import annotations
 

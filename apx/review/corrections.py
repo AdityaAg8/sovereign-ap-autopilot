@@ -1,8 +1,8 @@
 """The review corrections an approval covers, derived from an invoice's `fields` rows, and their
 canonical sha256 digest. The API computes both when a reviewer approves and records the digest on
 the `approvals` row; the workflow's `confirm_review` activity re-derives them to check that a
-`review` signal carries exactly the approved corrections and that no edit landed since (REVIEW.md
-N-03, KNOWN_ISSUES KI-02)."""
+`review` signal carries exactly the approved corrections and that no edit landed since
+(KNOWN_ISSUES KI-02)."""
 
 from __future__ import annotations
 

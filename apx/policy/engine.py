@@ -1,5 +1,5 @@
 """Default PolicyEngine: pure P1-P4 routing and capability + segregation-of-duties
-authorisation, with no hidden state and no override path (PRD §6.3, ADR-0008 K5/K7)."""
+authorisation, with no hidden state and no override path (ADR-0008 K5/K7)."""
 
 from __future__ import annotations
 
@@ -232,7 +232,7 @@ def _payee_route_reasons(inp: RoutingInput) -> tuple[list[PolicyReason], Payee |
     """P1 routing (ADR-0014 §4-5): a refusal, a sole account the invoice IBAN contradicts, and
     any selection among several verified accounts each route REVIEW. Only a sole verified
     account that the invoice matches or does not name adds no reason. Also returns the selected
-    payee (None on refusal), which the route decision pins (§7)."""
+    payee (None on refusal), which the route decision pins."""
     try:
         payee = select_payee(inp.vendor, invoice_iban=inp.invoice.iban)
     except PayeeRefusedError as refused:

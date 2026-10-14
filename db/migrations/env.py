@@ -1,7 +1,7 @@
 """Alembic async migration runner for the Postgres schema in `apx/db/models.py`. Resolves the
 connection URL like the app does (`apx.db.session.get_database_url`, else a non-empty
 `alembic.ini` value) and runs migrations through an `asyncpg` engine so the same driver is used
-in tests and production (PRD §7 db/migrations, §10 M5.1)."""
+in tests and production."""
 
 from __future__ import annotations
 

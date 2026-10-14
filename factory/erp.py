@@ -1,7 +1,7 @@
 """Seeded, deterministic synthetic UAE ERP: vendors (EN/AR names, TRNs, AE IBANs), purchase
 orders, goods receipts (including partial deliveries), users/roles and approval limits, exported
-to JSON. Feeds the invoice renderer (M2.2+) and the fraud/policy modules it models (PRD §10 M2.1,
-§6.3). `faker`/`jinja2` are not installed in this environment (see module note below), so name,
+to JSON. Feeds the invoice renderer (+) and the fraud/policy modules it models.
+`faker`/`jinja2` are not installed in this environment (see module note below), so name,
 address and item data are drawn from small curated EN/AR tables instead."""
 
 from __future__ import annotations
@@ -161,7 +161,7 @@ class VendorRecord(Vendor):
 
 class Erp(Frozen):
     """One deterministic synthetic ERP snapshot for a given seed: vendors, purchase orders,
-    goods receipts, users/roles and approval-limit policy (PRD §10 M2.1)."""
+    goods receipts, users/roles and approval-limit policy."""
 
     seed: int
     thresholds: PolicyThresholds
@@ -365,7 +365,7 @@ def _generate_purchase_orders_and_receipts(
 
 def generate_erp(seed: int, n_vendors: int = 20, n_users: int = 8) -> Erp:
     """Build one deterministic synthetic ERP snapshot. The same `seed` always yields byte-
-    identical `dump_erp_json` output; a different seed yields different data (PRD §10 M2.1)."""
+    identical `dump_erp_json` output; a different seed yields different data."""
     rng = random.Random(seed)
     users = _generate_users(rng, n_users)
     admin_ids = _admin_ids(users)

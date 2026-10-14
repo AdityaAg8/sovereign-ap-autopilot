@@ -1,4 +1,4 @@
-"""The `extract` activity's audit payload (PRD §10 M5.6 observability): besides the disputed
+"""The `extract` activity's audit payload: besides the disputed
 fields and whether an arbiter ran, it records each extractor's validity and finish reason, so an
 invalid Extractor B output (every field disputed, trust gate rule H1) is visible in the audit
 trail. Runs the real activity with a fake extraction pipeline and an in-memory audit log."""

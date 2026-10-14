@@ -1,5 +1,5 @@
-"""attacks/textsource.py: the pluggable payload-text interface for the M6.3 attack suite (PRD
-§4 red-team model, §10 M6.3 "text variants from the red-team model plus templates"). Two
+"""attacks/textsource.py: the pluggable payload-text interface for the M6.3 attack suite
+("text variants from the red-team model plus templates"). Two
 implementations share one `RedTeamTextSource` protocol: `TemplateTextSource`, deterministic
 EN/AR phrasing used for every committed manifest, and `LlamaSwapRedTeamTextSource`, an
 uncensored-model client for the optional `--redteam` enrichment pass (never on the default,
@@ -299,7 +299,7 @@ def template_variant_count(category: str, goal: Goal, lang: Lang) -> int:
 
 class RedTeamTextSource(Protocol):
     """Produces one payload string for `(category, goal, lang)`, deterministic from `seed`
-    (PRD §4: "Red-team generator ... M6.3"; PRD §10 M6.3: "deterministic from a seed")."""
+    ("Red-team generator ... "; "deterministic from a seed")."""
 
     def generate(self, *, category: str, goal: Goal, lang: Lang, seed: int) -> str: ...
 
@@ -307,7 +307,7 @@ class RedTeamTextSource(Protocol):
 class TemplateTextSource:
     """The default, GPU-free source: picks a phrasing variant and fills attacker-controlled
     specifics (IBAN, name, email, ...) purely from `seed`. Used for every case in the
-    committed manifests (PRD §10 M6.3: "template-based variants now")."""
+    committed manifests ("template-based variants now")."""
 
     def generate(self, *, category: str, goal: Goal, lang: Lang, seed: int) -> str:
         if category == "homoglyph_vendor":
@@ -334,14 +334,14 @@ class LlamaSwapRedTeamTextSource:
     uncensored (HauhauCS Aggressive GGUF)") through llama-swap's OpenAI-compatible endpoint for
     the optional `--redteam` enrichment pass. `served_model` must match a key
     `infra/llama-swap.yaml` registers -- at the time of writing that file has no red-team entry
-    yet (only extractor-a/extractor-b/arbiter, PRD §10 M0.4/M6/M7 stages); adding one is
+    yet (only extractor-a/extractor-b/arbiter); adding one is
     infra/ work, out of scope for `attacks/`, so the served name is a constructor argument
     rather than a
     hardcoded default. Deterministic per call: `temperature=0`, a fixed `seed`, and the prompt
     itself encodes `(category, goal, lang, seed)`, so the same seed always requests the same
     completion; callers cache the returned text into the manifest so it is fetched at most
-    once (PRD §10 M6.3: "make generation deterministic from a seed and cache outputs to
-    manifests")."""
+    once
+    ("make generation deterministic from a seed and cache outputs to manifests")."""
 
     def __init__(
         self,

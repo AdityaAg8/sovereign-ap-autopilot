@@ -1,5 +1,5 @@
 """Typed errors for the M10.2 promotion pipeline: any shadow eval that cannot prove "no gate
-regressed" raises one of these instead of promoting (PRD §8 no silent fallbacks, §10 M10.2)."""
+regressed" raises one of these instead of promoting (no silent fallbacks)."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class InvalidMetricError(PromotionError):
 class EvalMismatchError(PromotionError):
     """The two shadow evals are not comparable (ADR-0015 §4): different eval code, scorer,
     session, test digests, split, document count, sample limit, gate kind or threshold, or a
-    report from the wrong model (gates never move, PRD §6.2 I6)."""
+    report from the wrong model (gates never move, I6)."""
 
 
 class NoNewLabelsError(PromotionError):

@@ -1,5 +1,5 @@
 /** Seed vendor fixtures (EN/AR names, 15-digit TRNs, AE IBANs) used by the dev-only fixture
- * adapter, standing in for the factory ERP vendors (PRD §10 M2.1) until apx/api serves real ones. */
+ * adapter, standing in for the factory ERP vendors until apx/api serves real ones. */
 import type { Vendor } from "@/lib/api/types";
 
 /** Masks an illustrative fixture IBAN the same way `apx.api.service._mask_iban` does, so the

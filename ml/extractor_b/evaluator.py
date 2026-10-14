@@ -151,8 +151,8 @@ def generation_order(rows: Sequence[TrainingSample]) -> list[TrainingSample]:
 
     A batched `generate` decodes until its longest row stops, so the eval's cost is the sum of
     each batch's longest output. Sorting by the gold target length puts rows that decode about as
-    long in one batch, which minimises that sum for contiguous batches (M7.1 dev set at batch 4:
-    69.0k decode steps instead of 93.2k in prompt order). The gold length only
+    long in one batch, which minimises that sum for contiguous batches
+    (dev set at batch 4: 69.0k decode steps instead of 93.2k in prompt order). The gold length only
     schedules the rows; it never reaches the model or the scorer. The first batch holds the
     longest outputs and near-longest prompts, so an OOM still surfaces early."""
     return sorted(rows, key=lambda r: (-r.n_target_tokens, -r.n_prompt_tokens, r.sample_id))

@@ -67,7 +67,7 @@ B_TRAINED_ON: Final[Mapping[str, frozenset[str]]] = {
     "r1b": frozenset({"fatura", "cord"}),
     "r2": frozenset({"fatura", "cord", "docile"}),
 }
-"""Real sets each B version saw in training (§4.4): B on these is in-distribution."""
+"""Real sets each B version saw in training: B on these is in-distribution."""
 
 DEFAULT_SPLIT: Final[Mapping[RealSet, str]] = {
     "cord": "test",
@@ -77,7 +77,7 @@ DEFAULT_SPLIT: Final[Mapping[RealSet, str]] = {
     "reality": "verified",
 }
 DEV_SPLITS: Final[frozenset[tuple[str, str]]] = frozenset({("cord", "validation")})
-"""The only splits prompt, mapping and normaliser work may use (§4.1); all others are protected."""
+"""The only splits prompt, mapping and normaliser work may use; all others are protected."""
 PROTECTED_PATHS: Final[tuple[str, ...]] = (
     "evals/real",
     "apx/extract",
@@ -109,7 +109,7 @@ def rows_path(
     model_version: str,
     rows_dir: Path = ROWS_DIR,
 ) -> Path:
-    """`logs/real/<set>.<split>.<extractor>-<model_version>.jsonl` (§6)."""
+    """`logs/real/<set>.<split>.<extractor>-<model_version>.jsonl`."""
     return rows_dir / f"{set_}.{split}.{extractor}-{model_version}.jsonl"
 
 
@@ -211,7 +211,7 @@ class RealDoc:
 
 
 def set_docs(set_: RealSet, split: str, data_root: Path = DATA_ROOT) -> list[RealDoc]:
-    """The fixed document list of a set/split, in a deterministic order (§1)."""
+    """The fixed document list of a set/split, in a deterministic order."""
     if set_ == "cord":
         if split not in ("validation", "test"):
             raise RealTrackError(f"CORD {split!r} is not an evaluation split (train is never run)")

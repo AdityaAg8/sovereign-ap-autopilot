@@ -1,5 +1,5 @@
-"""Behavioural proof that no `apx.agent` tool changes payment state (PRD §6.3 P5, §10 M9.2,
-ADR-0008 K3, ADR-0010 D2): with a spy `SqlReader`/`ProposalSink`, every one of the six tools
+"""Behavioural proof that no `apx.agent` tool changes payment state
+(P5, ADR-0008 K3, ADR-0010 D2): with a spy `SqlReader`/`ProposalSink`, every one of the six tools
 performs only `fetch_all` reads and, for the two propose tools, exactly one `submit` of a
 pending proposal whose kind is in `TOOL_PROPOSAL_KINDS`. A read tool given a `DenyingSink` must
 never call it at all."""

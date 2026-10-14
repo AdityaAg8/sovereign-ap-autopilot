@@ -1,6 +1,6 @@
 """Compares pdfplumber's parsed characters against a pypdfium2 render of the same page to find
 text a human would never see: invisible fill, sub-4pt font, off-page/clipped positioning and
-text covered by a later-drawn image or opaque shape (PRD §3, §6.3 A01-A04, M6.2)."""
+text covered by a later-drawn image or opaque shape (A01-A04)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ PdfChar = dict[str, Any]
 """pdfplumber's per-character dict (`page.chars` items); see `apx.scan.controls.PdfChar`."""
 
 TINY_FONT_PT = 4.0
-"""Font size below which text is considered unreadable by a human (PRD §3 A02)."""
+"""Font size below which text is considered unreadable by a human (A02)."""
 
 INVISIBLE_CONTRAST_RATIO = 1.2
 """WCAG relative-luminance contrast ratio, between a glyph's actual rendered ink and its actual

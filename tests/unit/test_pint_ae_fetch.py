@@ -1,6 +1,6 @@
 """Unit tests for evals/pint_ae/fetch.py: pin.json loading, sha256 verification (mismatch is a
 typed, non-silent PinMismatchError -- httpx is monkeypatched so this needs no network), and the
-already-extracted-so-skip-the-network idempotency check (PRD §10 M1.3)."""
+already-extracted-so-skip-the-network idempotency check."""
 
 from __future__ import annotations
 

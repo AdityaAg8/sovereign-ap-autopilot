@@ -1,4 +1,4 @@
-"""End-to-end pipeline check (PRD §10 M5.6): drops a fixed set of factory invoices (plus attack
+"""End-to-end pipeline check: drops a fixed set of factory invoices (plus attack
 PDFs) into the running stack's inbox, approves the ones routed to review through the API the
 way a reviewer would, waits for each to settle, and writes `reports/e2e_pipeline.md` with every
 invoice's route, final status, timing and extracted-vs-truth check (header fields, seller address

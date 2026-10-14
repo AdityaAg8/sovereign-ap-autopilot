@@ -1,4 +1,4 @@
-"""GPU-backed parse service (PRD §3, §4, §10 M3.1): PaddleOCR-VL-1.6 text spotting for one scanned
+"""GPU-backed parse service: PaddleOCR-VL-1.6 text spotting for one scanned
 page image per POST /parse. The model lives in a child process that loads on the first page and
 is stopped by POST /unload, which returns all of its GPU memory (CUDA context included) so the
 worker's GPU stage scheduler can hand the card to the extract models (ADR-0013). A page whose
@@ -6,8 +6,8 @@ decoding loops or runs out of budget is re-read as overlapping horizontal strips
 (ADR-0013 amendment 2); an unfinished strip is re-read as two half-bands and the merged zones are
 put in geometric reading order (amendment 4). Only the scan path calls this; born-digital PDFs are
 parsed host-side by apx.parse.digital (pdfplumber). Every route but /health needs the shared
-service token, browser requests are refused, and page images are pixel-capped before decoding
-(REVIEW N-06).
+service token, browser requests are refused, and page images are pixel-capped before decoding.
+
 """
 
 from __future__ import annotations
@@ -42,12 +42,12 @@ from pydantic import BaseModel, Field
 
 MODEL_PATH: Final[str] = "/models/PaddleOCR-VL-1.6"
 """Read-only mount of models/PaddlePaddle/PaddleOCR-VL-1.6 (infra/compose.yaml `parse` service);
-never downloaded here -- `make models` resolves and checksums it on the host (PRD C1)."""
+never downloaded here -- `make models` resolves and checksums it on the host."""
 
 GPU_MEM_FRACTION_ENV: Final[str] = "PADDLE_GPU_MEM_FRACTION"
 DEFAULT_GPU_MEM_FRACTION: Final[float] = 0.35
 """Fraction of total device memory the model process may allocate (~4.3 GB on a 12 GB card),
-comfortably above the ~3.2 GB peak `reports/smoke.md` measured for this model (PRD §2 C2)."""
+comfortably above the ~3.2 GB peak `reports/smoke.md` measured for this model."""
 
 _SPOTTING_PROMPT: Final[str] = "Spotting:"
 _UPSCALE_THRESHOLD_PX: Final[int] = 1500
@@ -214,7 +214,7 @@ def _engine_main(conn: Connection) -> None:  # pragma: no cover - runs in the GP
             torch.cuda.set_per_process_memory_fraction(fraction, device=0)
         # No `trust_remote_code`: transformers ships `paddleocr_vl` as a native model type; the
         # checkpoint's own modeling files would produce a config/model class mismatch instead
-        # (scripts/smoke.py's `_load_and_probe_vlm` hit the same thing first, PRD §10 M0.5).
+        # (scripts/smoke.py's `_load_and_probe_vlm` hit the same thing first).
         processor = AutoProcessor.from_pretrained(MODEL_PATH, local_files_only=True)
         model = AutoModelForImageTextToText.from_pretrained(
             MODEL_PATH, local_files_only=True, dtype=torch.bfloat16 if device == "cuda" else "auto"
@@ -266,15 +266,15 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="parse", lifespan=_lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 SERVICE_TOKEN_ENV: Final[str] = "PARSE_SERVICE_TOKEN"
-"""Shared secret every caller but the healthcheck sends as `Authorization: Bearer <token>`
-(REVIEW N-06): the gateway exposes this service on 127.0.0.1:8010, where any local process or
+"""Shared secret every caller but the healthcheck sends as `Authorization: Bearer <token>`:
+the gateway exposes this service on 127.0.0.1:8010, where any local process or
 a browser page could otherwise reach it. Unset or empty means every guarded request is a 503."""
 _OPEN_ROUTES: Final[frozenset[tuple[str, str]]] = frozenset({("GET", "/health")})
 _FETCH_SITES_ALLOWED: Final[frozenset[str]] = frozenset({"same-origin", "none"})
 
 MAX_IMAGE_PIXELS: Final[int] = 100_000_000
-"""Most pixels a page image may declare in its header, checked before it is decoded (REVIEW
-N-06). Mirrors apx.common.raster.MAX_IMAGE_PIXELS, which this image cannot import (its build
+"""Most pixels a page image may declare in its header, checked before it is decoded.
+Mirrors apx.common.raster.MAX_IMAGE_PIXELS, which this image cannot import (its build
 context is this directory); tests/unit/test_parse_service_app.py asserts the two are equal."""
 _IMAGE_FORMATS: Final[frozenset[str]] = frozenset({"PNG", "JPEG"})
 
@@ -954,8 +954,8 @@ def _looped(raw: str) -> bool:
 
 def _parse_spotting_output(raw: str) -> list[tuple[str, tuple[float, float, float, float]]]:
     """Decode `_SPOTTING_PROMPT` output into `(text, (x0, y0, x1, y1))` zones, coordinates
-    normalized to [0, 1]. A line with no trailing 8-token LOC run is skipped (best-effort;
-    this path is informational only, PRD §10 M3.1)."""
+    normalized to [0, 1]. A line with no trailing 8-token LOC run is skipped
+    (best-effort; this path is informational only)."""
     zones: list[tuple[str, tuple[float, float, float, float]]] = []
     for entry in raw.split("\n"):
         entry = entry.strip()

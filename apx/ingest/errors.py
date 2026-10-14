@@ -1,5 +1,5 @@
 """Typed errors raised by `apx.ingest` beyond the upload-hardening ones in `apx.ingest.validate`
-(PRD §8: typed errors, no silent fallbacks)."""
+(no silent fallbacks)."""
 
 from __future__ import annotations
 

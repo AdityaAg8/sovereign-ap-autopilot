@@ -1,4 +1,4 @@
-/** The "now" band at the top of the operations view (PRD §10 M10.3): one plain sentence about
+/** The "now" band at the top of the operations view: one plain sentence about
  * what the system is doing this second -- invoices moving, the busiest station, which models hold
  * the GPU -- beside a two-minute trace of work in flight. */
 import type { OpsSnapshot } from "@/lib/api/types";

@@ -1,5 +1,5 @@
 """Interfaces for the hidden-content scan: invisible/hidden text, zero-width and bidi controls,
-PDF metadata/attachments/JavaScript, and the ModernBERT injection classifier (PRD §3, §6.3 P4)."""
+PDF metadata/attachments/JavaScript, and the ModernBERT injection classifier (P4)."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class ScanFlag(Frozen):
     score: Score
     evidence: UntrustedText
     bbox: BBox | None = None
-    """Location of the offending content, page-normalised (M6.2). None for document-level
+    """Location of the offending content, page-normalised. None for document-level
     findings that have no single position (metadata, attachments, JavaScript/OpenAction/AA)."""
 
 

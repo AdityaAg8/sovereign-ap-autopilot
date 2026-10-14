@@ -1,8 +1,7 @@
-"""`TemporalWorkflowStarter` id reuse (REVIEW L-06, PRD §6.4): against Temporal's time-skipping
+"""`TemporalWorkflowStarter` id reuse: against Temporal's time-skipping
 test server, re-ingesting a document whose invoice workflow has already closed returns the same
 id and starts no new run, and a running one is left alone. No worker runs, so the started
-workflow simply waits on its first activity until the test terminates it.
-"""
+workflow simply waits on its first activity until the test terminates it."""
 
 from __future__ import annotations
 

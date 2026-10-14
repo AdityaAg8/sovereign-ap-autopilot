@@ -1,6 +1,6 @@
-"""Builds PINT AE 1.0.4 UBL 2.1 Invoice/CreditNote XML from `InvoiceFields` (§10 M3.2) plus the
+"""Builds PINT AE 1.0.4 UBL 2.1 Invoice/CreditNote XML from `InvoiceFields` plus the
 ERP-verified vendor payment IBAN (never the invoice's own claimed IBAN, per P1 "injection-proof
-payments"), for VAT categories S/Z/E/AE/O (PRD §3 apx/einvoice, §10 M4.3). Presence checks are
+payments"), for VAT categories S/Z/E/AE/O. Presence checks are
 deliberately shallow: a header/line field left `None` is simply omitted from the XML, so the
 runtime schematron validator (`apx.einvoice.schematron`) is the single source of truth for which
 omissions are fatal, and reports the violated rule ID. The money path is the exception: currency
@@ -464,8 +464,7 @@ def build_ubl_xml(
     line, a supplier or buyer with neither identifier nor TRN (no EndpointID), an unparsable
     amount/date, a zero quantity with no unit price, or (for an Invoice document, per PINT AE
     `ibr-191-ae`/`ibr-192-ae`) a missing `verified_payment_iban`, since an Invoice without a
-    payment account would otherwise silently fail the money path further downstream.
-    """
+    payment account would otherwise silently fail the money path further downstream."""
     _require_document_currency(fields.currency_code)
     if type_code.is_invoice and verified_payment_iban is None:
         raise EInvoiceError(
@@ -649,7 +648,7 @@ def canonical_xml_diff(a: bytes, b: bytes) -> list[str]:
     """Canonicalise (C14N 1.1) `a` and `b` and return the unified-diff lines between them
     (empty when they are canonically identical). Used to compare a freshly built document
     against a pinned "gold" document irrespective of attribute order or insignificant
-    whitespace (PRD §10 M4.3)."""
+    whitespace."""
     import difflib
 
     def _c14n_lines(xml: bytes) -> list[str]:

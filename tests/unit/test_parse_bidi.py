@@ -1,5 +1,5 @@
 """Tests for `apx.parse.bidi`: recovering logical reading order and base Arabic letters from a PDF
-line whose glyphs come back in visual order as presentation forms (PRD §10 M3.1). The visual
+line whose glyphs come back in visual order as presentation forms. The visual
 strings below are copied from a factory AR-first invoice's pdfplumber output (doc 41f5771c,
 whose IBAN the extractor missed), written as escapes so this file stays plain ASCII."""
 

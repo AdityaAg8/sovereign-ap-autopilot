@@ -1,4 +1,4 @@
-"""Ops chat and audit-trail endpoints (PRD §10 M9.3). `POST /chat` streams server-sent events: one
+"""Ops chat and audit-trail endpoints. `POST /chat` streams server-sent events: one
 `step` per tool call while the agent works, then a `reply` whose citations carry links to the
 cited records (audit citations resolve to their invoice's audit tab). `GET /invoices/{id}/audit`
 returns that tab: the invoice's hash-chained audit events with only scalar facts exposed."""

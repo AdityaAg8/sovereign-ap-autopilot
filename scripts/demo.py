@@ -1,4 +1,4 @@
-"""`make demo` driver (PRD §10 M10.5): drops five scenarios -- clean, bilingual, poisoned, a
+"""`make demo` driver: drops five scenarios -- clean, bilingual, poisoned, a
 post-bank-change invoice and a resubmitted duplicate -- into the running stack's inbox, asserts
 each one's outcome against `GET /invoices/{id}` (approving the clean and bilingual ones through
 the API so they reach the archive) and shows progress in an aligned live table that honours

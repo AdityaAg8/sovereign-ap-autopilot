@@ -1,8 +1,7 @@
 """Per-field trust features (ADR-0009 §4): the comparator, agreement, format validity, OCR
 support, the arbiter vote, hard-reject rules and the 28-column encoder that the calibrator and
-Learn-then-Test read (PRD §6.1). Only this module and apx.trust.calibration/ltt/simulation read
-the cal split.
-"""
+Learn-then-Test read. Only this module and apx.trust.calibration/ltt/simulation read
+the cal split."""
 
 from __future__ import annotations
 
@@ -105,14 +104,14 @@ def format_valid(kind: FieldKind, value: str | None) -> bool:
 
 
 def _is_valid_trn(trn: str) -> bool:
-    """UAE TRN: 15 digits. Local copy of the not-yet-implemented apx.validate rule (M4), kept in
+    """UAE TRN: 15 digits. Local copy of the not-yet-implemented apx.validate rule, kept in
     sync by test_features.py; consolidate once apx.validate.is_valid_trn lands."""
     return bool(re.fullmatch(r"\d{15}", trn))
 
 
 def _is_valid_iban(iban: str) -> bool:
     """ISO 13616 IBAN with mod-97 checksum. Local copy of the not-yet-implemented
-    apx.validate.is_valid_iban rule (M4); consolidate once that module lands."""
+    apx.validate.is_valid_iban rule; consolidate once that module lands."""
     if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", iban):
         return False
     rearranged = iban[4:] + iban[:4]

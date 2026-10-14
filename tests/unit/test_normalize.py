@@ -1,5 +1,5 @@
 """Tests for `apx.extract.normalize`: unit cases for dates, amounts, TRN and IBAN, plus
-hypothesis property tests for digit conversion and amount parsing (PRD §10 M3.2)."""
+hypothesis property tests for digit conversion and amount parsing."""
 
 from __future__ import annotations
 

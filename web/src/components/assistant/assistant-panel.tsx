@@ -1,4 +1,4 @@
-/** The ops assistant panel (PRD §10 M9.3): a right-hand sheet where staff ask about invoices and
+/** The ops assistant panel: a right-hand sheet where staff ask about invoices and
  * decisions. While the assistant works, each tool call appears as a step; the answer arrives
  * with inline citation chips that open the cited audit event or record. It can read and draft,
  * never approve or pay, and the panel says so up front. */

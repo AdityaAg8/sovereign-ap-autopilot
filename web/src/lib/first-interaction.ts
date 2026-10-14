@@ -1,7 +1,7 @@
 /** Defers non-critical work until the person first interacts with the page (pointer, touch or
  * key). Used to warm lazily loaded overlays (command palette, shortcut help, assistant panel,
  * toasts) so their chunks never compete with first render yet are ready by the time a shortcut
- * or click needs them (Lighthouse budget, .claude/rules/design.md). */
+ * or click needs them (Lighthouse budget). */
 
 "use client";
 

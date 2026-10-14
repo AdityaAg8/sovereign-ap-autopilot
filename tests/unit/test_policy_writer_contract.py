@@ -1,5 +1,5 @@
 """Structural test: every PaymentStateWriter method accepts a `Grant`, so no payment-state
-mutator can be called without one (ADR-0008 K6, M6.5)."""
+mutator can be called without one (ADR-0008 K6)."""
 
 from __future__ import annotations
 
