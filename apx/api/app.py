@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Sovereign AP Autopilot API",
         description="JWT-authenticated REST + SSE API for invoice review and approval.",
-        version="0.1.0",
+        version="1.0.0",
     )
 
     settings = get_settings()

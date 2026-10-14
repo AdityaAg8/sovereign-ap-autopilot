@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/AdityaAg8/sovereign-ap-autopilot/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AdityaAg8/sovereign-ap-autopilot/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-3b6ea5"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3b6ea5"></a>
   <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-3776ab?logo=python&amp;logoColor=white">
   <img alt="TypeScript strict" src="https://img.shields.io/badge/typescript-strict-3178c6?logo=typescript&amp;logoColor=white">
   <img alt="PINT AE 1.0.4" src="https://img.shields.io/badge/PINT%20AE-1.0.4-6b7280">
@@ -538,7 +538,7 @@ Contribution workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License and acknowledgements
 
-Code is licensed under the [Apache License 2.0](LICENSE).
+Code is licensed under the [MIT License](LICENSE).
 
 Everything that runs at request time is Apache-2.0, MIT or BSD. This project builds on
 PaddleOCR-VL (PaddlePaddle), Qwen3.5, Qwen3-Embedding and Qwen3-VL-Embedding (Qwen team),

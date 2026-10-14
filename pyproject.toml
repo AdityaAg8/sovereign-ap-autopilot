@@ -3,11 +3,12 @@
 
 [project]
 name = "sovereign-ap-autopilot"
-version = "0.0.1"
-description = "Local-only AP agent: UAE PINT AE e-invoicing with fraud checks, a provable field error rate and injection-proof payments."
+version = "1.0.0"
+description = "Local-only accounts-payable agent: English and Arabic supplier invoices become validated UAE PINT AE e-invoices, with fraud checks, a measured field error rate and guarded payments."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-license = { text = "Apache-2.0" }
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -63,7 +64,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
