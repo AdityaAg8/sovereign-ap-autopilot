@@ -59,8 +59,8 @@ models:
     ttl: 600
 
   extractor-b:
-    name: "Extractor B (Qwen3.5-4B + LoRA)"
-    description: "Extraction stage, our LoRA lands as a --lora flag."
+    name: "Extractor B (Qwen3.5-4B)"
+    description: "Extraction stage, served as the base model; a promoted LoRA would be added with --lora."
     # ADR-0013: an explicit --parallel is required. Unset, this llama.cpp build picks 4 slots
     # sharing ONE unified 8192-token cache (n_slots=4, kv_unified=true), so concurrent 3-page
     # prompts overflowed it ("Context size has been exceeded", "failed to process mtmd chunk").
