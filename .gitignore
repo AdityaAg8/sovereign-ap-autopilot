@@ -43,22 +43,5 @@ node_modules/
 Thumbs.db
 
 
-# Local-only notes, planning files and editor/agent tooling; they are not part of the project.
-PROGRESS.md
-BLOCKED.md
-KICKOFF.md
-REVIEW.md
-PRD.md
-CLAUDE.md
-CLAUDE.local.md
-AGENTS.md
-**/CLAUDE.md
-**/AGENTS.md
-.claude/
 # Machine-specific preflight output (scripts/preflight.sh)
 reports/env.md
-# Local developer console and remote-session setup (local-only)
-tools/ops-dashboard/
-tests/unit/test_ops_dashboard.py
-scripts/cloud-setup.sh
-.kilo/

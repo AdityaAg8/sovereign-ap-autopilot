@@ -20,7 +20,7 @@ set -euo pipefail
 mkdir -p /work
 set +e
 tar -C /src --exclude=./.venv --exclude=./models --exclude=./logs --exclude=./node_modules \
-  --exclude=./web/node_modules --exclude=./web/.next --exclude=./.claude/worktrees --exclude=./.env \
+  --exclude=./web/node_modules --exclude=./web/.next --exclude='./.*/worktrees' --exclude=./.env \
   --exclude='./data/*' --exclude='*.gguf' --exclude='*.safetensors' --exclude=__pycache__ \
   -cf - . | tar -C /work -xf -
 status=${PIPESTATUS[0]}

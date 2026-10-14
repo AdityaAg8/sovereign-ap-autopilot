@@ -1,8 +1,6 @@
 # Keeps the apx image build context small and secret-free (infra/docker/apx/Dockerfile).
-.git
-.env
-.venv
-.claude
+# Hidden files and folders: git metadata, secrets, the virtualenv, editor state.
+.*
 data
 models
 logs

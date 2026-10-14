@@ -48,8 +48,6 @@ SKIP_DIR_PARTS = {
     ".pytest_cache",
     "htmlcov",
     ".turbo",
-    # Local editor tooling, not product code.
-    ".claude",
 }
 
 # Individual files that are generated or otherwise exempt (lockfiles, generated types).

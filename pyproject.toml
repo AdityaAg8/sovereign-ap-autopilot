@@ -74,7 +74,6 @@ packages = ["apx"]
 target-version = "py312"
 line-length = 100
 src = ["apx", "factory", "evals", "ml", "attacks", "tests", "scripts"]
-extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
