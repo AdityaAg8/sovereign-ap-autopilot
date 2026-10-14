@@ -85,11 +85,15 @@ export function KpiTiles({ kpis }: { kpis: OpsKpis }) {
     },
   ];
   return (
-    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-      {tiles.map((tile) => (
+    <dl className="grid grid-cols-2 gap-3 md:grid-cols-6 xl:grid-cols-5">
+      {tiles.map((tile, index) => (
         <div
           key={tile.id}
-          className="panel flex flex-col px-4 py-3.5 last:col-span-2 sm:last:col-span-1"
+          // Three then two on tablets (a six-track grid), so no row ends in an empty cell.
+          className={cn(
+            "panel flex flex-col px-4 py-3.5 last:col-span-2 xl:col-span-1 xl:last:col-span-1",
+            index < 3 ? "md:col-span-2" : "md:col-span-3 md:last:col-span-3",
+          )}
           data-testid={`kpi-${tile.id}`}
         >
           <dt className="text-muted-foreground text-xs font-medium">{tile.label}</dt>

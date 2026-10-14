@@ -43,7 +43,7 @@ export function NowStrip({
 
   return (
     <section aria-label="Now" className="panel overflow-hidden">
-      <div className="grid md:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 px-5 py-4">
           <p className="text-muted-foreground flex items-center gap-2 text-xs">
             <span className="relative flex size-2" aria-hidden>
@@ -85,7 +85,7 @@ export function NowStrip({
             {gpuSentence(snapshot)}
           </p>
         </div>
-        <div className="border-border bg-muted/30 dark:bg-muted/20 flex flex-col justify-end border-t px-5 py-4 md:border-t-0 md:border-s">
+        <div className="border-border bg-muted/30 dark:bg-muted/20 flex flex-col justify-end border-t px-5 py-4 lg:border-t-0 lg:border-s">
           {history.length >= 2 ? (
             <Sparkline
               values={history}

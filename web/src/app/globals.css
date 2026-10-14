@@ -73,6 +73,7 @@
 /* Light: a cool paper canvas, white panels, an ink-teal sidebar and one teal accent taken from
    the invoice documents' own rule color. */
 :root {
+  color-scheme: light;
   --background: oklch(0.979 0.004 205);
   --foreground: oklch(0.2 0.02 235);
   --card: oklch(1 0 0);
@@ -125,6 +126,7 @@
 /* Dark: elevation reads as lightness (sidebar < canvas < panel < popover), shadows are dropped,
    and the accent and status hues are lifted so text on the dark panels stays above 4.5:1. */
 .dark {
+  color-scheme: dark;
   --background: oklch(0.172 0.012 232);
   --foreground: oklch(0.94 0.008 210);
   --card: oklch(0.206 0.014 232);

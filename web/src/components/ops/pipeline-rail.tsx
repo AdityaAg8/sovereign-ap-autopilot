@@ -42,7 +42,7 @@ export function PipelineRail({ stages }: { stages: OpsSnapshot["stages"] }) {
             >
               <span
                 className={cn(
-                  "min-w-0 truncate text-xs md:text-center",
+                  "min-w-0 truncate text-xs md:overflow-visible md:text-center md:leading-tight md:whitespace-normal",
                   n > 0 ? "text-foreground" : "text-muted-foreground",
                 )}
               >
