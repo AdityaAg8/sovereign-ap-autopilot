@@ -414,7 +414,7 @@ def render_report(
         if official == {True}
         else "not yet scored"
         if not official
-        else "the built-in fallback scorer (official framework clone absent)"
+        else "the fallback scorer (official framework clone absent)"
     )
     lines = [
         "# Extractor A bake-off",
@@ -423,7 +423,7 @@ def render_report(
         "rows under `logs/bakeoff/` and `reports/bakeoff_probe.json`; nothing here is typed in.",
         "",
         f"- UAE: the fixed {BAKEOFF_SUBSET_SIZE}-document test subset (first {BAKEOFF_SUBSET_SIZE} "
-        f"sha256s of `evals/splits.json` uae/test, shared with the Extractor B P2 latency gate), "
+        f"sha256s of `evals/splits.json` uae/test, shared with Extractor B's P2 latency gate), "
         f"digest `{uae_digest}`.",
         f"- ExtractBench short: every eval document, digest `{eb_digest}`, value F1 through "
         f"{scorer}. Published Qwen3.5-9B one-shot: {PUBLISHED_EXTRACTBENCH_F1} (context only; "
@@ -457,7 +457,7 @@ def render_report(
         "",
         "## Decision",
         "",
-        f"Rule: Qwen3.5-9B stays unless a challenger's pooled UAE field F1 is at "
+        f"Rule (ADR-0016): Qwen3.5-9B stays unless a challenger's pooled UAE field F1 is at "
         f"least {F1_MARGIN_POINTS} point higher at a p50 latency of at most {LATENCY_RATIO_MAX}x "
         f"the baseline's, within the budget, keeping valid JSON ≥ {100 * VALID_JSON_MIN}% "
         "(ADR-0016). The MTP arm is a latency arm: reported, never a champion by itself.",

@@ -10,14 +10,14 @@ ADR behind whichever module you are changing.
 | [Getting started](getting-started.md) | Fresh machine to running demo, step by step |
 | [Commands](commands.md) | Every `make` target grouped by task, plus useful one-liners |
 | [Evaluation guide](evaluation.md) | Datasets, splits, what each report measures and how to regenerate it |
-| [Training Extractor B](training.md) | Running, watching, pausing and exporting the fine-tune; first-run results |
+| [Training Extractor B](training.md) | Running, watching, pausing and exporting the fine-tune; results per round |
 | [Glossary](glossary.md) | UAE e-invoicing, pipeline, security and ML terms in plain words |
 | [Architecture](architecture.md) | Modules, import direction, data flow, trust boundaries, GPU staging, the payee pin, the decision index |
-| [Security threat model](security.md) | Assets, attackers, STRIDE per boundary, attack trees, the A01-A12 attack categories, the SEC-01..25 control catalogue, residual risks |
-| [Runbook](runbook.md) | Starting and stopping the stack, service URLs, GPU budget and the training lock, common failures, migrations, the ops dashboard, audit verification |
+| [Security threat model](security.md) | Assets, attackers, STRIDE per boundary, attack trees, the A01-A12 attack categories, the control catalogue, residual risks |
+| [Runbook](runbook.md) | Starting and stopping the stack, service URLs, GPU budget and the training lock, common failures, migrations, audit verification |
 | [Demo walkthrough](demo.md) | What `make demo` stages and what each scenario shows |
 | [Models, datasets and licenses](licenses.md) | Every runtime and offline model and dataset, with its license |
-| [Extractor B training loop](design/training-loop.md) | Builder-level design of the pausable M7.1 fine-tune (checkpoints, resume, data guards) |
+| [Extractor B training loop](design/training-loop.md) | Implementation notes for the pausable Extractor B fine-tune (checkpoints, resume, data guards) |
 
 ## Architecture decision records
 
@@ -37,7 +37,11 @@ ADR behind whichever module you are changing.
 | [0013](adr/0013-live-serving-budget-and-backpressure.md) | Whole-card VRAM budget of 11.8 GB per stage, A and B swap, preflight headroom checks |
 | [0014](adr/0014-p1-multiple-verified-accounts.md) | With several verified accounts, the invoice IBAN selects one and never introduces a payee; the payee is pinned from routing to build |
 | [0015](adr/0015-promotion-gates.md) | An Extractor B challenger is promoted only if no gate (G1-G11) regresses |
-| [0019](adr/0019-real-data-evaluation-track.md) | Real-data track: A and B measured on ExtractBench, CORD v2 and DocILE, then B retrained with CORD and DocILE train and measured before and after on the same hold-outs |
+| [0016](adr/0016-extractor-a-bakeoff.md) | Extractor A bake-off against two newer models: designed and built, not run for v1.0 |
+| [0017](adr/0017-injection-guard-runtime.md) | The fine-tuned injection guard runs in the worker's scan step, on CPU |
+| [0018](adr/0018-reduced-gpu-plan.md) | Reduced GPU plan: champion-only trust calibration, deferred bake-off and B retrain |
+| [0019](adr/0019-real-data-evaluation-track.md) | Real-data track: A and B measured on ExtractBench and CORD v2, then B retrained with CORD train and measured before and after on the CORD test split; DocILE was not run (no access token) |
+| [0020](adr/0020-v1-scope-and-deferred-items.md) | v1.0 scope: the teacher round is skipped; the arbiter, the bake-off and live retraining are deferred |
 
 There is no ADR-0007; the number was not used.
 

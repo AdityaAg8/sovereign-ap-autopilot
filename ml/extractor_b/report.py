@@ -495,7 +495,7 @@ def render(ev: Evidence, *, generated_at: datetime) -> str:
         "",
         "## Dev curve",
         "",
-        "Generative evals are greedy decoding scored by the shared scorer (micro field F1 over the "
+        "Generative evals are greedy decoding scored by `evals/scorers` (micro field F1 over the "
         "14 header fields, in points). Dev-loss evals are teacher-forced.",
         "",
         "| Step | Kind | Dev F1 | Valid JSON | Dev loss |",

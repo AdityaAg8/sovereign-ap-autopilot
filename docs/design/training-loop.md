@@ -1,6 +1,6 @@
-# Design: Extractor B training loop (M7.1)
+# Design: Extractor B training loop
 
-This is the builder-level spec for the checkpointed, resumable and guarded Extractor B fine-tune.
+Implementation notes for the checkpointed, resumable and guarded Extractor B fine-tune.
 The decisions and their reasons are in ADR-0011, the recipe, data mix, export and promotion gates
 in ADR-0009 §1, and the typed contracts in `ml/extractor_b/interfaces.py`. Nothing here changes a
 gate.
@@ -17,7 +17,7 @@ gate.
 | `ml/extractor_b/checkpoints.py` | no | `FsCheckpointStore(CheckpointStore)`, `atomic_write_json`, `retention_plan`, `compute_fingerprint` |
 | `ml/extractor_b/selection.py` | no | `select_best` |
 | `ml/extractor_b/gpu.py` | no (shells out to `nvidia-smi`) | `preflight_gpu`, `GpuLock` context manager |
-| `ml/extractor_b/evaluator.py` | yes | `HfDevEvaluator(DevEvaluator)`: dev loss + greedy generation scored by the M1.3 scorer |
+| `ml/extractor_b/evaluator.py` | yes | `HfDevEvaluator(DevEvaluator)`: dev loss + greedy generation scored by `evals/scorers` |
 | `ml/extractor_b/trainer.py` | yes | `GuardedSFTTrainer(SFTTrainer)` and `LoopCallback(TrainerCallback)` |
 | `ml/extractor_b/train.py` | yes (lazy) | CLI: `--probe`, `--new-run`, `--resume auto\|<step>`, `--rung` |
 
@@ -165,7 +165,7 @@ writes checkpoints.
 
 Sort output rows by `sample_id` so the manifest sha256 is stable.
 
-## 6. Makefile and Compose (orchestrator-owned)
+## 6. Makefile and Compose
 
 - `train-b-probe`: `gpu-free`, then the probe in the foreground.
 - `train-b`: `gpu-free`, then `nohup … --resume auto > logs/extractor_b_train.log 2>&1 &`; record
@@ -206,19 +206,3 @@ base variables explicitly. `ml.extractor_b.train.resolve_base` never guesses a p
 | `tests/trainer/test_resume_equivalence.py` | trainer image, CPU | tiny random causal LM (from config, no download) with LoRA via peft and `GuardedSFTTrainer`: 12 steps straight vs 6 + SIGTERM + resume 6 → equal adapter tensors, optimizer state and loss sequence; `torch.use_deterministic_algorithms(True)` |
 | `tests/trainer/test_nan_skip.py` | trainer image, CPU | a planted NaN batch is skipped and logged to `spikes.jsonl`; weights stay finite |
 | `tests/trainer/test_private_api_pins.py` | trainer image | the overridden private Trainer methods exist with the expected signatures |
-
-## 8. Builder task plan
-
-1. `ml/extractor_b/config.py` + `config.yaml`: YAML → `TrainConfig`, rung table, derived-step helpers. Tests.
-2. `ml/extractor_b/checkpoints.py`: `FsCheckpointStore`, `atomic_write_json`, `retention_plan`, `compute_fingerprint`. Tests 1 and 5 in §7.
-3. `ml/extractor_b/selection.py`: `select_best`. Test 4.
-4. `ml/extractor_b/guards.py`: `run_guards`, `label_sanity`, `spike_guard_observe`. Tests 2 and 3.
-5. `ml/extractor_b/gpu.py`: `preflight_gpu`, `GpuLock`. Test 6.
-6. `pyproject.toml` (orchestrator): add `ml` to mypy `files`, overrides for the torch stack, the `trainer` marker.
-7. `ml/extractor_b/mappings.py` + `data.py` (ADR-0009 plan item 7), emitting `raw_*.jsonl` and pre-resized pages.
-8. `ml/extractor_b/evaluator.py`: `HfDevEvaluator` (dev loss, greedy generation, M1.3 scorer).
-9. `ml/extractor_b/trainer.py`: `GuardedSFTTrainer`, `LoopCallback`, SIGTERM handler. Trainer tests in §7.
-10. `ml/extractor_b/train.py`: CLI, run flow in §4, probe, MLflow logging, exit codes 0/2/3.
-11. Compose `trainer` settings and Makefile targets in §6 (orchestrator); add `trainer` to the no-egress test.
-12. Run `make test-trainer` (CPU) once the GPU eval finishes, then `make train-b-probe`, then `make train-b`.
-13. Export and promote from `best.json` (ADR-0009 plan items 9-10); `reports/extractor_b.md` gets the selected step, dev F1 curve, quarantine table, skipped steps and resume count.

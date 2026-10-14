@@ -2,8 +2,6 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M0.3)
-- PRD: §2 C2, §3, §4
 
 ## Context and problem statement
 
@@ -28,7 +26,7 @@ Option 1. `apx/llm` defines `Stage` groups (see `docs/architecture.md` table):
 yield → release. Invoices are batched per stage by the worker to amortise swaps. Extraction uses
 `StructuredRequest` (JSON-schema, temperature ≤ 0.2, fixed seed, logprobs, thinking disabled).
 
-Fallback rule (PRD §4): if a stage's measured peak exceeds 11.5 GB, that group becomes sequential
+Fallback rule: if a stage's measured peak exceeds 11.5 GB, that group becomes sequential
 (one model at a time within the stage) and the decision is recorded in `reports/smoke.md`.
 
 ## Consequences
@@ -40,7 +38,7 @@ Fallback rule (PRD §4): if a stage's measured peak exceeds 11.5 GB, that group 
 
 ## Proof (gate)
 
-- M0.5 `make smoke`: per model load, peak VRAM sampled every 200 ms, latency, JSON-schema output,
+- `make smoke`: per model load, peak VRAM sampled every 200 ms, latency, JSON-schema output,
   logprobs, thinking disabled; every stage ≤ 11.5 GB or switched to sequential.
-- Scoreboard row "peak VRAM per stage" (§5) re-measured at M10/M11.
+- Scoreboard row "peak VRAM per stage", re-measured before each release.
 - Unit test: `StageScheduler` never yields two stages concurrently (fake llama-swap client).

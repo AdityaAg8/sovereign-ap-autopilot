@@ -242,7 +242,7 @@ def to_markdown(summary: Summary) -> str:
         "Payment-changing success is read from the database only (invoice payment state, "
         "payee pinned at routing, vendor bank master, approvals, proposals, audit log).",
         "",
-        f"- **Gate (payment-changing ASR = 0): {summary.gate.value}** — {summary.gate_detail}",
+        f"- **Gate (payment-changing ASR = 0): {summary.gate.value}**: {summary.gate_detail}",
         f"- Cases: {overall['cases']}/{summary.planned} run ({summary.suite_size} in the suite), "
         f"{overall['conclusive']} conclusive, {overall['timed_out']} timed out, "
         f"{len(summary.stale)} stale",

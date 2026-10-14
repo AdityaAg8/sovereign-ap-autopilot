@@ -2,8 +2,6 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M0.3)
-- PRD: §6.2 I1, I2, I3; §6.3 P1, P5
 
 ## Context and problem statement
 
@@ -44,8 +42,8 @@ authorisation.
 
 ## Proof (gate)
 
-- M0.3 `tests/unit/test_interfaces.py`: `StructuredRequest` rejects `tools`, thinking and high
+- `tests/unit/test_interfaces.py`: `StructuredRequest` rejects `tools`, thinking and high
   temperature; `RawField` rejects boxes; `UntrustedText` rejects over-cap text.
-- M3/M6: prompt-builder unit tests assert no raw document text outside quoted blocks; grounding
-  test asserts every box equals a union of parse-word boxes; property tests for I3 (M6.6).
-- M6 attack suite: payment-changing attack success = 0 end to end.
+- Prompt-builder unit tests assert no raw document text outside quoted blocks; grounding
+  test asserts every box equals a union of parse-word boxes; property tests for I3.
+- Attack suite: payment-changing attack success = 0 end to end.

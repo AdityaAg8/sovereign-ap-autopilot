@@ -1,16 +1,14 @@
-# ADR-0009: Extractor B training and trust-gate features (M7 design)
+# ADR-0009: Extractor B training and trust-gate features
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M7 OPUS-DESIGN)
-- PRD: §2 C1-C5, §4, §5, §6.1, §6.2 I1/I2/I5/I6, §10 M7
 - Related: ADR-0002 (VRAM staging), ADR-0004 (trust gate method), ADR-0005 (eval protocol),
   ADR-0006 (Windows host, Smart App Control), ADR-0008 (typed boundary, `UntrustedText`)
 - Interfaces: `apx/trust/interfaces.py`
 
 ## Context and problem statement
 
-M7 has to deliver a second, cheaper extractor (B) and a trust gate whose claim is statistical:
+The project needs a second, cheaper extractor (B) and a trust gate whose claim is statistical:
 error among auto-accepted fields ≤ α with probability ≥ 1 − δ. ADR-0004 fixed the method
 (calibrated P(correct) plus Learn-then-Test). It left open the exact features, how the cal split
 is used, the grid, the proof simulation and how B is trained on this host. Four facts constrain
@@ -27,7 +25,7 @@ the answer:
 
 ## Decision drivers
 
-Simplest design that passes the M7 gates; a guarantee that is valid, not just plausible; every
+Simplest design that passes the B and trust-gate gates; a guarantee that is valid, not just plausible; every
 definition executable without further design; no outbound calls; no cal or test data in training.
 
 ## Considered options
@@ -44,7 +42,7 @@ definition executable without further design; no outbound calls; no cal or test 
 
 ## Decision outcome
 
-### 1. Extractor B (M7.1)
+### 1. Extractor B
 
 **1.1 Recipe.** Qwen3.5-4B (vision), Unsloth `FastVisionModel`, bf16 weights, LoRA r = 16,
 α = 16, dropout 0, `finetune_vision_layers=False`, `finetune_language_layers=True`,
@@ -76,7 +74,7 @@ Drops are counted per source in MLflow.
 
 | Source | Use | Cap | Label mapping |
 |---|---|---|---|
-| UAE factory `train` minus dev | train | all (~3,325) | factory labels (M2.3) |
+| UAE factory `train` minus dev | train | all (~3,325) | factory labels |
 | UAE dev: 5% of train groups, hash salt `extractor-b-dev-v1` | checkpoint selection | ~175 | same |
 | DocILE `docile_train` (if token present) | train | 2,500, seeded sample | KILE: document_id→invoice_number, date_issue, date_due, vendor_name, vendor_address, vendor_tax_id→supplier_trn, customer_billing_name→buyer_name, customer_tax_id→buyer_trn, currency_code_amount_due→currency, order_id→po_number, amount_total_net→subtotal, amount_total_tax→vat_total, amount_total_gross→total, iban. LIR: description, quantity, unit_price_net, amount_net, tax_rate |
 | FATURA `train` | train | 30 per template (≤ 1,500) | per-class table; strip key text from boxes that include it |
@@ -100,8 +98,7 @@ becomes a new `infra/models.yaml` intent `extractor_b_train_base`, resolved by
 `scripts/resolve_models.py` and never guessed.
 The job runs detached (`nohup docker compose --profile train run --rm trainer … >
 logs/extractor_b_train.log`), checkpoints every 250 steps and supports `--resume`. Preflight
-requires `docker info` MemTotal ≥ 16 GiB (est.). If that fails, a BLOCKED.md entry asks the
-human to set `.wslconfig` `[wsl2] memory=48GB` and run `wsl --shutdown`.
+requires `docker info` MemTotal ≥ 16 GiB (est.). If that fails, the host's owner has to set `.wslconfig` `[wsl2] memory=48GB` and run `wsl --shutdown`.
 
 **1.6 VRAM budget ≤ 11.5 GB** (all values est. until probed): bf16 weights ~9.0 GB, LoRA
 parameters + gradients + 8-bit Adam state < 0.3 GB, checkpointed activations at 4096 tokens and
@@ -123,7 +120,7 @@ MLflow and models.lock metadata. B's runtime prompt builder reads it from there,
 the resolution B was trained at.
 
 **1.7 Export.** (a) `save_pretrained_merged(..., "merged_16bit")`. (b) Pinned llama.cpp:
-`convert_hf_to_gguf.py --outtype bf16`, then `llama-quantize … Q4_K_M` (PRD §4 "GGUF Q4"), then
+`convert_hf_to_gguf.py --outtype bf16`, then `llama-quantize … Q4_K_M` (the serving spec's "GGUF Q4"), then
 `convert_hf_to_gguf.py --mmproj --outtype f16`. (c) Because the vision tower was frozen, the
 exported mmproj must be tensor-equal to the pinned upstream `mmproj-F16.gguf`. A mismatch fails
 the export, because it means a conversion or base-revision error. (d) llama-server smoke test: 5
@@ -138,8 +135,8 @@ llama-swap `extract` group.
 
 | Gate | Definition |
 |---|---|
-| P1 accuracy | UAE test micro field F1 over the 14 header fields (M1.3 scorer, EN+AR pooled) ≥ F1_A − 3.0 points. EN and AR are reported separately |
-| P2 latency | p50 seconds per invoice for the extract call, warm, sequential, on the 200-document M3.4 subset in the same session: p50_B ≤ 0.60 × p50_A. p95 is reported |
+| P1 accuracy | UAE test micro field F1 over the 14 header fields (the eval harness scorer, EN+AR pooled) ≥ F1_A − 3.0 points. EN and AR are reported separately |
+| P2 latency | p50 seconds per invoice for the extract call, warm, sequential, on the 200-document latency subset in the same session: p50_B ≤ 0.60 × p50_A. p95 is reported |
 | P3 JSON | valid JSON ≥ 99% on UAE test |
 | P4 VRAM | `extract` stage peak with A and B co-resident ≤ 11.5 GB, or the ADR-0002 sequential fallback is recorded |
 | P5 hygiene | leakage test green on the run's manifest; base revision matches models.lock |
@@ -150,15 +147,15 @@ rollback is an alias move. A champion change invalidates the calibrator (§5).
 
 Checkpoints are selected by UAE dev F1 at the end of each epoch; test is read once per
 challenger. If P1 or P2 fails: first a third epoch from the dev-best checkpoint, then r = 32 if
-the probe allows, then the M7.2 round if it is a go. If it still fails, write an ADR with
-evidence (the PRD allows this) that names which version the trust gate uses. B's quality moves
+the probe allows, then the teacher round if it is a go. If it still fails, write an ADR with
+evidence that names which version the trust gate uses. B's quality moves
 the straight-through rate, never the validity of the guarantee. B's F1 on cal is reported by
 `apx/trust` from its cached cal outputs, because only trust reads cal.
 
-### 2. Teacher decision (M7.2)
+### 2. Teacher decision
 
 The host is eligible: 63 GB RAM ≥ 32 GB (`reports/env.md`). Eligibility alone is not a go. After
-M7.1 round 1, `ml/teacher/decide.py` evaluates these criteria in order and stops at the first
+B's round 1, `ml/teacher/decide.py` evaluates these criteria in order and stops at the first
 failure:
 
 - **T1 headroom:** F1_B,dev < F1_A,dev − 1.0 on UAE dev. Otherwise silver labels have nothing to
@@ -167,7 +164,7 @@ failure:
   carry gold labels, so silver labels for them are strictly worse; the only such pool is
   `data/reality/`. DocILE's unlabeled set is excluded by §5.
 - **T3 memory:** Docker VM MemTotal ≥ 28 GiB. The CPU-offloaded 27B needs ~10 GB of RAM inside
-  the llama-server container. Otherwise BLOCKED.md with the `.wslconfig` fix from §1.5.
+  the llama-server container. Otherwise the host needs the `.wslconfig` fix from §1.5.
 - **T4 pilot:** Qwen3.8-27B UD-Q4_K_XL with `-ngl` tuned so the GPU stays ≤ 11.5 GB (the C2
   offload exception covers the teacher only), run on 30 UAE dev documents: ≥ 29 valid JSON,
   F1_teacher ≥ max(F1_A, F1_B) + 2.0, throughput ≥ 25 documents per hour.
@@ -180,7 +177,7 @@ round-2 mix, and round 2 trains from the base model with the §1 recipe. To prom
 pass P1-P5 and beat the round-1 champion by ≥ 0.5 F1. Either way the outcome is recorded in the
 addendum below. The expected outcome is skip at T2, unless the human adds reality PDFs.
 
-### 3. Arbiter contract (M7.3)
+### 3. Arbiter contract
 
 **3.1 When.** A field is disputed iff `agreement < 1.0` (§4.2), so for TEXT kinds that means any
 difference after normalisation. Every disputed field of an invoice goes into one call. The call
@@ -219,7 +216,7 @@ arbiter is valid for a field iff the JSON is valid.
 **3.5 Report** (`reports/arbiter.md`, UAE test disputed fields): arbiter accuracy, A-only and
 B-only accuracy on the same fields, vote distribution, EN/AR split.
 
-### 4. Per-field features (M7.4)
+### 4. Per-field features
 
 **4.1 Kinds and comparator.** `FIELD_KINDS` maps each `FieldName` to a kind.
 `normalize_for_compare(kind, raw)` returns None for blank input. All kinds first apply NFKC, map
@@ -238,7 +235,7 @@ with a space and strip. Then:
 
 A structured value that cannot be parsed becomes `"~" + TEXT form`. The function never raises,
 and such a value never equals a parsed one. One comparator serves three uses: agreement, the
-trust label (`is_correct`), and the UAE F1 scorer. If M1.3 already has a comparator, a test must
+trust label (`is_correct`), and the UAE F1 scorer. If the eval harness already has a comparator, a test must
 prove the two are equivalent.
 
 **4.2 Agreement** ∈ [0, 1]:
@@ -307,7 +304,7 @@ arbiter_agrees_a, arbiter_agrees_b, arbiter_agrees_neither, language_ar, then th
 for the 14 `FieldName`s. Bools are encoded as 0/1. Line items are outside the v1 gate; they are
 guarded by validation (VAT math, subtotal = Σ lines, 3-way match), which is a documented limit.
 
-### 5. Calibration (M7.4)
+### 5. Calibration
 
 1. **Partition.** Cal records are split by `partition_cal` into FIT (40%) and LTT (60%) by group,
    using u = sha256(salt + group) / 2⁶⁴. The split is label-independent and fixed, which is what
@@ -332,7 +329,7 @@ guarded by validation (VAT math, subtotal = Σ lines, 3-way match), which is a d
 
 #### 5.A Amendment (2026-09-25): the cal job, the persisted artifact and the runtime gate
 
-Implementation decisions of M7.4/M7.5; none changes a feature, the fit, the grid or a gate.
+Implementation decisions of the calibration and test jobs; none changes a feature, the fit, the grid or a gate.
 
 - **Rows, not cached results.** The cal job reuses the extraction harness (`evals.extraction_a
   --split cal`). Rows record, per field, the mean and min logprob, the final value the features
@@ -340,7 +337,7 @@ Implementation decisions of M7.4/M7.5; none changes a feature, the fit, the grid
   `apx.trust.features.field_features` the worker calls; a unit test proves row features equal
   `ExtractionFeatureBuilder` features. The job requires row schema 3 (see the OCR fix below);
   rows of schemas 1 and 2 are refused, never imputed.
-- **No arbiter is served yet** (M7.3), so, as at runtime, every disputed field is INVALID and
+- **No arbiter is served yet**, so, as at runtime, every disputed field is INVALID and
   hard-rejected by H2 on cal, test and at runtime alike.
 - **Label.** `is_correct` of the extracted (raw) final value against the gold or, for party
   names, any printed rendering. The grounder's normalised form is not used for the label.
@@ -348,7 +345,7 @@ Implementation decisions of M7.4/M7.5; none changes a feature, the fit, the grid
   (no pickles), λ̂ per α, and the A/B/arbiter identities (served GGUF sha256 + prompt version;
   the arbiter is an explicit null while none is served). `active_calibrator.json` pins its
   sha256. The job always saves the artifact, but activates it, and clears the ADR-0015
-  invalidation marker, only after the M7.5 test gate passed (test rows complete and from the
+  invalidation marker, only after the test gate passed (test rows complete and from the
   fitted builds, error among auto-accepted fields <= alpha at alpha = 1%) and only when the
   served champion aliases serve those same A/B/arbiter builds; otherwise it says why and the
   previous active calibrator (or the stale marker) stays.
@@ -379,7 +376,7 @@ saw. If one is made active anyway, the runtime gate refuses every decision with 
 `calibrator_champion_only` (every field to REVIEW, audited). It never scores B-derived features
 with A's calibrator, and it never ignores B output.
 
-### 6. Learn-then-Test (M7.5)
+### 6. Learn-then-Test
 
 The grid is `default_grid()`: λ₁ = 1.0, then λⱼ = 1 − 10^(−4 + 0.05(j−2)) for j = 2…76 (0.9999
 down to 0.499). It is fixed before any data, dense near 1, and fixed-sequence testing pays no
@@ -400,7 +397,7 @@ rates per α, plus scoreboard rows.
 
 #### 6.A Amendment (2026-09-22): the label-free testable grid, `LTT_MIN_ACCEPTED = 1500`
 
-**Evidence.** The M7.5 builder found the §7 simulation degenerate. Re-analysis showed two
+**Evidence.** Building the test gate showed the §7 simulation was degenerate. Re-analysis showed two
 defects, and this section fixes the one in the walk. Isotonic regression with y_max = 1 gives
 p = 1.0 to the longest all-correct run of top out-of-fold scores in FIT. The LTT size of that
 block is small and random: k₁ = 1, 10, 53, 229, 303 and 1041 were observed on seed 20260922. At
@@ -418,7 +415,7 @@ read. This defines the grid; it does not relax the test. The testable grid is {�
 `default_grid()` : #(LTT p ≥ λⱼ) ≥ k_min}, a function of the LTT scores only. So the
 fixed-sequence order is fixed before any label is read, and the FWER argument is unchanged: a
 false rejection requires rejecting the first true null in that order, which has probability ≤ δ.
-The p-values, the walk and PRD §6.1 are unchanged, and the old kⱼ = 0 rule is the case
+The p-values, the walk and the ADR-0004 method are unchanged, and the old kⱼ = 0 rule is the case
 k_min = 1. A cal set with fewer than k_min non-hard-rejected LTT fields accepts nothing. Changing
 k_min is an ADR change (I6), like the grid.
 
@@ -438,7 +435,7 @@ Sensitivity on the §7.A generator (first 100 splits): k_min = 1 finds λ̂ in 5
 probability, and it costs no accept rate here. The cost: the smallest non-empty accept set is
 1500 LTT fields, about 24% of the ~6.3k UAE LTT fields.
 
-### 7. Simulation test (the M7.5 gate; the generator is frozen by this ADR, I6)
+### 7. Simulation test (the test gate; the generator is frozen by this ADR, I6)
 
 **Generator** (`simulate_ltt_coverage`, numpy, seeded):
 
@@ -502,7 +499,7 @@ score-ordered ceiling is 0.869 at α (0.798 at 0.6%), so the features resolve al
 
 **Decision: pass criterion** (asserted, icc = 0; this replaces the Pass paragraph above):
 
-1. Coverage ≥ (1 − δ) − 0.02 = **0.93** (PRD §6.1, unchanged).
+1. Coverage ≥ (1 − δ) − 0.02 = **0.93** (ADR-0004, unchanged).
 2. λ̂ ≠ None in ≥ **450/500** splits (unchanged).
 3. Median reference accept rate ≥ **0.75 × `oracle_ceiling(config)`**, computed in code on the
    same reference set. This replaces the absolute 0.30.
@@ -543,7 +540,7 @@ run and machine also produced the 95 s serial figure quoted above under a 74-99%
 &gt;2x spread with no code change. A hard-coded wall-clock bound in the default test suite
 therefore fails intermittently for reasons unrelated to the code under test, which is exactly
 the flakiness the commit message ("flaky under load, not a spec") describes. The bound was never
-part of the PRD §6.1 spec; it was a self-imposed engineering budget for `make verify-m7`.
+part of the ADR-0004 method; it was a self-imposed engineering budget for `make verify-m7`.
 
 **Decision.** The bound is now reported, not asserted, in the default suite:
 
@@ -568,13 +565,13 @@ Caveats, stated in `reports/trust.md`:
 - The binomial test treats fields as independent. Fields cluster by document and template, so
   the report includes the ANOVA ICC of errors among accepted LTT fields by document and the
   design effect DEFF = 1 + (n̄ − 1)·ICC.
-- The guarantee is marginal over fields for the M2 factory distribution. It is not per field,
+- The guarantee is marginal over fields for the synthetic factory distribution. It is not per field,
   per language or per invoice, and it does not transfer to real documents: the reality set and
   DocILE get empirical error with a Clopper-Pearson CI and no guarantee claim.
 - Cal and test must come from the same factory run with grouped splits. Any change to a champion
   or the generator requires recalibration.
 
-If UAE test error > α at α = 1% (debugger, in this order):
+If UAE test error > α at α = 1%, debug in this order:
 
 1. Freeze α, δ, the grid and λ̂, and do not rerun on test.
 2. Leakage: run `test_no_leakage`; check that B's MLflow manifest is train-only and that the
@@ -592,8 +589,8 @@ If UAE test error > α at α = 1% (debugger, in this order):
 
 ### 9. Follow-ups
 
-- `apx/trust/features._is_valid_trn` and `_is_valid_iban` consolidate with `apx.validate` once M4
-  lands.
+- `apx/trust/features._is_valid_trn` and `_is_valid_iban` consolidate with `apx.validate` once the
+  validators land.
 
 ## Consequences
 
@@ -610,17 +607,17 @@ If UAE test error > α at α = 1% (debugger, in this order):
 
 ## Proof (gate)
 
-- M7.1: `reports/extractor_b.md` with P1-P5 values, the probe peak and rung, and the MLflow
+- Extractor B: `reports/extractor_b.md` with P1-P5 values, the probe peak and rung, and the MLflow
   version and alias; models.lock entry; leakage test green.
-- M7.2: the addendum below with the T1-T4 values and the go/skip decision.
-- M7.3: `reports/arbiter.md` (§3.5).
-- M7.4: reliability table and ECE on LTT and UAE test; unit and hypothesis tests for §4
+- Teacher: the addendum below with the T1-T4 values and the go/skip decision.
+- Arbiter: `reports/arbiter.md` (§3.5).
+- Calibration: reliability table and ECE on LTT and UAE test; unit and hypothesis tests for §4
   (comparator idempotent, agreement symmetric and within [0, 1], encode length 28, lexicon covers
   EN and AR for every field).
-- M7.5: the simulation test (§7, amended by §6.A and §7.A) passes in CI; UAE test error among accepted fields ≤ 1% at
+- Trust gate: the simulation test (§7, amended by §6.A and §7.A) passes in CI; UAE test error among accepted fields ≤ 1% at
   α = 1%; STP and error curves at α ∈ {0.5, 1, 2}%; `make verify-m7` runs all of the above.
 
-## Implementation plan (builders; paths are non-overlapping per bullet)
+## Implementation plan
 
 1. `apx/trust/features.py` + `labels.py`: the comparator, `is_correct`, `agreement`,
    `format_valid`, `ocr_support`, `arbiter_vote`, `hard_reject`, `encode_features`, and the
@@ -640,20 +637,20 @@ If UAE test error > α at α = 1% (debugger, in this order):
 7. `ml/extractor_b/data.py` + `mappings.py`: train-only manifests, UAE dev holdout, DocILE and
    FATURA mappings and target JSON (§1.3-1.4). Tests for the mappings and for manifest leakage.
 8. `ml/extractor_b/train.py` + `config.yaml`: probe and ladder, the full run, checkpoints and
-   resume, MLflow logging. Makefile `train-b` (detached); record it in PROGRESS "Running jobs".
+   resume, MLflow logging. Makefile `train-b` (detached).
 9. `ml/extractor_b/export.py`: merge → GGUF → Q4_K_M + mmproj, the mmproj parity check, the
    llama-server smoke test, and registration as `challenger`.
 10. `ml/extractor_b/promote.py` + a llama-swap `extract` group entry for B: P1-P5 on UAE test,
     the 200-document latency run, `champion`, models.lock, `reports/extractor_b.md`.
 11. `ml/teacher/decide.py`: T1-T4 and the addendum text; round 2 only on a go.
 12. `apx/trust` cal job + `evals` test job (detached GPU): cache `ExtractionResult` for cal and
-    test in `data/trust/`, then write `reports/arbiter.md` (M7.3).
+    test in `data/trust/`, then write `reports/arbiter.md`.
 13. Fit on FIT, run LTT at α ∈ {0.5, 1, 2}%, write `reports/trust.md` (reliability, ECE, curves,
     ICC and DEFF) and the scoreboard rows.
 14. Makefile `verify-m7`: the simulation test, the trust unit tests, and report presence with
     the gate values.
-15. If UAE test error > α, the debugger follows the §8 protocol before any other change.
+15. If UAE test error > α, follow the §8 protocol before any other change.
 
-## Addendum: M7.2 outcome
+## Addendum: teacher round outcome
 
-Pending. The builder fills in T1-T4 measured values and the go/skip decision here.
+The teacher round was skipped for v1.0 (ADR-0020 §1), so T1-T4 were not measured.

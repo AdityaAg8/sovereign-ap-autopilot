@@ -95,11 +95,12 @@ def test_real_rows_render_arm_scope_n_and_ci(tmp_path: Path) -> None:
             ),
         },
     )
-    cord = _line(markdown, "CORD v2 test")
+    cord = _line(markdown, "CORD v2 test field F1 / nTED accuracy (A base)")
     assert "A base, zero-shot: field_f1 61.00% (95% CI 56.00%-66.00%, n=100)" in cord
-    assert "B v1, zero-shot" in cord
     assert re.search(r"\| REPORTED +\|", cord)
     assert "`reports/real_cord.a-base.json` (generated 2026-09-29 15:00 UTC)" in cord
+    cord_b = _line(markdown, "CORD v2 test field F1 / nTED accuracy (B v1)")
+    assert "B v1, zero-shot" in cord_b and "real_cord.a-base" not in cord_b
     assert "value_f1.real 61.00%" in _line(markdown, "ExtractBench short")
     assert "field_f1:b-r1 - b-v1 +0.00%" in _line(markdown, "Extractor B before")
 
@@ -140,4 +141,17 @@ def test_prd_extractbench_row_reads_the_real_track_report(tmp_path: Path) -> Non
     assert "A base, zero-shot: value F1 61.00% (n=100)" in row
     assert "grounding F1 61.00%" in row and "valid JSON 98.00%" in row
     assert re.search(r"\| REPORTED +\|", row)
+    assert "`reports/real_extractbench.a-base.json`" in row
+
+
+def test_valid_json_row_fails_on_a_real_extractbench_miss(tmp_path: Path) -> None:
+    """The valid-JSON target covers every set: UAE test passing does not hide an ExtractBench
+    miss (98.00% < 99%)."""
+    alone = _line(_render(tmp_path / "uae", {}), "Valid JSON rate")
+    assert re.search(r"\| PASS +\|", alone)
+    report = _report("extractbench").model_dump_json()
+    row = _line(_render(tmp_path / "eb", {"real_extractbench.a-base.json": report}), "Valid JSON")
+    assert "99.47% (Extractor A `extractor-a`, UAE test, n=750)" in row
+    assert "98.00% (A base, zero-shot, ExtractBench short, n=100)" in row
+    assert re.search(r"\| FAIL +\|", row)
     assert "`reports/real_extractbench.a-base.json`" in row

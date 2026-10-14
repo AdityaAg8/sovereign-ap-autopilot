@@ -384,12 +384,12 @@ def _score_uae_set(manifest: Manifest) -> SetOutcome:
     entry = manifest.datasets.get("uae")
     if entry is None:
         return SetOutcome(
-            set_name="uae", status="deferred", reason="UAE factory output not built yet"
+            set_name="uae", status="deferred", reason="UAE factory not built yet (`make factory`)"
         )
     return SetOutcome(
         set_name="uae",
         status="deferred",
-        reason="uae present in manifest but the UAE field-F1 gold loader is not wired yet",
+        reason="uae is scored by the Extractor A and Extractor B gate reports, not this harness",
     )
 
 

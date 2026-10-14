@@ -384,7 +384,7 @@ def render_report(results: Sequence[GoldXmlResult], *, erp_seed: int) -> str:
         "## Credit notes",
         "",
         f"0 of {total} documents are credit notes. The factory (`factory/build.py`, "
-        "`factory/layouts.py`'s `TaxCase`) generates invoices only -- every gold document here "
+        "`factory/layouts.py`'s `TaxCase`) generates invoices only, so every gold document here "
         'is a PINT AE `Invoice` (`DocumentTypeCode.INVOICE`, type code "380").',
         "",
         "## Failures by rule ID",
@@ -410,7 +410,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m factory.gold_xml",
         description=(
-            "Build and schematron-validate gold PINT AE XML for every UAE factory invoice."
+            "Build and schematron-validate gold PINT AE XML for every UAE factory invoice "
+            "(gold labels, not model output)."
         ),
     )
     parser.add_argument("--uae-root", type=Path, default=None, help="default: data/uae")

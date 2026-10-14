@@ -2,16 +2,14 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M0.3)
-- PRD: §0 (reality differs → ADR), §2 C2, C3
 
 ## Context and problem statement
 
-PRD C3 specifies WSL2 Ubuntu 24.04 or Linux as the host. On this machine the WSL Ubuntu distro is
+The project targets WSL2 Ubuntu 24.04 or Linux as the host. On this machine the WSL Ubuntu distro is
 limited to 7 GB RAM while the Windows host has 63 GB. Parse, model loading, training and the
-optional M7.2 teacher need far more than 7 GB. The run is already executing on native Windows 11
-with Git Bash, GNU make and Docker Desktop (WSL2 backend, GPU via Docker Desktop). Claude must not
-use sudo or change system configuration.
+optional teacher round need far more than 7 GB. The run is already executing on native Windows 11
+with Git Bash, GNU make and Docker Desktop (WSL2 backend, GPU via Docker Desktop). The build uses no sudo and changes no system
+configuration.
 
 ## Considered options
 
@@ -22,7 +20,7 @@ use sudo or change system configuration.
 
 ## Decision outcome
 
-Option 1, keeping the intent of C3.
+Option 1, keeping the intent of the Linux target.
 
 - Services (postgres, Temporal, Phoenix, MLflow, llama-swap/llama-server CUDA, parse, app) run in
   Docker Compose with Linux images; Docker Desktop's WSL2 backend provides the Linux kernel and GPU.
@@ -31,8 +29,8 @@ Option 1, keeping the intent of C3.
 - Makefile and scripts use POSIX sh via Git Bash; paths are forward-slash; no reliance on
   `/proc`, `sudo`, `apt` or Linux-only CLIs on the host. VRAM is sampled with `nvidia-smi`, which
   exists on both.
-- If RAM for Docker Desktop's VM becomes the bottleneck, the fix is a human-only `.wslconfig`
-  change logged in BLOCKED.md.
+- If RAM for Docker Desktop's VM becomes the bottleneck, the fix is a manual `.wslconfig`
+  change by the host's owner.
 
 ## Consequences
 
@@ -44,10 +42,10 @@ Option 1, keeping the intent of C3.
 
 ## Proof (gate)
 
-- M0.1 `scripts/preflight.sh` records OS, RAM, Docker GPU access and uv in `reports/env.md`.
-- M0.4/M0.5: `make up` healthy and `make smoke` passes on this host.
-- `make fresh-clone` (M10/M12) passes on this host; CI (Linux runners) proves portability back
-  to the PRD's Linux target.
+- `scripts/preflight.sh` records OS, RAM, Docker GPU access and uv.
+- `make up` healthy and `make smoke` passes on this host.
+- `make fresh-clone` passes on this host; CI (Linux runners) proves portability back
+  to the Linux target.
 
 ## Addendum (2026-09-22): Windows Smart App Control
 
@@ -56,7 +54,7 @@ Smart App Control is On on the dev host and blocks native DLLs from wheels with 
 constraint-dependencies` pins numpy, scipy, pandas, scikit-learn and pyarrow to builds already
 trusted on the host. CI runs on Linux and is unaffected. New native dependencies (torch, paddle,
 llama.cpp tooling) may need the same treatment or must run inside Docker; turning Smart App Control
-off is a human decision (BLOCKED.md `[host:smart-app-control]`).
+off is the host owner's decision.
 
 Verified on the host (2026-09-22): sqlalchemy 2.0, alembic, asyncpg, temporalio, fastapi,
 pdfplumber, pypdfium2, imagehash and opencv-python-headless import fine; `psycopg[binary]` and

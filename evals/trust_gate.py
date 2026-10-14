@@ -541,8 +541,8 @@ def render_report(result: CalibrateResult) -> str:
         f"| UAE test error among auto-accepted fields, alpha = 1% | {result.gate_detail} | "
         f"{'PASS' if result.gate_passed else 'FAIL'} |",
         "",
-        "The guarantee is marginal over fields of the factory distribution (ADR-0009 §8): not "
-        "per field, language or invoice, and it does not transfer to real documents.",
+        "The guarantee is marginal over fields of the synthetic factory distribution (ADR-0009): "
+        "not per field, language or invoice, and it does not transfer to real documents.",
         "",
         f"## Thresholds per alpha (LTT partition, delta = 5%, k_min = {art.ltt_min_accepted})",
         "",
@@ -619,12 +619,13 @@ def render_report(result: CalibrateResult) -> str:
     )
     lines += [
         "",
-        "## Exchangeability caveats (ADR-0009 §8)",
+        "## Exchangeability caveats (ADR-0009)",
         "",
         "The binomial test treats fields as independent. Among LTT fields accepted at alpha = 1%: "
         f"ANOVA ICC of errors by document = {'n/a' if cal.icc is None else f'{cal.icc:.4f}'}, "
         f"design effect DEFF = {'n/a' if deff is None else f'{deff:.3f}'}. If the gate fails, the "
-        "§8 protocol runs before any change; test is never redrawn and λ̂ never tuned on test.",
+        "ADR-0009 failure protocol runs before any change; test is never redrawn and λ̂ never "
+        "tuned on test.",
         "",
         "## Inputs",
         "",

@@ -1,13 +1,14 @@
 # Training Extractor B
 
 Extractor B is the second, independent extractor: a LoRA fine-tune of Qwen3.5-4B (vision +
-text) on our labelled UAE invoices and FATURA. It exists so the trust gate can compare two
-extractors that make different mistakes; where A and B agree, a field is far more likely to be
-right, and the calibrated gate can let it through without a human
+text) on labelled UAE factory invoices, FATURA and, from round R1, CORD v2 receipts. It was
+built to give the trust gate a second opinion from a model that makes different mistakes
 ([ADR-0004](adr/0004-trust-gate-method.md), [ADR-0009](adr/0009-extractor-b-training-and-trust-features.md)).
+In v1.0 the fine-tune is a registered challenger that is not promoted, the worker serves the base
+Qwen3.5-4B as Extractor B, and the trust gate's calibrator is fitted on Extractor A alone.
 
-This guide covers how to run the training, how to watch and pause it, and what the first full
-run measured. The builder-level design (checkpoint format, resume fingerprint, data guards) is in
+This guide covers how to run the training, how to watch and pause it, and what each round
+measured. Implementation details (checkpoint format, resume fingerprint, data guards) are in
 [`design/training-loop.md`](design/training-loop.md) and [ADR-0011](adr/0011-training-loop.md).
 
 ## The recipe
@@ -19,8 +20,8 @@ run measured. The builder-level design (checkpoint format, resume fingerprint, d
 | Optimiser | AdamW 8-bit, lr 1e-4, cosine after 3% warmup, grad-clip 1.0 | ADR-0011 §1 |
 | Batch | micro-batch 1 × 16 accumulation steps | `ml/extractor_b/interfaces.py` |
 | Length | 2 epochs, 510 optimizer steps | `ml/extractor_b/config.yaml` |
-| Image rung | L0 (the serving resolution, so training and serving see the same pixels) | ADR-0012 §5 |
-| Data | 3,322 UAE factory invoices + 752 FATURA, 178 UAE dev documents held out; the UAE test split is never touched | ADR-0012, `evals/splits.json` |
+| Image rung | L0, the serving resolution; the training collator still downsized pages to 512 px wide, so training saw about a quarter of the serving pixels ([KI-05](../KNOWN_ISSUES.md)) | ADR-0012 §5 |
+| Data | v1: 3,322 UAE factory invoices + 752 FATURA, 178 UAE dev documents held out. R1 and R1b add the CORD v2 train receipts (709 after dropping photo copies of hold-out receipts). The UAE test split is never touched | ADR-0012, ADR-0019 §9, `evals/splits.json` |
 | Checkpoints | every 25 steps; dev loss every 50; generative dev eval twice per epoch | ADR-0011 |
 | Selection | highest dev field F1; within 0.1 points, lower dev loss, then the earlier step | `ml/extractor_b/selection.py` |
 
@@ -46,7 +47,7 @@ make train-b-pause   # stop cleanly: save at the next optimizer step, exit 0
 |---|---|
 | Live log | `logs/extractor_b_train.log` (`tail -f`) |
 | Loss, learning rate, grad norm, dev metrics | MLflow at http://localhost:5000 (one MLflow run per training run) |
-| Step, pace, ETA, GPU memory, checkpoints | the ops dashboard (`tools/ops-dashboard/`, see the [runbook](runbook.md#ops-dashboard-development)) or `make status` |
+| Step, pace, GPU memory, checkpoints | the training log and MLflow above, `make status`, and `models/extractor_b/<run_id>/checkpoints/` |
 | Run files | `models/extractor_b/<run_id>/`: `run.json` (fingerprint), `best.json`, `checkpoints/` |
 
 **Pausing and resuming** is safe at any point. A pause saves at the next optimizer step; a crash
@@ -81,10 +82,11 @@ promotion.
 An exported model is only a challenger. It replaces the served Extractor B only after it passes
 the promotion gates on the UAE test split through the real serving path: field F1 within 3
 points of A, p50 latency at most 0.6 × A, valid JSON ≥ 99%, the VRAM budget and data hygiene
-(ADR-0009 §1.8, [ADR-0015](adr/0015-promotion-gates.md)). `make retrain` will run that comparison for
-later challengers once its production adapters land (today it exits 2).
+(ADR-0009 §1.8, [ADR-0015](adr/0015-promotion-gates.md)). `make retrain` is meant to run that
+comparison for later challengers; in v1.0 it exits 2 because its production adapters are not
+built.
 
-### Promotion (M7.1): register, measure, promote
+### Promotion: register, measure, promote
 
 `python -m ml.extractor_b.promote` does the first promotion. Run these in order on the host,
 with `make up` running and **no other GPU job** (training, export, an A eval): steps 0, 2 and 3
@@ -105,7 +107,7 @@ How each gate is measured:
 
 - **P1 and P3** come from the Extractor A harness (`evals.extraction_a --extractor b --model
   extractor-b-challenger`): same parse, same schema-constrained request settings, B with its
-  image-only prompt. A's and B's rows are scored by the same M1.3 scorer
+  image-only prompt. A's and B's rows are scored by the same scorer
   (`evals.extraction_f1` → `evals.scorers.uae.score_uae`, micro F1 over the 14 header fields,
   EN and AR split by the factory's `arabic_first`). Both row files must cover all 750 test
   documents or `gates` stops.
@@ -120,7 +122,7 @@ How each gate is measured:
 - **Served build.** `eval-b`, `gates` and `promote` refuse to run unless llama-swap's
   `extractor-b-challenger` entry serves exactly `--export-dir`'s Q4_K_M and mmproj.
 - **P2** is a separate timed run in one session: the first 200 UAE test ids in sorted order
-  (the M3.4 subset until M3.4 defines its own; its digest is recorded) are parsed first, the
+  (the same subset the Extractor A bake-off uses; its digest is recorded) are parsed first, the
   parse service is unloaded, then A and B each get one untimed warm-up call and then every
   document once, strictly sequentially. The latency is the extract call's HTTP round trip, the
   number the A harness reports.
@@ -137,10 +139,10 @@ that the file's sha256 equals the `gates.evidence_sha256` tag on the challenger 
 the export still matches its manifest, that the challenger entry serves that export and that
 `champion` has not moved since `gates` ran (checked again right before the alias move). Only
 then, in this order, it marks the calibrator stale (`data/trust/calibrator_invalidation.json`,
-cleared by the M7.4/M7.5 cal job), records the build in `infra/models.lock.json` under
+cleared by the next calibration run), records the build in `infra/models.lock.json` under
 `local_models`, repoints llama-swap's `extractor-b` at the export and finally moves the alias.
 A failure names the steps already applied (`PromotionApplyError`, recovery as in ADR-0015 §5),
-and rerunning `make promote-b` finishes the job. The M10.2 decider behind `make retrain` is not
+and rerunning `make promote-b` finishes the job. The decider behind `make retrain` is not
 reused for this first promotion: it compares a challenger with an existing champion on the full
 RunReport, and there is no champion yet. The thresholds, the models.lock entry type, the stage
 names and the errors are shared with it.
@@ -152,7 +154,7 @@ re-hashed on disk, and A's mmproj is not part of its identity; the prompt versio
 rendered PNG, so a Pillow upgrade can change it, which fails safe (the rows are refused and the
 eval is rerun).
 
-## First run: results (2026-09-25)
+## Round v1: results (2026-09-25)
 
 Run `b-20260923T2025-eb0aea7d`, 510/510 steps in 12 h 39 min of training time across three
 resumes, no skipped optimizer steps, final train loss 0.0042. VRAM at rung L0: the probe measured a 5.8 GB training-step peak
@@ -174,16 +176,15 @@ What this means:
 - About 4.5% of dev outputs are not valid JSON under unconstrained decoding, and they are not
   truncations. Serving uses schema-constrained decoding, so the number that counts is the P3
   gate measured through llama-server on the test split. This run did not save per-row dev
-  outputs, so its invalid rows cannot be classified. Since #53 the evaluator writes
+  outputs, so its invalid rows cannot be classified. The evaluator now writes
   `<run>/dev_outputs/step-NNNNNN.jsonl` (text, parsed_ok, finish_reason, token count) at every
   generative eval, and `make report-b` splits the invalid rows into truncated, looping and
   malformed.
-- These are dev numbers on 178 documents. The comparison with A (99.24% field accuracy on the
-  750-document test split, [`extraction_a.md`](../reports/extraction_a.md)) happens only at the
+- These are dev numbers on 178 documents. The comparison with A happens only at the
   promotion gates, on the same test documents and the same scorer.
 
 **What changed during the run** (all merged): the dev eval became batched and its output budget
-was set to the serving value (#51); MLflow resume stopped rewriting immutable params (#51); the
+was set to the serving value; MLflow resume stopped rewriting immutable params; the
 data loader became lazy after the first run was OOM-killed inside an 8 GB Docker VM, and the VM
 was raised to 32 GB.
 
@@ -198,10 +199,42 @@ was raised to 32 GB.
 The llama-server smoke passed on 5 of 5 UAE dev documents (valid JSON under schema-constrained
 decoding).
 
+## Rounds R1 and R1b
+
+R1 (run `b-20261001T1641-eb0aea7d`) added CORD v2 train receipts. It passed every promotion gate
+except latency, and it invented IBANs on long invoices: data prep had cut 4-5 page invoices to
+their first 3 pages while keeping labels from later pages. R1b (run `b-20261004T1300-e871c646`,
+MLflow `extractor_b` version 3) fixes that page rule and changes nothing else; it is the current
+challenger. Its dev numbers are not comparable with v1 and R1, because its dev targets hold only
+labels on the pages B sees.
+
+R1b on the 750 UAE test invoices, from [`extractor_b_gates.md`](../reports/extractor_b_gates.md):
+
+| Gate | Measured | Rule | Result |
+|---|---|---|---|
+| P1 field F1 (14 header fields, pooled) | B 93.23% (EN 91.54%, AR 98.38%); A 92.75% | B ≥ A - 3 points | pass |
+| P2 p50 extract latency, 200 documents | B 16.35 s; A 26.04 s | B ≤ 0.60 × A (15.62 s) | fail |
+| P3 valid JSON | 100% | ≥ 99% | pass |
+| P4 extract-stage peak VRAM | 8.23 GiB | ≤ 11.8 | pass |
+| P5 data hygiene | leakage test green, base revision matches the lock | both | pass |
+
+R1b is not promoted, so the worker keeps serving the base Qwen3.5-4B as Extractor B. Field
+accuracy on the same test set is 98.63% for R1b against 97.80% for A
+([`extractor_b_test.md`](../reports/extractor_b_test.md)), and on the CORD v2 test split R1b scores
+field F1 90.70% on the 7 mapped fields ([`real_cord.b-r1b.md`](../reports/real_cord.b-r1b.md)).
+
+## Model card: Extractor B (R1b)
+
+| | |
+|---|---|
+| Base model | `Qwen/Qwen3.5-4B` at the revision pinned as `extractor_b_train_base` in `infra/models.lock.json` (Apache-2.0) |
+| Method | bf16 LoRA r=16 on the language layers, vision tower frozen; exported as GGUF Q4_K_M + mmproj |
+| Training data | 3,322 synthetic UAE factory invoices, 752 FATURA invoices, CORD v2 train receipts |
+| Intended use | Second extractor for UAE supplier invoices inside this pipeline; tool-free, schema-constrained output |
+| Evaluation | UAE test field F1 93.23% (synthetic); CORD v2 test field F1 90.70% on 7 mapped fields (in-distribution) |
+| Limits | Trained on synthetic UAE invoices only, so accuracy on real UAE invoices is unmeasured; trained at a lower image resolution than it is served (KI-05); misses the latency gate, so not promoted |
+
 ## Next steps
 
-1. Run the promotion steps above once the GPU is free.
-2. Commit the promotion's `infra/models.lock.json` and `infra/llama-swap.yaml` changes with
-   `reports/extractor_b_gates.md` as the evidence.
-3. Calibration (M7.4) and the Learn-then-Test threshold (M7.5) on real A and B outputs, which
-   is what finally lets the trust gate accept fields without review.
+1. Fix the training resolution (KI-05) and retrain, then re-run the promotion gates.
+2. Fit the trust gate on the A/B pair the worker serves (`make cal-rows-b`, `make calibrate`).

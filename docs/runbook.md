@@ -36,7 +36,7 @@ nvidia-smi                               # one GPU stage at a time; see the budg
 
 ## GPU budget (12 GB)
 
-llama-swap loads one group at a time: `extract` or `arbitrate` (the arbiter alone), and unloads
+llama-swap loads one group at a time: `extract` (A or B, one at a time; the `arbitrate` group is not used in v1.0), and unloads
 an idle model after 10 minutes. Inside `extract`, Extractor A and B swap: only one is resident at
 a time, because the two together broke the 11.8 GB whole-card budget (ADR-0013). The parse container holds about
 4.3 GB (`PADDLE_GPU_MEM_FRACTION`, default 0.35) while it runs. If a model fails to load with an
@@ -74,7 +74,7 @@ empty and no train job runs on the host), then `rm data/ml/gpu.lock` (ADR-0011 a
 | Activity fails with `GpuProbeError` | `nvidia-smi` missing in the worker or its output unreadable | Check the worker's GPU `utility` reservation (`infra/compose.yaml`); a timeout or non-zero exit (`GpuProbeTransientError`) is retried |
 | `build_einvoice` fails with `PayeeChangedError` | The vendor's verified accounts or the invoice IBAN changed after routing, or the workflow was routed before the payee pin shipped | Nothing was paid. Re-ingest the invoice so it is re-routed and pinned (ADR-0014 §7) |
 | Approval refused with `PayeeRefusal` / `approve_payment denied` | P1 could not select a payee (ADR-0014). The refusal names the reason: `no_verified_account`; with several verified accounts, `invoice_iban_missing`, `invoice_iban_malformed` or `no_match`; `ambiguous_match` or `master_iban_malformed` point at bad master data | Nothing was paid. Fix the vendor master through the admin callback process, or correct the invoice IBAN field in review; never add an account from the invoice |
-| `make retrain` exits 2 with `RetrainPrerequisiteError` | The production adapters (exporter, trainer, shadow evaluator, MLflow registry, models.lock writer, calibrator invalidator) are not built yet | Expected until they land (ADR-0015 §5) |
+| `make retrain` exits 2 with `RetrainPrerequisiteError` | The production adapters (exporter, trainer, shadow evaluator, MLflow registry, models.lock writer, calibrator invalidator) are not built yet | Expected in v1.0 (ADR-0015 §5) |
 
 ## Database migrations
 
@@ -95,9 +95,9 @@ start, so a pull that adds a migration is applied on the next `make up`. Migrati
 | `0009_invoice_kind_check_name` | Renames the `invoices.kind` check constraint on databases that ran the first 0007; a no-op on fresh databases |
 | `0010_page_embeddings` | pgvector page embeddings for vendor-scoped near-duplicate detection |
 | `0011_document_failure` | `ingested_documents.failed_at`/`failure`: a workflow that failed before its invoice row existed reads as `failed` in the API |
-| `0012_approval_digest` | `approvals.invoice_digest`: the workflow acts on a review signal only when a digest-matched approval backs it (REVIEW C-03) |
-| `0013_agent_ro_password` | Sets the `apx_agent_ro` password from `AGENT_RO_PASSWORD` instead of the old hardcoded default (REVIEW L-01) |
-| `0014_approval_corrections_digest` | `approvals.corrections_digest`: a review signal's corrections must match the approved ones (REVIEW N-03, KNOWN_ISSUES KI-02) |
+| `0012_approval_digest` | `approvals.invoice_digest`: the workflow acts on a review signal only when a digest-matched approval backs it |
+| `0013_agent_ro_password` | Sets the `apx_agent_ro` password from `AGENT_RO_PASSWORD` instead of the old hardcoded default |
+| `0014_approval_corrections_digest` | `approvals.corrections_digest`: a review signal's corrections must match the approved ones (KNOWN_ISSUES KI-02) |
 
 ### After deploying a workflow patch
 
@@ -109,20 +109,6 @@ the execution (`temporal workflow terminate --workflow-id <invoice id>`) and re-
 document so it starts again under the new code. The worker's review-signal reconciler
 (`apx/workflows/reconciler.py`) re-delivers decisions that were recorded but not delivered;
 it does not upgrade a pre-patch execution.
-
-## Ops dashboard (development)
-
-`tools/ops-dashboard/` is a read-only console for the developer's machine: Extractor B training
-progress and loss, GPU memory against the ADR-0013 budget, Compose services, pull requests and
-CI, recent commits and the changelog. It binds 127.0.0.1:8765, uses only the Python standard
-library and loads nothing from the network.
-
-```bash
-.venv/Scripts/python.exe tools/ops-dashboard/server.py    # then open http://127.0.0.1:8765
-```
-
-A missing `docker`, `nvidia-smi` or `gh` blanks only that panel. Settings and details:
-[`tools/ops-dashboard/README.md`](../tools/ops-dashboard/README.md).
 
 ## Audit chain
 
@@ -140,7 +126,7 @@ never repaired automatically.
 **Secrets.** `make env` (run by `make up` and `make bootstrap`) generates `API_JWT_SECRET`,
 `POSTGRES_PASSWORD` and `AGENT_RO_PASSWORD` into `.env` when they are missing or empty. It never
 changes a value that is set and never prints one. Compose has no fallback for any of them and
-stops with `... is not set -- run make env` instead.
+stops with a `... is not set` message that names `make env` instead.
 
 **Installs created before generated passwords.** The Postgres volume still holds the old default
 (the fixed dev password older releases shipped) until you rotate it once:
@@ -178,10 +164,9 @@ app origin plus the API origin, `frame-ancestors 'none'`), `X-Frame-Options: DEN
 `Referrer-Policy: no-referrer`, COOP and a Permissions-Policy. When the API is not on
 `localhost:8000`, set `NEXT_PUBLIC_API_BASE_URL` before `pnpm build` so the CSP allows it.
 
-**Large blobs in history (REVIEW M-05).** Two files over 1 MB are in git history:
-`web/public/pdfjs/pdf.worker.min.mjs` (1.27 MB) and `evals/splits.json` (1.18 MB). Rewriting
-history is not safe with open PRs. The plan is to stop tracking new copies (LFS, or a generated
-artifact) and record the exception in `KNOWN_ISSUES.md`.
+**Large blobs in history.** Two files over 1 MB are in the repository history:
+`web/public/pdfjs/pdf.worker.min.mjs` (1.27 MB) and `evals/splits.json` (1.18 MB). History is not
+rewritten; `KNOWN_ISSUES.md` KI-01 records the exception.
 
 ## Reset to a clean demo
 

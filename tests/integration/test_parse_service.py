@@ -98,7 +98,7 @@ def _percentile(sorted_values: list[float], q: float) -> float:
 def _require_test_data() -> list[Path]:
     if not TEST_DATA_DIR.is_dir():
         pytest.fail(
-            f"{TEST_DATA_DIR} not found -- generate the UAE test split (invoice factory) before "
+            f"{TEST_DATA_DIR} not found -- generate the UAE test split (`make factory`) before "
             "running this test",
             pytrace=False,
         )
@@ -317,7 +317,7 @@ def _write_report(
             f"- p50: {_percentile(latencies_ms, 0.50):.2f} ms",
             f"- p95: {_percentile(latencies_ms, 0.95):.2f} ms",
             "",
-            "## Scan path (PaddleOCR-VL service) -- informational, not gated",
+            "## Scan path (PaddleOCR-VL service): informational, not gated",
             "",
         ]
     )

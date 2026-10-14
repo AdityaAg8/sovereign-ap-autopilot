@@ -2,15 +2,13 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M6.1)
-- PRD: §6.2 I2, I3, I4; §6.3 P1-P5; §10 M6.5, M6.6, M9.1
 - Extends ADR-0003 (it does not replace it). Related: ADR-0001, `docs/security.md`.
 
 ## Context and problem statement
 
-ADR-0003 set up the type-level boundary in M0: a tool-free `StructuredRequest`, a `RawField`
+ADR-0003 set up the type-level boundary in the scaffold: a tool-free `StructuredRequest`, a `RawField`
 with no box fields, a capped `UntrustedText`, and an agent that can only make proposals. Before
-M6.5 can be built and tested, four gaps have to be closed:
+the policy layer can be built and tested, four gaps have to be closed:
 
 1. Which extracted values are trusted typed data, and which are attacker-controlled free text?
 2. What exact spotlight format and size budgets does untrusted text get in a tool-enabled prompt?
@@ -26,8 +24,8 @@ deterministic policy check. None may end at a model's judgement.
 - Payment safety never depends on a model (guard, extractor, arbiter or agent) being right.
 - A violation fails when a value is constructed, at type-check time, or in a deterministic
   unit or property test.
-- Use the simplest design that passes M6.5 (policy property tests, SoD tests) and M6.6
-  (payment-changing attack success = 0).
+- Use the simplest design that passes the policy property tests, the SoD tests and the live
+  attack suite (payment-changing attack success = 0).
 - Stay consistent with ADR-0003 and the import direction in `docs/architecture.md`
   (`agent` → `policy` → `common`).
 
@@ -198,8 +196,8 @@ verified account within the limit, and that is straight-through processing (§6.
 - Good: every attack path in `docs/security.md` ends at a deterministic check. The worst an
   agent can do is draft a bad proposal, which a human with the right role must execute under
   P1-P3 and SoD. The whole engine is pure, so property tests cover it.
-- Good: the injection classifier (M6.4) becomes defence in depth. Payment safety has to hold
-  with it switched off, and M6.6 measures that.
+- Good: the injection classifier becomes defence in depth. Payment safety has to hold
+  with it switched off, and the live attack suite measures that.
 - Bad: more types, and the agent sees less (8000-character budget, masked IBANs).
 - Bad: a BLOCK false positive needs the vendor to resubmit.
 - Bad: a vendor with two verified accounts routes to REVIEW until an admin retires one (P1
@@ -211,7 +209,7 @@ verified account within the limit, and that is straight-through processing (§6.
 
 ## Proof (gate)
 
-- **M6.5** (all `tests/unit`, no GPU):
+- Unit tests (all `tests/unit`, no GPU):
   - `common/test_untrusted.py` (hypothesis): exactly one fence pair; no `<` or `>` in the body;
     no zero-width or bidi characters; length within the cap; budget respected; source pattern
     enforced.
@@ -232,13 +230,13 @@ verified account within the limit, and that is straight-through processing (§6.
   - `policy/test_proposals.py`: agent, chat and MCP `change_bank` proposals are refused.
   - `policy/test_payee.py`: `Invoice.iban` never influences `select_payee` (property test;
     amended by ADR-0014: it may only select among verified accounts).
-- **M6.6**: every M6.3 case runs through the real workflow with live models. Payment-changing
-  attack success must be 0, which is the PRD gate. `reports/attacks.md` also reports it with the
+- Live attack suite: every attack case runs through the real workflow with live models.
+  Payment-changing attack success must be 0, which is the project's gate. `reports/attacks.md` also reports it with the
   guard disabled, which must also be 0; anything else is a critical finding against this ADR.
-- **M9.2 and M9.4**: tool unit tests show no tool changes payment state; the MCP client test
+- Agent tools and MCP: tool unit tests show no tool changes payment state; the MCP client test
   lists only read and propose tools.
 
-## M6.5 build plan (builder, no further design needed)
+## Implementation plan
 
 1. `apx/common/untrusted.py`: implement `quoted`, `to_untrusted` and `render_untrusted`; add
    `tests/unit/common/test_untrusted.py` with hypothesis.
@@ -269,7 +267,7 @@ verified account within the limit, and that is straight-through processing (§6.
     - P1 also requires the account's verification audit entry
     - add a compose security test
     - add `tests/integration/test_no_egress.py` (ADR-0001)
-14. Implement `make verify-m6`: M6.2 clean-corpus zero flags, the security unit tests, and the
-    M6.6 run writing `reports/attacks.md` (per-category routes; payment-changing attack success
+14. Implement `make verify-m6`: clean-corpus zero flags, the security unit tests, and the
+    live attack run writing `reports/attacks.md` (per-category routes; payment-changing attack success
     with the guard on and off).
 15. Update the Status column in `docs/security.md` §8 as each test lands.

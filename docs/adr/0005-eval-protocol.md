@@ -2,8 +2,6 @@
 
 - Status: accepted
 - Date: 2026-09-22
-- Deciders: architect (M0.3)
-- PRD: §5, §6.2 I5, I6
 
 ## Context and problem statement
 
@@ -42,14 +40,14 @@ Option 1.
 
 ## Proof (gate)
 
-- M1: `tests/test_no_leakage.py` in CI (`not gpu`), plus a negative test that injects an overlap
+- `tests/test_no_leakage.py` in CI (`not gpu`), plus a negative test that injects an overlap
   and expects failure.
-- M1: `make eval-quick` produces a scoreboard with every §5 row present (value or "not run").
-- M11 auditor re-runs `make eval` from a fresh clone and diffs the scoreboard.
+- `make eval-quick` produces a scoreboard with every target row present (value or "not run").
+- A release audit re-runs `make eval` from a fresh clone and diffs the scoreboard.
 
-## Amendment (M5.1): declaring the split value is not reading it
+## Amendment: declaring the split value is not reading it
 
-The M5.1 schema records which split a corrected label belongs to (`apx/db/enums.py`,
+The database schema records which split a corrected label belongs to (`apx/db/enums.py`,
 `LabelSplit.CAL = "cal"`), which the "only `apx/trust` references cal" grep flagged. The guard
 now exempts exactly that one declaration line and nothing else in the file, and in exchange also
 flags any `*Split.CAL` enum-member use outside `apx/trust`. Net effect: the gate is stricter than

@@ -1,6 +1,6 @@
 # Demo walkthrough
 
-`make demo` runs a small, realistic accounts-payable day on your machine: it brings up the stack,
+`make demo` drops nine synthetic invoices through the live stack on your machine: it brings up the stack,
 loads the factory ERP (vendors, verified bank accounts, POs, users), starts the web app against the
 live API, and drops nine supplier invoices into the inbox a few seconds apart, checking each one's
 outcome. Nothing leaves the machine: the models, OCR, database and workflow engine run in local
@@ -58,7 +58,7 @@ git ignores.
 
 | Scenario | Expected outcome (asserted) | What happens | Where to look |
 |---|---|---|---|
-| Clean (3) | Archived | Extracted by two models, grounded to the words on the page, validated and checked for fraud. Invoices from vendors with one verified account the invoice matches. Without a calibrated trust gate each one is held for review; the demo approves it through the API as the seeded approver, and the workflow builds the PINT AE e-invoice, validates it, sends it to the mock ASP and archives it. | Operations: the archived count. Invoice page: each field's value, box and confidence. |
+| Clean (3) | Archived | Extracted by Extractor A and the base Qwen3.5-4B, grounded to the words on the page, validated and checked for fraud. Invoices from vendors with one verified account the invoice matches. No trust-gate calibrator is active in the worker ([KI-08](../KNOWN_ISSUES.md)), so each one is held for review; the demo approves it through the API as the seeded approver, and the workflow builds the PINT AE e-invoice, validates it, sends it to the mock ASP and archives it. | Operations: the archived count. Invoice page: each field's value, box and confidence. |
 | Bilingual (2) | Archived | Arabic-first invoices, approved the same way. Party names printed only in Arabic keep their Arabic script. | Invoice page: the supplier field in Arabic, boxed on the page image. |
 | Poisoned (2) | Blocked, or held with a scan reason; never on the payment path | Attack PDFs with hidden instructions, picked because the rule-based scanner alone scores them at the block threshold; the runtime injection guard adds its own flags on top. Above the threshold the invoice is blocked and can never be paid. The extraction models read every document tool-free, so hidden instructions have nothing to act on. | Operations: the blocked tile. Invoice page: the scan reason. |
 | Bank change | Held for review by P1 | The vendor switched its IBAN and now has several admin-verified accounts; the invoice IBAN may only choose among them, never add one, so P1 payee selection holds it for a person (ADR-0014). The pinned payee is what an approval pays. When it was issued inside 30 days of the switch the `bank_detail_change` flag shows too. | Invoice page: the P1 reason and the payee. |

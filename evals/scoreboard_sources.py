@@ -199,7 +199,7 @@ def parse_extraction_a(text: str, source: str = "reports/extraction_a.md") -> Ex
     head = _match(
         source,
         r"^Model `(?P<model>[^`]+)` on the UAE factory test split, (?P<n>\d+) documents "
-        r"\((?P<ar>\d+) with Arabic text\)\.",
+        r"\((?:[^()]*, )?(?P<ar>\d+) with Arabic text(?: parsed)?\)\.",
         text,
         "model/document-count line",
     )

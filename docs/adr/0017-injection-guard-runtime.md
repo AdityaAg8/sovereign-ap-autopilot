@@ -1,9 +1,7 @@
-# ADR-0017: M6.4 injection guard at runtime: CPU in the worker, cal thresholds on the P4 scale
+# ADR-0017: injection guard at runtime: CPU in the worker, cal thresholds on the P4 scale
 
 - Status: accepted
 - Date: 2026-09-25
-- Deciders: builder (SEC-03)
-- PRD: §2 C1/C2/C6, §3 `apx/scan`, §4 (injection guard row), §6.3 P4, §10 M6.4
 - Related: ADR-0006 (native Windows host, Smart App Control), ADR-0008 (P4 routing),
   ADR-0013 (GPU stages and budget), reports/guard.md (the checkpoint's cal/test numbers)
 - Interfaces: `apx.scan.interfaces.InjectionClassifier` (seam), `apx.scan.guard`
@@ -13,7 +11,7 @@
 ## Context
 
 `apx/scan/interfaces.py` promised "all detectors and the classifier", but the worker ran only
-the rule-based detector: the fine-tuned ModernBERT guard (M6.4, `data/guard/checkpoints/
+the rule-based detector: the fine-tuned ModernBERT guard (`data/guard/checkpoints/
 guard-modernbert`) was evaluated offline and never called. P4 needs two operating points
 (review, block); guard.json carried one (`threshold`, cal max-F1). The apx image (api +
 worker) is a slim CPU image built from `uv.lock`, without torch or transformers.
@@ -34,8 +32,8 @@ worker) is a slim CPU image built from `uv.lock`, without torch or transformers.
      switch before every scan, all for a model that is fast on CPU); ONNX export (an extra
      conversion artifact whose parity with the evaluated checkpoint must itself be proven,
      plus onnxruntime native DLLs on the host).
-   - **GPU budget: unchanged.** The guard uses no VRAM; the §4 row's "< 1 GB, stage scan"
-     becomes 0 GB. C2's "no CPU offload" is about splitting a GPU model's layers onto the CPU;
+   - **GPU budget: unchanged.** The guard uses no VRAM; the budget row's "< 1 GB, stage scan"
+     becomes 0 GB. The budget's "no CPU offload" is about splitting a GPU model's layers onto the CPU;
      this model runs wholly on CPU by design, so no stage's measured peak changes.
 2. **Local only.** The checkpoint is a read-only bind mount (`infra/compose.yaml` worker:
    `../data/guard/checkpoints/guard-modernbert:/models/guard-modernbert:ro`,
@@ -78,8 +76,8 @@ worker) is a slim CPU image built from `uv.lock`, without torch or transformers.
      an address line joined to a date/PO/TRN line. Single lines flagged 0 of 750 at review.
      A wrapped instruction is scored as its two halves.
    - **Result on the clean split:** 0 of the 750 clean UAE test invoices reach review
-     (M6.2's zero-flag bar), with the thresholds of point 3.
-   - **Follow-up (M6.4 retrain, GPU):** mine hard negatives through `apx.scan.spans`
+     (the clean-set zero-flag bar), with the thresholds of point 3.
+   - **Follow-up (guard retrain, GPU):** mine hard negatives through `apx.scan.spans`
      (the runtime span extractor), with Arabic text-layer lines and joined lines included, so
      train and serve see the same text; re-run `evals.guard`; then delete `without_arabic`
      and restore line pairs.

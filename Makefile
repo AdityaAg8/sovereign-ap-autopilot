@@ -475,7 +475,7 @@ train-guard: gpu-free
 
 guard-report:
 	@echo "==> reports/guard.md: our fine-tune vs baselines on the test split (CPU)"
-	uv run python -m evals.guard report 		--status "Llama Prompt Guard 2 86M=blocked (gated; BLOCKED [models:promptguard])" 		--scores "ModernBERT-base fine-tune (ours)=data/guard/scores/modernbert-ft.jsonl" 		--scores "siberiancat/modernbert-prompt-injection=data/guard/scores/siberiancat.jsonl" 		--fixed "siberiancat/modernbert-prompt-injection=argmax 0.5:0.5" 		--fixed "siberiancat/modernbert-prompt-injection=vendor ~1% FPR point:0.03"
+	uv run python -m evals.guard report 		--status "Llama Prompt Guard 2 86M=not run (gated model, access not granted)" 		--scores "ModernBERT-base fine-tune (ours)=data/guard/scores/modernbert-ft.jsonl" 		--scores "siberiancat/modernbert-prompt-injection=data/guard/scores/siberiancat.jsonl" 		--fixed "siberiancat/modernbert-prompt-injection=argmax 0.5:0.5" 		--fixed "siberiancat/modernbert-prompt-injection=vendor ~1% FPR point:0.03"
 
 retrain:
 	@echo "==> retrain: export corrections, LoRA challenger, shadow eval vs champion, promote or reject (ADR-0015)"

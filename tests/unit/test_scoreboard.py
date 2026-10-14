@@ -85,7 +85,7 @@ def test_measured_rows_show_value_status_and_source(tmp_path: Path) -> None:
     valid = _row_line(markdown, "Valid JSON rate")
     assert "99.47% (Extractor A `extractor-a`, UAE test, n=750)" in valid
     assert "| PASS " in valid
-    assert "`reports/extraction_a.md` (committed 2026-09-24 08:00 UTC)" in valid
+    assert "`reports/extraction_a_adr0012.md` (committed 2026-09-24 08:00 UTC)" in valid
 
     schematron = _row_line(markdown, "Schematron pass")
     assert "99.98% (4999/5000 generated PINT AE XML)" in schematron
@@ -128,8 +128,9 @@ def test_partially_measured_rows_stay_pending_with_evidence(tmp_path: Path) -> N
 
     for metric in ("Error among auto-accepted fields", "Straight-through rate"):
         assert "PENDING: " in _row_line(markdown, metric)
-    assert "DOCILE_TOKEN" in _row_line(markdown, "Field F1, KILE and LIR")
-    assert "- Headline rows: 2 PASS, 1 FAIL, 2 REPORTED, 8 PENDING" in markdown
+    docile = _row_line(markdown, "Field F1, KILE and LIR")
+    assert "NOT RUN: not run for v1.0" in docile and "DOCILE_TOKEN" in docile
+    assert "- Target rows: 2 PASS, 1 FAIL, 2 REPORTED, 7 PENDING, 1 NOT RUN" in markdown
 
 
 def test_our_guard_fine_tune_fills_the_row_once_measured(tmp_path: Path) -> None:
@@ -199,8 +200,9 @@ def test_dry_run_chat_evals_are_not_model_scores(tmp_path: Path) -> None:
 def test_missing_reports_leave_every_row_pending(tmp_path: Path) -> None:
     markdown = render_scoreboard([], reader=_reader(tmp_path, {}), now=NOW)
     for row in ROWS:
-        assert "PENDING: " in _row_line(markdown, row.metric)
-    assert "13 PENDING" in markdown
+        line = _row_line(markdown, row.metric)
+        assert "PENDING: " in line or "NOT RUN: " in line
+    assert "12 PENDING, 1 NOT RUN" in markdown
     assert "No harness run yet" in markdown
 
 
@@ -230,7 +232,7 @@ def test_main_writes_the_scoreboard(tmp_path: Path) -> None:
         ["--runs-dir", str(tmp_path / "runs"), "--reports-dir", str(reports_dir), "--out", str(out)]
     )
     assert code == 0
-    assert "## Headline metrics" in out.read_text(encoding="utf-8")
+    assert "## Target metrics" in out.read_text(encoding="utf-8")
 
 
 def test_split_runs_separates_harness_predictors() -> None:
@@ -325,8 +327,8 @@ def test_missing_json_evidence_renders_pending_never_zero(tmp_path: Path) -> Non
     assert "| pending " in gates
     assert "PENDING: `make gates-b` not run yet" in gates
     bakeoff = _row_line(markdown, "Extractor A bake-off decision")
-    assert "| pending " in bakeoff
-    assert "PENDING: reports/bakeoff.json not written yet" in bakeoff
+    assert "| not run " in bakeoff
+    assert "NOT RUN: built, not run for v1.0" in bakeoff
     for metric in ("Error among auto-accepted fields", "Straight-through rate"):
         row = _row_line(markdown, metric)
         assert "| pending " in row
@@ -391,7 +393,7 @@ def test_trust_gate_failure_and_missing_test_split(tmp_path: Path) -> None:
 def test_extractor_b_gates_fill_language_f1_latency_and_gate_rows(tmp_path: Path) -> None:
     markdown = _render(tmp_path, _with())
     uae = _row_line(markdown, "Field F1, EN and AR separately")
-    assert "Extractor B v3: EN 97.00% (n=560), AR 95.00% (n=190)" in uae
+    assert "Extractor B registry v3: EN 97.00% (n=560), AR 95.00% (n=190)" in uae
     assert "Extractor A EN 96.00%, AR 94.50%" in uae
     assert "| REPORTED " in uae
     latency = _row_line(markdown, "p50 / p95 seconds per invoice, peak VRAM per stage")
@@ -433,7 +435,7 @@ def test_guard_row_names_the_best_baseline_next_to_ours(tmp_path: Path) -> None:
 
 def test_all_evidence_counts_and_tables_stay_aligned(tmp_path: Path) -> None:
     markdown = _render(tmp_path, _with())
-    assert "- Headline rows: 4 PASS, 1 FAIL, 4 REPORTED, 4 PENDING" in markdown
+    assert "- Target rows: 4 PASS, 1 FAIL, 4 REPORTED, 3 PENDING, 1 NOT RUN" in markdown
     tables = _tables(markdown)
     assert len(tables) == 3
     for table in tables:

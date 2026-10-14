@@ -322,11 +322,11 @@ def test_score_docile_set_deferred_when_missing_from_manifest() -> None:
     assert "DOCILE_TOKEN" in (outcome.reason or "")
 
 
-def test_score_uae_set_deferred_until_m2() -> None:
+def test_score_uae_set_deferred_until_the_factory_exists() -> None:
     manifest = Manifest(generated_at=empty_splits().generated_at, datasets={})
     outcome = _score_uae_set(manifest)
     assert outcome.status == "deferred"
-    assert "factory" in (outcome.reason or "")
+    assert "make factory" in (outcome.reason or "")
 
 
 @pytest.mark.filterwarnings("ignore")

@@ -1,9 +1,7 @@
-# ADR-0016: M3.4 Extractor A bake-off: does Qwen3.5-9B stay Extractor A?
+# ADR-0016: Extractor A bake-off: does Qwen3.5-9B stay Extractor A?
 
-- Status: proposed (decision PENDING until `make bakeoff` has complete rows)
+- Status: deferred (not run for v1.0, see ADR-0020)
 - Date: 2026-09-25
-- Deciders: builder (M3.4 harness); the decision block below is generated, not typed
-- PRD: §2 C2, §4 (runtime table, offline table, "Model currency check"), §5, §10 M3.4
 - Related: ADR-0005 (eval protocol: fixed splits, generated reports), ADR-0009 §1.8 (P2 latency
   subset, now shared), ADR-0012 (extraction contract), ADR-0013 (11.8 GB whole-card budget,
   models ≤ 9.5 GB measured)
@@ -13,11 +11,11 @@
 
 ## Context and problem statement
 
-Extractor A is Qwen3.5-9B UD-Q4_K_XL + mmproj (PRD §4). The 2026-09-24 model currency check found
+Extractor A is Qwen3.5-9B UD-Q4_K_XL + mmproj. The 2026-09-24 model currency check found
 no newer Qwen at ≤ 9B, but newer generations may still win at our budget through a low-bit quant
 of a larger model (Qwen3.8-27B UD-IQ2_XXS), a distilled 9B (empero-ai Qwen3.8-9B-Distill, text
 only: the repo ships no mmproj) or faster decoding of the same weights (Qwen3.5-9B with its
-multi-token-prediction head as a speculative drafter). M7.4/M7.5 fit calibration on the champion
+multi-token-prediction head as a speculative drafter). Trust-gate calibration is fitted on the champion
 A, so this has to be settled first, on measurements rather than model cards.
 
 ## Considered options
@@ -36,7 +34,7 @@ A, so this has to be settled first, on measurements rather than model cards.
   whole-card or over 9.5 GB for the model share (peak minus the idle desktop reading) is
   disqualified before any eval hours; a model llama-server cannot serve is recorded as failed.
 - Eval (`make bakeoff`): the fixed 200-document UAE test subset (first 200 sha256s of
-  `evals/splits.json` uae/test, the same subset as the M7.1 P2 latency gate) and every
+  `evals/splits.json` uae/test, the same subset as the P2 latency gate) and every
   ExtractBench short eval document. Each arm alone on the card, strictly sequential, temperature
   0, seed 0, thinking off, JSON-schema constrained; parses are cached before any model loads so
   the parse service never enters a measured window. Rows carry alias, served GGUF sha256 and
@@ -48,9 +46,9 @@ A, so this has to be settled first, on measurements rather than model cards.
 ## Decision rule
 
 Qwen3.5-9B stays unless a challenger's pooled UAE field F1 is at least 1.0 point higher, at a p50
-latency of at most 1.5× the baseline's, within the C2 budget (probe in budget and eval-run peak
-≤ 11.8 GB). A winner must also keep valid JSON ≥ 99%, the M3.3 gate Extractor A already holds; a
-champion that breaks it would fail M3.3, so this adds no new bar. Among several winners the
+latency of at most 1.5× the baseline's, within the VRAM budget (probe in budget and eval-run peak
+≤ 11.8 GB). A winner must also keep valid JSON ≥ 99%, the gate Extractor A already holds; a
+champion that breaks it would fail that gate, so this adds no new bar. Among several winners the
 highest pooled F1 wins (ties: lower p50). The MTP arm is reported with its speed-up and F1 delta;
 adopting it as the serving configuration of the same weights would be its own change.
 
@@ -149,7 +147,7 @@ two different OCR passes. And amendment 1 left the concurrency condition to the 
    byte-deterministic), so the subset is a cache hit and every arm reads the same parse.
    Scan inputs are written under `data/bakeoff/scan_inputs/`.
 2. `evals.extraction_a` records `client_concurrency` on every row, and `make extraction-a-adr0012`
-   runs at `--concurrency 1` (extractor-a has one slot, ADR-0013 amdt 1, so a second request only
+   runs at `--concurrency 1` (extractor-a has one slot, ADR-0013 amendment 1, so a second request only
    queued and inflated its latency).
 3. Arm a reuse is all or nothing, as before, and now also requires every row to carry the
    serving identity the challengers are compared under (extractor-a's llama-swap args hash and
@@ -164,13 +162,15 @@ two different OCR passes. And amendment 1 left the concurrency condition to the 
 block from `reports/bakeoff.md`.
 <!-- BAKEOFF:DECISION:END -->
 
+The bake-off was not run for v1.0 (ADR-0020), so Qwen3.5-9B stays Extractor A.
+
 ## Consequences
 
 - KEEP: nothing in serving changes; the challengers stay offline-only entries, and the probe
-  result for Qwen3.8-27B feeds the M7.3 arbiter candidate list.
+  result for Qwen3.8-27B feeds the arbiter candidate list.
 - REPLACE: the winner's GGUF becomes the `extractor_a` intent in `infra/models.yaml`, its
   llama-swap entry takes over the `extractor-a` alias after an ADR-0013 serving-budget
-  measurement at production concurrency, and M3.3/M7.1 evidence is regenerated against it.
+  measurement at production concurrency, and the Extractor A and P2 latency evidence is regenerated against it.
 - Either way, the scoreboard row and this ADR's status are updated from the report.
 
 ## Proof

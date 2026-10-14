@@ -688,7 +688,7 @@ def render_report(report: RealEvalReport) -> str:
     gate = "PASS" if report.valid_json_rate.value >= VALID_JSON_GATE else "FAIL"
     lines += [
         "",
-        f"Valid-JSON gate (≥ 99%): {gate}. Failures: {report.n_failed} of {report.n_docs}"
+        f"Valid-JSON target (≥ 99%): {gate}. Failures: {report.n_failed} of {report.n_docs}"
         + (
             " (" + ", ".join(f"{k} {v}" for k, v in report.failures_by_kind.items()) + ")"
             if report.failures_by_kind

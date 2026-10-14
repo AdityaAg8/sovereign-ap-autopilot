@@ -1,15 +1,13 @@
 # ADR-0019: Real-data track: evaluate A and B on real documents, then retrain B on real data
 
-- Status: accepted
+- Status: accepted. The DocILE, FATURA-test and reality-set parts were not run for v1.0
+  (ADR-0020).
 - Date: 2026-09-29
-- Deciders: architect (design), orchestrator; scope set by the owner on 2026-09-29 (real data for
-  both evaluation and training, as soon as possible)
-- PRD: §2 C2, C4, C5, §5 (dataset table, scoreboard), §6.2 I6, §8, §10 M1.3/M1.4, M3.4, M7.1, M10.2
 - Related: ADR-0005 (fixed splits, generated reports), ADR-0009 §1.4/§1.8 (B data mix, P1-P5),
   ADR-0011 (training loop), ADR-0012 (B training inputs), ADR-0013 (A one slot, 11.8 GB),
   ADR-0015 (promotion gates G1-G11), ADR-0016 amendment 1 §3 (bounded ExtractBench requests),
   ADR-0018 (reduced GPU plan)
-- **Supersedes:** ADR-0018 §1's deferred-table row "B retrain (M10.2), `make retrain`, outside the
+- **Supersedes:** ADR-0018 §1's deferred-table row "B retrain, `make retrain`, outside the
   queue". For real data that row no longer applies: the retrain is scheduled as phase 2 of this
   ADR, directly after phase 1 (§9). ADR-0018's other deferred rows are unchanged.
 - **Amends:** ADR-0009 §1.4 (adds a CORD v2 train source; the UAE ≥ 45% floor stays) and
@@ -22,18 +20,17 @@
 ## Context and problem
 
 Every extraction number so far (`reports/extraction_a.md`, `extractor_b.md`, trust rows) comes from
-the synthetic UAE factory. The PRD lists DocILE, FATURA and ExtractBench, but the scoreboard shows
-them as pending, and `make eval` runs only the dummy predictor. The owner will present the results
-publicly, so they need real, public benchmarks under protocols a sceptic can check. The owner
-also wants real data used to **improve** B, not only to measure it.
+the synthetic UAE factory. The plan lists DocILE, FATURA and ExtractBench, but the scoreboard shows
+them as pending, and `make eval` runs only the dummy predictor. Published results need real,
+public benchmarks under protocols a sceptic can check. The project also needs real data used to **improve** B, not only to measure it.
 
 | Set | Real? | State | Blocker |
 |---|---|---|---|
 | ExtractBench short | 245 of 252 tagged `source:real` | `data/extractbench/short.jsonl`, official scorer adapter | none |
-| CORD v2 (naver-clova-ix/cord-v2, CC-BY-4.0, official author) | real receipt photos | not fetched | test (100 rows, 234 MB) and validation (100 rows, 242 MB) may be fetched now; train (800 rows, 1.8 GB) needs the owner's OK (>1 GB rule) |
-| DocILE | real invoices and orders | fetcher exists | `DOCILE_TOKEN` (BLOCKED `[dataset:docile]`) |
+| CORD v2 (naver-clova-ix/cord-v2, CC-BY-4.0, official author) | real receipt photos | not fetched | test (100 rows, 234 MB) and validation (100 rows, 242 MB) may be fetched now; train (800 rows, 1.8 GB) is over 1 GB, so it needs an explicit go |
+| DocILE | real invoices and orders | fetcher exists | `DOCILE_TOKEN` (access not granted) |
 | FATURA | template-generated | fetched | B was trained on FATURA train |
-| Reality set | owner's redacted UAE invoices | `data/real_uae/incoming/` is empty | owner labelling; no public UAE or Arabic invoice set exists |
+| Reality set | redacted real UAE invoices | `data/real_uae/incoming/` is empty | manual labelling; no public UAE or Arabic invoice set exists |
 
 Constraints: one 12 GB GPU and one job at a time (`scripts/gpu_queue.sh`, `data/ml/gpu.lock`).
 Measured costs: A takes ~35 s/doc on a born-digital PDF, parsing takes ~33 s/scan, and B takes
@@ -67,12 +64,12 @@ ExtractBench schema once stalled llama-server; ADR-0016 bounded each request at 
 | 1 | CORD v2 test | A (zero-shot), **B v1** | 100 | baseline; B v1 is the "before" |
 | 1 | ExtractBench short | A | 252; headline on the 245 `source:real` | baseline |
 | 1, on token | DocILE val | A, B v1 | 200, stratified by layout cluster, seed 0 | baseline; runs as soon as the token exists |
-| 2 R1 | train B on UAE + FATURA + **CORD train** | — | — | first real-data training round |
+| 2 R1 | train B on UAE + FATURA + **CORD train** | n/a | n/a | first real-data training round |
 | 2 R1 | CORD test, UAE test (P1-P5), DocILE val if present | B R1 | same docs as phase 1 | "after" |
-| 2 R2 | train B, adding **DocILE train** | — | — | when the token exists |
+| 2 R2 | train B, adding **DocILE train** | n/a | n/a | when the token exists |
 | 2 R2 | CORD test, DocILE val, UAE test | B R2 | same docs | "after" |
 | later | FATURA test | A zero-shot, B | 200, stratified by template, seed 0 | template-generated, not real. **B is in-distribution on FATURA and A is zero-shot**; each report says so in its first line |
-| owner-paced | reality set | A (runtime pipeline) | as labelled | UAE/Arabic sanity check (§7) |
+| as labelled | reality set | A (runtime pipeline) | as labelled | UAE/Arabic sanity check (§7) |
 
 B does not run on ExtractBench. B's prompt (`apx/extract/prompt_b.py`) is image-only and fixed to
 our schema, so it cannot take an arbitrary JSON schema.
@@ -120,7 +117,7 @@ and 300 s bound).
 | ExtractBench short | official value F1 and grounding F1: the 245 real docs, then all 252 | published Qwen3.5-9B one-shot 92.31 (all 252), labelled "authors' harness; ours differs in parser, 12 k-token slot, schema digest" |
 | CORD v2 test | field F1 over mapped keys (Donut-style multiset of (key, normalised value) per doc, micro) and nTED accuracy on the mapped tree | Donut (Kim et al., ECCV 2022), labelled "fine-tuned on CORD train, full label set: not like-for-like". The builder copies the numbers from the paper's table with the page cited, and leaves out any number that cannot be verified |
 | DocILE val | text-only field F1, KILE and LIR, over mapped fields | the official metric is location-aware AP, which we do not compute. The report says so and prints no paper number beside ours |
-| All real sets | valid-JSON rate, p50/p95 s/doc, failures by `error_kind` | the PRD ≥ 99% valid-JSON gate is evaluated and shown, not exempted |
+| All real sets | valid-JSON rate, p50/p95 s/doc, failures by `error_kind` | the ≥ 99% valid-JSON gate is evaluated and shown, not exempted |
 | Before/after (B) | B v1 vs B R1 (vs R2) on identical documents: difference with a paired bootstrap CI | A zero-shot on the same documents |
 
 Uncertainty: each F1 gets a 95% percentile bootstrap CI over documents (2000 resamples, seed 0);
@@ -190,18 +187,18 @@ B v1 ~1.5 h) runs as its own queue when the token exists.
   - B before → after on real hold-outs
   - Reality set (n)
 
-  A row with no JSON yet reads `pending <reason>`. The orchestrator adds these rows to PRD §5.
+  A row with no JSON yet reads `pending <reason>`. These rows are part of the scoreboard targets.
 
 ### 7. Reality-set labelling protocol
 
-- The owner drops a redacted PDF or image into `data/real_uae/incoming/`. PRD §5's
+- The labeller drops a redacted PDF or image into `data/real_uae/incoming/`. The planned
   `data/reality/` is renamed to `data/real_uae/`.
 - `make real-reality-template` writes a **blank** template to `data/real_uae/truth/<sha256>.json`.
   It is not pre-filled by A, so the labels are not anchored to A's answers.
 - Template fields: the 14 header `FieldName`s, `line_count`, and
   `language ∈ {en, ar, bilingual}`.
-- The owner types each value from the document: `null` if it is not printed, `"__redacted__"` if
-  redacted (excluded from scoring). The owner then sets `verified_by` and `verified_at`.
+- The labeller types each value from the document: `null` if it is not printed, `"__redacted__"` if
+  redacted (excluded from scoring). The labeller then sets `verified_by` and `verified_at`.
   Unverified files are counted but not scored.
 - `make real-reality` runs parse + A on the verified files and writes
   `reports/real_reality.{md,json}`, split by language, with per-field correct/total and Wilson
@@ -246,7 +243,7 @@ Checkpoint selection stays on UAE dev F1 (ADR-0011, I6). Each round trains from 
 | UAE factory train minus dev (EN + AR) | 3,322 | 3,322 | 68% / 45% |
 | FATURA train (30 per template) | 752 | 752 | 15% / 10% |
 | CORD v2 train | 800 (all, no upsampling) | 800 | 16% / 11% |
-| DocILE annotated train (seeded sample, ADR-0009 cap) | — | 2,500 | — / 34% |
+| DocILE annotated train (seeded sample, ADR-0009 cap) | n/a | 2,500 | n/a / 34% |
 | **Total** | 4,874 | 7,374 | |
 
 `check_mix` keeps the UAE ≥ 45% floor (R2 is at 45.05%). The Arabic share inside UAE is unchanged,
@@ -295,9 +292,9 @@ The DocILE item fails typed and is recorded if DocILE is absent.
 - Time cost: R2 is a second full train-and-evaluate cycle, ~24-29 h, on top of R1's ~19-23 h.
   Waiting for DocILE would have spent one cycle instead of two.
 
-The owner asked for the earliest improvement, so R1 goes first.
+R1 goes first because it gives the earliest improvement.
 
-## Interface sketch (the builder implements this; every file starts with the §8 header comment)
+## Interface sketch
 
 ```python
 # evals/real/models.py
@@ -556,7 +553,7 @@ printed as `-`) and 6 `label_arithmetic` (for example `98,180 + 9,818 = 107,998`
 the run should not learn.
 
 **Consequences.** R1 trains on 768 CORD receipts rather than the 800 in §9.2's table. The
-dedup and length guards run afterwards, and the final mix counts are in PROGRESS.md and
+dedup and length guards run afterwards, and the final mix counts are in
 `guard_report.json`. The four arithmetic forms accept only identities that receipts actually
 print. Accidental agreement within 0.5% stays possible, and that risk is accepted for a
 training-data filter.
@@ -593,7 +590,7 @@ hash, and `label_empty` still catches it. The guards, `near_dup_hamming`, the to
 
 **Measured.** 89 of 798 photos are dropped (27 hold-out copies, 34 redundant, 28 conflicting),
 leaving 709. The amendment-1 label checks then quarantine 30 of the 709 (4.2%). The final rate,
-including the image-size guard, is recorded in PROGRESS.md and `guard_report.json`.
+including the image-size guard, is recorded in `guard_report.json`.
 
 **Consequences.**
 - R1 trains on about 680 CORD receipts instead of §9.2's 800.
@@ -640,7 +637,7 @@ The IBAN is the payment field, so a confident invented IBAN is the worst error B
    both epoch-2 evals. Dev loss still runs every 50 steps. The trained weights are unchanged;
    only the candidate checkpoints for selection are fewer. Batch size, accumulation, learning
    rate and epochs stay as in R1, so the R1 to R1b difference is the page rule alone.
-6. **Loader (REVIEW.md P4-01).** The PDF loader rendered only the first 3 pages, so the first R1b
+6. **Loader fix.** The PDF loader rendered only the first 3 pages, so the first R1b
    prep still showed pages 0-2 while masking targets to [0, 1, last]. It now renders every page
    and `build_row` selects; `tests/unit/ml/test_b_long_pdf_pages.py` builds a row from a real
    5-page PDF. The R1b data was prepared again after this fix.

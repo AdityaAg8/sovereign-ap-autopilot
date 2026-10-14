@@ -2,8 +2,6 @@
 
 - Status: accepted
 - Date: 2026-09-24
-- Deciders: architect (T3, money path)
-- PRD: §2, §6.2 I3, §6.3 P1, §8 (money path)
 - Amends: ADR-0008 K5 ("exactly one account with `verified=True`") and its consequence "a vendor
   with two verified accounts routes to REVIEW until an admin retires one". Related: ADR-0003,
   `docs/security.md` I3, SEC-08, SEC-14, A08.
@@ -40,7 +38,7 @@ account") and cannot tell "no verified account" apart from "invoice IBAN missing
    but never adds a payee.
 3. The single-verified-account case must not get looser than today.
 4. One function decides the payee. Engine, guard, subject digest, writer and UBL path all call it.
-5. Refusals are typed (enum) and fail closed. No silent fallback (PRD §8).
+5. Refusals are typed (enum) and fail closed. No silent fallback.
 6. Use the simplest control that stops a forged invoice from steering money unseen.
 
 ## Considered options

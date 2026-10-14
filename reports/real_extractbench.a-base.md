@@ -14,7 +14,7 @@ n = 252, extractbench eval, Extractor A `base` (extractor-a), zero-shot
 | grounding_f1.all | 0.00% | 0.00% to 0.00% (bootstrap) | 175 |
 | valid_json_rate | 91.67% | 87.60% to 94.49% (wilson) | 252 |
 
-Valid-JSON gate (PRD ≥ 99%): FAIL. Failures: 21 of 252 (invalid_json 21); every failure counts in every denominator.
+Valid-JSON target (≥ 99%): FAIL. Failures: 21 of 252 (invalid_json 21); every failure counts in every denominator.
 Latency: p50 16.1 s, p95 79.1 s per doc.
 
 | Published baseline | Value | Comparable | Note | Source |

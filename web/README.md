@@ -1,36 +1,29 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Review UI
 
-## Getting Started
+The Next.js 15 app reviewers and approvers use: inbox, review queue, invoice detail with each
+field's box drawn on the page image, fraud-flag explanations, an operations board and the
+assistant panel. Source lives in `src/`; the design system is described in [DESIGN.md](DESIGN.md).
 
-First, run the development server:
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install --ignore-workspace   # or `make bootstrap` from the repo root
+pnpm dev                          # http://localhost:3000 on built-in fixtures, no backend needed
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app reads its data through one of two adapters, picked at build time:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `NEXT_PUBLIC_API_MODE` unset or `fixture`: in-browser fixtures. `make preview` from the repo
+  root builds this mode and serves it on http://localhost:3001; the login page lists the demo
+  accounts.
+- `NEXT_PUBLIC_API_MODE=http`: the live API from `make up`, at `NEXT_PUBLIC_API_BASE_URL`
+  (default `http://localhost:8000`). `make demo` builds and starts the app this way on port 3000.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Script                                   | What it does                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------------ |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Development server, production build, serve the build                                |
+| `pnpm lint` / `pnpm typecheck`           | ESLint, `tsc --noEmit`                                                               |
+| `pnpm format` / `pnpm format:check`      | Prettier write / check                                                               |
+| `pnpm test:e2e`                          | Playwright specs in `e2e/` against a fixture-mode build (`make e2e` builds it first) |

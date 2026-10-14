@@ -7,158 +7,115 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Relicensed under the MIT License.
+- Documentation rewritten for the public release: the README states what ships and lists the
+  limitations in one place, the threat model's control catalogue points at tests that exist, and
+  `KNOWN_ISSUES.md` adds KI-08 (no active trust-gate calibrator in the worker) and KI-09 (fraud
+  gate measured on an offline engine).
+- The scoreboard reads the current Extractor A run (scans fed as scans), fails the all-sets
+  valid-JSON row on the ExtractBench result, and marks evals that were never run as NOT RUN.
+
 ## [1.0.0] - 2026-10-05
-
-### Measured (live stack and fixed eval splits; every report under `reports/`)
-
-- Attack suite end to end (M6.6, fresh database): 312 of 312 cases run, payment-changing ASR 0 of 308 conclusive, none timed out; gate FAIL_INCOMPLETE on 4 cases that ended `failed` with no payment (3 extractions without totals, KI-06; 1 mock-ASP resend conflict, now fixed).
-- End to end (M5.6): 18 of 18 factory invoices archived, 2 of 2 attack PDFs kept out of payment (one only because its workflow failed before routing). Demo (M10.5): 9 of 9 scenarios met their expected outcome (`reports/demo.md`).
-- Extractor B R1b: UAE test field F1 93.23% vs A 92.75%, valid JSON 100%, p50 16.35 s vs A 26.04 s; promotion gates 4 of 5 (fails P2 latency, limit 15.62 s), not promoted. CORD v2 test field F1 90.70% (A zero-shot 46.16%).
-- Extractor A on ExtractBench short (zero-shot): value F1 70.39% on 245 real documents, 91.67% valid JSON (KI-07).
-- Trust gate: 0.54% error among auto-accepted fields at α = 1% (limit 1%).
 
 ### Added
 
-- Extractor B R1b (ADR-0019 amendment 3) exported: run `b-20261004T1300-e871c646`, best step 446 (dev F1 99.64, valid JSON 1.000 on 178 UAE dev docs whose targets are limited to the pages B sees, so not comparable with R1's 97.25), Q4_K_M sha256 `366648ea…`, smoke 5/5, registered as MLflow `extractor_b` v3 (alias challenger). `extractor-b-challenger` now serves R1b, and the new pinned `extractor-b-r1b` alias serves `evals.real --b-version r1b`. The champion is unchanged.
-
-- `--parser-id` on `evals.extraction_a`, `ml.extractor_b.promote` (eval-b, gates) and `evals.real run` (Makefile `PARSER_ID`) reads an earlier parser build's cache snapshot, read-only: a miss stops the run instead of parsing. R1b's eval queue reads `a8832889e65c7fd5`, the snapshot A and R1 were measured on (ADR-0019 amendment 3 item 7), and `gates-b` is now `+` so a failed gate still lets the CORD hold-out and the report run.
-
-- `cadence.first_generative_eval_epoch` (default 1): R1b skips the two epoch-1 generative dev evals (~3.2 h of ~13 h), keeping both of epoch 2, where v1's and R1's best checkpoints were. ADR-0020 records the v1.0 scope (teacher skipped, arbiter and live retrain deferred); KNOWN_ISSUES KI-03, KI-04.
-
-- Extractor B R1 (ADR-0019 §9) exported: run `b-20261001T1641-eb0aea7d`, best step 594 (dev F1 97.25, valid JSON 0.955 on 178 UAE dev docs; v1 97.17 / 0.955), Q4_K_M sha256 `11ce0660…`. `extractor-b-challenger` now serves R1 for smoke, eval-b and gates, and the new pinned `extractor-b-r1` alias serves `evals.real --b-version r1`. The champion is unchanged. The promote tests read the challenger run from the config instead of hardcoding v1.
-
-- `make train-b-reeval` (`python -m ml.extractor_b.reeval`) re-runs a saved checkpoint's generative dev eval on the current trainer image, under the GPU lock and with the same model load as training. It passes only when dev F1 is within ± 0.1 and the valid-JSON rate within one dev row of the recorded values: ADR-0011 amendment 6 GPU validation item 5, which had no command before.
-
-- Real-data evaluation track, phase 1 (ADR-0019): `python -m evals.real run|parse|report|before-after|reality-template` runs Extractor A or B on CORD v2, ExtractBench short, DocILE val and the owner's reality set. Every failure (timeout, 5xx, 400, parse error, invalid JSON) is a row that stays in every denominator, three server failures in a row stop the run, protected splits refuse an uncommitted `evals/real`, `apx/extract` or `ml/extractor_b/mappings.py`, and reports carry n, bootstrap/Wilson CIs, labelled baselines (Donut, ExtractBench 92.31) and a paired B before/after. The scoreboard gets a report-only real-data section.
-- `evals.datasets fetch --set cord --splits validation,test[,train] --allow-large` fetches CORD v2 (`naver-clova-ix/cord-v2` @ `7f0115a4`, CC-BY-4.0) with pinned shard sha256s and unpacks one image plus an index line per receipt. `CORD_FIELDS`/`CORD_IGNORED` map every CORD key; CORD train, validation and test are registered in `evals/splits.json`, and the leakage test also fails when a CORD, DocILE val or ExtractBench document sits in an `ml/` training manifest.
-- Extractor B real-data retraining (ADR-0019 §9): `CORD_FIELDS` / `CORD_IGNORED` map every CORD v2 label (a new label raises), `cord_docs` reads the CORD train split from the manifest, and `make train-b-data REAL_MIX=r1|r2` builds the R1 (UAE + FATURA + CORD) or R2 (+ DocILE) mix. A round whose source is missing fails with `MixSourceMissingError` before any page is rendered, and `check_mix` keeps the UAE ≥ 45% floor.
-- Per-field loss mask (ADR-0019 §9.3): keys a source does not annotate stay `null` in the target JSON but their value tokens get label -100 (CORD: all but the 3 totals and 4 line keys; DocILE: `invoice_type_code` and line `vat_category`). UAE and FATURA rows and labels are unchanged from v1. A target that is not where the collator expects it stops training as tokenizer drift.
-- `promote-b` fails closed (`RealHoldoutsMissingError`) without the challenger's real hold-out reports (CORD test, plus DocILE val once DocILE is fetched), matched by its Q4_K_M sha256. The values are carried for the record and never gate.
-- The `activity:extract` audit payload is typed (`ExtractAudit`) and records `a_valid`, `b_valid` and each extractor's finish reason (`ExtractorOutput.finish_reason`), so an invalid Extractor B output and its cause (for example a `length` cut) show in the audit trail.
-- The e2e driver reviews a refused approval like a reviewer: on a 422 naming fields it patches the invoice kind and the named lines' VAT category and rate from what is printed on the document (each with a reason), notes `corrected: ...` and retries the approval once. The supplier TRN, amounts and missing lines are never corrected, so those refusals stand.
-- Reduced GPU plan (ADR-0018): the default `make gpu-queue` runs parse-cache test and cal, the A test rows, the A cal rows, champion-only trust calibration, eval-b and the attack suite in sequence; the bake-off, cal-rows-b, gates-b and the B retrain are deferred, with the commands to run them later. `gpu_queue.sh` accepts `a|b` groups that run concurrently (fd52698, b5abda8).
-- Champion-only trust calibration (`calibrate --extractors a`, ADR-0018 amendment 1): the artifact records `extractor_b: null` and keeps the same alpha, delta, grid, `LTT_MIN_ACCEPTED` and ≤1% test gate. It is never auto-activated and refuses to REVIEW if made active. Missing B rows without the flag still raise `TrustRowsError` (fd52698).
-- `make archive-stale-rows` moves row files written by another parser build to `logs/archive/` and never deletes them (fd52698).
-- The parse service's per-page log line reports `first_seconds`, so the first-pass decode rate can be read apart from the strip re-reads (ADR-0013 amendment 3, b5abda8).
-- Eval scoreboard reads the attack, trust, Extractor B gate and bake-off JSON reports; missing inputs render as pending, never as zero; new `docs/evals.md`; the bake-off writes `reports/bakeoff.json` (a598ad9).
-- `make demo` scenarios assert outcomes against the current API (clean and bilingual archived, poisoned blocked or held by scan, bank change held by P1, duplicate flagged) with typed failure lines, a per-scenario timeout and a bounded, NO_COLOR-aware table (4378d6a).
-- Bake-off group-sequential futility stopping (ADR-0016 amendment 1): looks at 50/100/150 documents with O'Brien-Fleming bounds on a paired bootstrap, a possible winner always runs all 200; A test rows are reused; ExtractBench timeouts and 5xx on huge schemas become recorded misses instead of a stall (b4bcd5c).
-- Shared parse cache per (document, parser identity), so a scan is OCR'd once across the A test, eval-b, gates and cal passes; rows carry a serving-args hash and a resume onto a different server config fails loudly; `scripts/gpu_queue.sh` chains GPU targets under the lock (a2272de).
-- Extractor B generative evals batch longest target first with an OOM backoff ladder and per-phase timing (ADR-0011 amendment 5): same 178 dev rows, budget and selection rule, about 26% fewer decode steps at batch 4 (8689dfe).
-- M3.4 bake-off VRAM probe (`make bakeoff-probe`, 2026-09-25): every arm fits the 11.8 GB whole-card budget: `q38-27b` peak 10.53 GB (model 8.97 GB), `q35-9b-mtp` 8.94 GB, `q38-9b-distill` 7.00 GB, plus the current Extractor A (`reports/bakeoff_probe.json`). The bake-off parses each UAE document as its runtime input (a scanned invoice as its image-only scan PDF).
-- Scanned invoices are evaluated as scans: `evals/scan_input.py` assembles a document's scan PNGs into an image-only PDF (the form a scanned upload takes), used by the extraction eval, the e2e run and the bake-off; rows carry `input_kind` and `arabic_first` (row schema 4) and every report metric is split by input kind and layout language.
-- Ops dashboard redesign: papaya-on-carbon livery (McLaren-inspired), dark by default; light theme stays on `T`.
-- SEC-03 runtime injection guard (ADR-0017): the fine-tuned ModernBERT guard now scores scanned text in the worker's scan step on CPU (CPU torch 2.6.0 + transformers 5.0.0 pinned in the app image, outside `uv.lock`). Review and block thresholds come from `guard.json` (review 0.99649 = cal max-F1; new `block_threshold` 0.99856 = lowest cal score no benign row reached). It fails closed when the checkpoint or thresholds are missing. Scoring is per line and Latin-script only for now: 0/750 clean UAE test invoices reach review, ~0.86 s CPU per invoice. Visible Arabic injections are not scored yet (hidden Arabic text is still blocked by the rule-based detector); retraining on runtime-extracted lines including Arabic is a follow-up.
-- `scripts/commit.sh`: runs the auto-fixing pre-commit hooks on the staged files and re-stages them before `git commit`, so a reformat never aborts a commit.
-- M6.4 injection guard fine-tune (ModernBERT-base, `make train-guard` / `make guard-report`): test F1 0.800, precision 1.000, recall 0.667, hard-negative FPR 0.000 (n=406) vs best baseline F1 0.658; ModernBERT loads with `reference_compile=False` (the toolbox has no C compiler for Triton).
-- M9.5 live chat evals (`make eval-chat`, 2026-09-25): stock `ops-chat` 65.0% exact tool calls, 92.4% citation faithfulness, 88.2% refusal accuracy; AgentDojo banking utility 87.5%, attack success 22.2% (uncensored red-team model: 56.0%, 81.0%, 5.9%, 87.5%, 30.6%).
-- Make targets `build` (rebuild app images after a pull; `make up` reuses the existing ones), `test-integration`, `test-artifacts`; `test-gpu`, `e2e`, `verify-m4`, `verify-m8` and `verify-all` now run real checks instead of printing "not implemented".
-- Extractor B dev evals persist per-row outputs to `<run>/dev_outputs/step-NNNNNN.jsonl`; `report.py` classifies invalid JSON as truncated / looping / malformed (#53).
+- End-to-end attack-suite run on a fresh database: 312 of 312 cases ran, 0 of 308 conclusive
+  cases changed a payment, and 4 workflows ended `failed` with no payment, so the gate reads
+  FAIL_INCOMPLETE (`reports/attacks_e2e.md`, KI-06).
+- ExtractBench rerun with Extractor A: value F1 70.39% on the 245 real documents, 91.67% valid
+  JSON (KI-07). Demo report: 9 of 9 scenarios met their expected outcome.
 
 ### Fixed
 
-- ExtractBench requests sized their schema digest (the field descriptions) with `estimate_tokens`, which is calibrated on document text and overshoots compact JSON 1.88-2.70x against the Qwen3.5 tokenizer. After the 2026-10-04 estimator change, 153 of 252 requests carried no digest (132 of them had one on 2026-10-03), and Extractor A's value F1 fell from 73.10% to 47.07% with the same model and parse; that run was discarded (rows kept under `logs/archive/`). Digests are now sized with `estimate_json_tokens` (calibrated on the 252 digests, never below their true count); 220 of 252 carry one, and the largest request is 11,172 of the slot's 12,288 true tokens. Invoice extraction is unaffected: no UAE test or calibration invoice reaches the text budget.
-- A run on a second database also shared the mock-ASP store (`data/asp/asp.sqlite`), whose send and archive idempotency is keyed by document sha: a document already sent from another database (the attack and demo PDFs are deterministic) was refused as a conflicting resend and its invoice ended FAILED. The worker now takes `WORKER_ASP_DB` from the shell (compose passthrough); found by the 2026-10-05 attack run, where it made one attack case and two clean baselines inconclusive.
-- Attack-suite harness (`scripts/attacks_e2e.py`, `evals/attacks_e2e/db.py`): a blob in the shared document store skips a case only on the live Temporal history, so a run on its own `TEMPORAL_DB_FILE` no longer reports every case as already ingested; a document whose workflow failed before its invoice existed (`ingested_documents.failed_at`) settles as `failed` instead of being polled to the 90-minute case timeout, and counts as already created for a later run on the same database. Outcomes and the M6.6 gate are unchanged: such a case is still inconclusive.
-- `INGEST_INBOX_DIR` must be a folder below `data/` (`evals/stack_inbox.py`): the worker shares only `data/` with the host, so any other value made the scripts drop files the worker could never see.
-- Extractor B `build_row` stops when a document's rendered page count differs from its labels' `n_pages` (REVIEW.md P5-06), so a target masked for one page count is never paired with another.
-- A run on a second database (attack suite, demo) would have shared the live inbox: its worker, starting on an empty database, sweeps every file it finds, and the scripts that drop documents always wrote to `data/inbox`. The worker now takes `INGEST_INBOX_DIR` from the shell (compose passthrough), and `eval-attacks`, `e2e-pipeline` and `demo` drop into the same folder (`evals/stack_inbox.py`; `attacks_e2e.py --inbox` overrides). Runbook: "A second database".
-- The inbox watcher started watching only after its startup sweep, so a file dropped while the sweep ran (a 513-file inbox took minutes) raised no event and was never ingested until the next restart; the 2026-10-05 e2e run lost all 20 of its documents this way. The watch is now live before the sweep (`apx/ingest/watcher.py`), with a test that drops a file mid-sweep.
+- ExtractBench requests sized their schema digest with an estimator calibrated on document text,
+  which overshoots compact JSON 1.9-2.7x, so most requests lost their digest and value F1 fell to
+  47.07%. The digest now uses a JSON-calibrated estimate; that run was discarded.
+- A run on a second database shared the mock-ASP store with the live stack, so a document sent
+  from the other database was refused as a conflicting resend. The worker now takes its own
+  `WORKER_ASP_DB`.
+- Second-database runs (attack suite, demo, e2e) now drop documents into their own inbox
+  (`INGEST_INBOX_DIR`, which must sit below `data/`), so their worker never sweeps the live
+  inbox.
+- The attack harness no longer reports every case as already ingested on a fresh Temporal
+  history, and settles a workflow that failed before its invoice existed instead of polling it
+  until the case timeout.
 
-- B training data rendered only the first 3 pages of a PDF, so after the page-rule change a 4-5 page invoice still showed pages 0-2 while its target followed pages [0, 1, last] (REVIEW.md P4-01, found by the pass-4 audit before any training). The loader renders every page; a test builds a row from a real 5-page PDF.
-- `document_text` trimmed by character ratio, so text denser at its ends than in its middle kept up to 2.2x A's token budget (REVIEW.md P4-02). It now shrinks until the estimate fits.
-- The login throttle could evict the bucket it had just created when `max_keys` is below the eviction window, leaving that account unthrottled (REVIEW.md P4-05; defaults were safe).
+## [0.1.0] - 2026-10-05
 
-- `estimate_tokens` undercounted real parse text: its 3.5 Latin / 1.8 Arabic characters-per-token rule was below the true Qwen3.5 count on 99% of 752 parsed documents, digit-heavy tables by up to 3.4x. That overflowed the 12288-token slot (HTTP 400 on 4 ExtractBench documents) and could overflow Extractor A on a long, dense real invoice. It now counts the tokenizer's units (digits, punctuation and newline runs one each, Latin letter runs per 3, Arabic per 2) with a 1.2 safety factor: never below the true count on 1,452 documents (worst 1.05x, median 1.3x, 0.7 ms/doc). A's text budget is now 5000 estimated tokens (was 3500 under the old rule); no UAE test or cal invoice reaches either (longest 3621 true tokens), so A's recorded UAE results and the trust calibration are unchanged. The ExtractBench request version includes the estimator (`TOKEN_ESTIMATOR_VERSION`).
+### Added
 
-- The gateway's llama-swap port (8080, used by the host-run evals; the runtime calls llama-swap directly) had no `client_max_body_size`, so nginx's 1 MB default rejected requests with two dense page images (HTTP 413 on 3 ExtractBench documents). It now sets 25m explicitly; a static test pins it.
-
-- Extractor B was trained on values it could not see (ADR-0019 amendment 3). Data prep cut a 4-5 page invoice to its first 3 pages but kept the whole document's labels, so all 315 long UAE training invoices taught B an IBAN printed on a page it never saw (and 142 a totals block). B R1 then invented IBANs on long invoices (0/71 right on the UAE test, A 70/71). B now sees a long document's first 2 pages and its last (`b_page_indices`, one function for serving, data prep and training), and targets hold only labels on those pages (`visible_pages`); a label without a page index stops prep. Retraining as round R1b (`--b-version r1b`, alias `extractor-b-r1b`); gates unchanged.
-
-- ExtractBench: the gateway's HTTP 413 (one document's request, page images included, over the nginx body cap) ended the 2026-10-03 run at document 131/252 instead of recording that document. A 413 is now a `rejected` row like llama-server's 400, kept in every denominator; the body cap is runtime config and stays unchanged.
-
-- The digital PDF parser crashed (`TypeError` in `unicodedata.bidirectional`) on any word holding a glyph whose text is not one code point: a ligature that a font maps to "fi", or an unmapped glyph. 22 of ExtractBench's 151 born-digital PDFs hit it, stopping the 2026-10-02 ExtractBench run at document 26. Such glyphs are now base letters (`_is_mark`); for one code point the check is unchanged, and a page that parsed before parses byte-identically (any word with such a glyph used to crash), so only the parser identity changes. All 252 ExtractBench PDFs now parse (151 digital, 101 to OCR).
-
-- A digit run of 27 or more integer digits (three 9-digit account groups the grounder joins into one amount candidate, or a hostile model output) overflowed the 28-digit decimal context at the cents quantize and raised `decimal.InvalidOperation`: it crashed the 2026-10-02 Extractor A eval at document 133/750, and `normalize_for_compare` (A/B agreement, trust features, field F1) had the same crash. `normalize_amount` now raises `NormalizationError` ("amount out of range") past `MAX_AMOUNT_INTEGER_DIGITS` = 26, and the comparator treats such a value as an unparseable amount (`~` text form). Amounts up to 26 integer digits are unchanged.
-
-- The parse-cache warm pass and `evals.real` unloaded the OCR model only when a document had been parsed, so a pass whose every parse failed (or that stopped on a service failure) left the model resident in VRAM next to the following GPU eval. Both now unload whenever any page reached the parse service (`Contacted`); an all-cached pass still skips it. Found in the session code review.
-
-- CI: the artifacts pytest step (35 tests) was judged on its own against the 85% coverage bar (REVIEW M-04) and failed at 46%. It now appends to the unit step's coverage data (`--cov-append`), so the unchanged 85% bar is checked on everything CI ran.
-
-- `make test-trainer` selected `-m trainer` with the GPU hidden, so the two GPU-marked DeltaNet fast-path tests could never pass there. It now runs `trainer and not gpu` (12 pass), and the new `make test-trainer-gpu` runs `trainer and gpu` with the GPU visible: 2/2 pass on trainer image 2026.9.28 (ADR-0011 amendment 6 item 3).
-
-- CORD hold-out leakage through photo copies (ADR-0019 amendment 2). CORD v2 re-releases receipt photos with the anonymisation blur redone, and 27 CORD train photos are copies of validation (13) or test (14) receipts that the sha256 leakage check could not see. `cord_docs` now drops, by image pHash alone (Hamming ≤ 4): train copies of a hold-out photo, redundant train copies with the same label (keeping one), and copies whose labels conflict (all of them). Every drop is logged, and prep stops if the hold-out indexes are missing. 798 photos -> 709. Guards and the 5% cap are unchanged.
-
-- `evals.real --b-version` pins each B round to its own llama-swap alias: `v1` -> the new `extractor-b-v1` (the v1 export, never repointed), `r1`/`r2` -> `extractor-b-r1`/`-r2`, which are added when that round's export is registered. Before this, `v1` read `extractor-b-challenger`, which would have scored R1 as "v1" once the challenger moved. A version whose alias is missing fails typed.
-
-- CORD data guards per source (ADR-0019 amendment 1, §9.3a). `cord_docs` now reads `gt_parse` from the split's `index.jsonl`, which is the fetcher's real layout: the old `<sha>.json` lookup could not start prep. CORD rows are checked by `cord_label_sanity`: `total` plus a line item, amounts read with the frozen real-track normaliser, and the receipt identity on the raw `gt_parse` (tax-inclusive, netted discount, service). This took the quarantine on 798 CORD train receipts from 599 (75%) to 30 (3.8%). UAE, FATURA and DocILE guard results are byte-identical, and the 5% cap is unchanged.
-
-- `make parse-cache` no longer dies on one document: a `ParseError` (a 240 s page timeout under contention, as at test 191/750 on 2026-09-29) is recorded under `failed/<key>.json` with its error and the pass continues; a rerun retries only the failed documents and clears their records, and three transient failures in a row stop the pass as `ParseServiceDownError` (the service is down). Evals that read the cache still parse a missing document live and count its failure.
-
-- Scan strip re-read lost a table row and emitted rows bottom-up with cells right to left (invoice 165d017b0a90 page 2). Merged strip zones are now put in geometric reading order (rows top to bottom, cells in the row's reading direction), and a strip that does not finish is re-read as two half-bands inside the same 90 s page deadline; pages whose first pass finishes are unchanged (`SERVICE_PARSER_VERSION` 4, ADR-0013 amendment 4; GPU validation pending).
-- PaddleOCR-VL looped on 16 of 16 Arabic-first scans and spent the whole 3072-token page budget. A loop or budget stop now re-reads the page as 4 overlapping strips with a loop breaker, and pages that finish are unchanged (`SERVICE_PARSER_VERSION` 3, ADR-0013 amendment 2; 4576685).
-- M11 pass-2 findings (4576685): a review signal that arrives before the review wait is buffered, with pre-fix histories replay-tested (N-01). Reject re-sends like approve (N-02). The audit row is written in the same transaction (N-07). `review_hold` never reopens (N-09). Raster errors are non-retryable (N-11). A stale approval ends FAILED with a typed reason (N-13).
-- The parse client timed out at 120 s on a dense non-looping scan page that needed 125 s, which also stopped eval-b. The timeout is now 240 s (bc89319).
-- `make parse-cache` ran out of memory (`MemoryError`) building every scan input of a full split up front. It now builds them lazily (7c895ff).
-- Arabic text reached Extractor A reversed: RTL words were sorted right to left but kept their glyphs in visual order and as presentation forms. `apx/parse/bidi.py` applies the Unicode bidi algorithm per line (numbers, dates and Latin runs kept whole), NFKC-folds presentation forms and re-attaches diacritics; word boxes are unchanged and the parser version bump drops cached parses (cac04a4).
-- A workflow that failed before its invoice row existed left no trace: `mark_failed` now records `failed_at` and the failure on `ingested_documents` (migration 0011), `GET /invoices/{id}` reports it as failed and the e2e driver settles such documents (e4653a6).
-- Temporal's dev server kept its store in memory, so `make down` or a reboot dropped every in-flight workflow, and because ingest dedupes by sha256 those documents were never processed again. The store is now a SQLite file on the `temporal-data` volume.
-- The inbox watcher never saw files dropped on the host: `data/` is a bind mount, and Docker Desktop raises no inotify events for host writes, so ingestion only happened when a worker restart swept the inbox. The worker now polls (`WATCHFILES_FORCE_POLLING`).
-- `make test` and `make ci-local` pass on Windows again: the unit suite runs in a Linux container (`scripts/pytest_linux.sh`), because Smart App Control blocks the unsigned Playwright driver and Chromium on the host.
-- Extractor A lost line items and the IBAN when llama-server ran two of its requests at once (an Arabic-first invoice came back with 0 of 29 lines); it now serves one request at a time (ADR-0013 amendment 1).
-- OCR cut every page off at 1024 decode tokens without saying so, dropping the middle pages' lines on long scans. The limit is 3072 with a repetition penalty, and a page that still hits it is flagged `truncated`, audited, and sends the invoice to review.
-- Reviewers could approve invoices that were bound to fail PINT AE at build. A supplier address with no recognisable emirate (English, Arabic or official variant) is now a validation error the reviewer can correct, and approval is refused while totals that no correction can fix still mismatch (ADR-0012 amendment 4).
-- A failed workflow now writes FAILED to `invoices.status` (new `mark_failed` activity, patched in as `p0-failed-status`) and audits the typed root cause. Before, only the workflow's in-memory status changed, so an invoice whose post-review build failed schematron showed as `approved` indefinitely. Terminal statuses (sent, archived, blocked) are never overwritten.
-- Worker crash-loop: `apx/extract/identity.py` imports PyYAML, which was only a dev dependency, so the `--no-dev` app image died on import and processed nothing. PyYAML is now a runtime dependency; a new unit test fails if any `apx/` import is missing from the runtime dependency closure.
-- The inbox watcher ingests files already waiting when it starts (files dropped while the worker was down were never picked up); ingest dedupes by sha256.
-- Host-run GPU evals (bake-off, cal rows, Extractor A/B evals) could not reach the parse service: `gateway` now proxies it on loopback `127.0.0.1:8010` for those targets only (ADR-0001 amendment 2); the runtime path is unchanged.
-- `price_variance_po` no longer fires on clean invoices: the grounded invoice linked line N to PO line N regardless of content (20/20 clean invoices flagged before, 0/20 after). A line now matches a PO line only by a printed reference, or by a unique same-description, same-quantity PO line; unmatched lines get a low-severity `po_line_unmatched` flag (0.25, below review).
-- Login: the form posts and its button stays disabled until hydration, so a pre-hydration submit can no longer put the email and password in the URL (new `login-prehydration.spec.ts`).
-- `make e2e` builds the web app in fixture mode first (48/53 specs failed against a stale build); `pdf-viewer-errors.spec.ts` now injects a failure the nested parser worker really sees.
-- Windows host: the unit suite collects and passes (gpu.lock via a `FileLocker` seam, lock file closed before delete), host scripts print UTF-8 (`PYTHONUTF8=1`, explicit subprocess encodings), and every pre-commit hook runs through `uv run python -m` so Smart App Control no longer blocks commits.
-- `checkpoints.retention_plan` no longer prunes newer checkpoints when `keep_last` exceeds the count.
-- ADR-0012 §2 data promotion done: `data/uae_full2` is now `data/uae`; the parse IoU gate re-run passes on it (98.24%, p50 187 ms).
-
-- Docs: new guides linked from the README and `docs/README.md`: [Getting started](docs/getting-started.md) (fresh machine to demo, step by step), [Commands](docs/commands.md) (every `make` target grouped by task), [Evaluation guide](docs/evaluation.md) (datasets, splits, and the command behind every report), [Training Extractor B](docs/training.md) (run, watch, pause, export; first-run results) and a [Glossary](docs/glossary.md).
-- M7.1 Extractor B export (ADR-0009 §1.7): `ml/extractor_b/export.py` merges the `best.json` LoRA, converts with pinned llama.cpp b11096 (new `exporter` image) to Q4_K_M + mmproj, fails on any mmproj tensor mismatch vs upstream, logs sha256/size to MLflow; `ml/extractor_b/smoke.py` checks 5 UAE dev documents through a non-default `extractor-b-challenger` llama-swap entry; `ml/extractor_b/report.py` writes `reports/extractor_b.md`. Targets `export-b-image`, `export-b`, `smoke-b`, `test-export`, `report-b`. First export: 2.78 GB GGUF, 298/298 mmproj tensors equal, smoke 5/5.
-- M7.1 Extractor B training complete (run `b-20260923T2025-eb0aea7d`, 2026-09-25): 510/510 steps, train loss 0.0042, probe step peak 5.8 GB (max reserved 8.96 GB incl. dev evals); dev field F1 96.99 / 97.17 / 97.17 at steps 255 / 383 / 510, valid JSON 0.955 unconstrained; `best.json` selects step 383 (tie with 510, earlier step wins). README highlights and M7 status updated.
-- Ops dashboard (`tools/ops-dashboard/`, #50): a read-only local console for Extractor B training (step, pace, finish estimate, MLflow loss, evals, checkpoints), GPU memory against the ADR-0013 budget, trainer RAM and CPU, Compose services, pull requests with CI state, recent commits and the changelog. Standard library only, binds 127.0.0.1, loads nothing from the network; parsers covered by `tests/unit/test_ops_dashboard.py`.
-- M10.2 Promotion decider and retrain pipeline (`ml/promotion/`, ADR-0015): champion vs challenger on gates G1-G11 with a +0.5-point UAE F1 bar, compare-and-set on the champion alias, ordered side effects (audit, calibrator invalidation, models.lock, alias) and typed partial-apply reporting; `make retrain` exits 2 with `RetrainPrerequisiteError` until the production adapters exist.
-- M8.1 Page-similarity provider: `apx.llm.embedding.HttpPageEmbedder` (local Qwen3-VL-Embedding-2B client, typed errors, never an empty vector) and `apx.fraud.page_similarity.InMemoryPageSimilarityIndex` serving `DuplicateInvoiceRule.evaluate_similarity`; fraud owns the `PageEmbedder` port and never imports `apx.llm`.
-- M5.6a VRAM/RAM preflight (`apx.llm.preflight`, ADR-0013 addendum): every GPU stage switch and the trainer check free memory against a needs table plus a 0.3 GB margin and fail typed; the worker gets a utility-only GPU reservation for `nvidia-smi`, and probe timeouts or non-zero exits raise the retryable `GpuProbeTransientError`.
-- M9.3a Audit actions: `AuditAction` accepts the actions the pipeline really writes (`activity:route`, `authorize:pay`, `decision.approve`, 64-char cap); `explain_decision` topics match the written prefixes, including `payment_state` writes; the web audit trail labels them.
-- P1 option b (ADR-0014): a vendor may have several admin-verified accounts; the invoice IBAN (strict electronic form) selects exactly one or P1 refuses with a typed `PayeeRefusal`.
-- Payee pin, routing to build (ADR-0014 §7): `route` pins the selected payee, `build_einvoice` refuses a changed payee with a non-retryable, audited `PayeeChangedError`; migration `0008_agent_routed_payee` makes the agent view read the pinned payee.
-- Required `WORKER_BUYER_TRN` worker config (ADR-0012 amendment 2): our TRN is written as the buyer (BT-48/BT-49); a different printed buyer TRN is `BUYER_TRN_MISMATCH` and routes REVIEW.
-- M1 Evaluation harness: dataset fetchers + manifest (FATURA, ExtractBench short, AgentDojo; DocILE deferred without token), fixed sha256 splits + leakage test, scorers (DocILE KILE/LIR, FATURA, UAE EN/AR, ExtractBench via the official framework, perf), pinned PINT AE 1.0.4 schematron validator, `evals.run` CLI, scoreboard + README sync. Infra: localhost-only gateway, Linux CUDA toolbox, llama-swap re-pinned, live smoke 7/7 PASS, no-egress test.
-- M0 Foundations: preflight (`scripts/preflight.sh`), architecture + ADR-0001..0006, typed `apx` interface stubs enforcing I1/I2, Compose stack (internal app network), HF-resolved `infra/models.lock.json` + `make models`, `make smoke` harness, header checker, CI (ruff, mypy, pytest, web, headers, gitleaks), `make verify-m0`.
-- Repository scaffold (PRD §7): `apx/` subpackages, `web/` Next.js app, uv project,
-  Makefile, `.github/` templates, pre-commit config, and root project files (M0.2).
-- `scripts/preflight.sh` environment check (M0.1).
+- Temporal workflow per invoice: watch-folder and upload ingest with sha256 dedupe, hidden-content
+  scan, parsing (pdfplumber for born-digital PDFs, PaddleOCR-VL for scans), two tool-free
+  extractors, grounding, trust gate, validation, fraud checks, policy routing, PINT AE UBL 2.1
+  build, mock ASP send and archive.
+- Synthetic UAE invoice factory: an ERP, 12 English, Arabic-first and bilingual layouts, five tax
+  cases, 5,000 labelled invoices with 30% rendered as scans, and gold PINT AE XML.
+- Validation of VAT for every tax case, TRN and AE IBAN checks, mandatory fields and a 3-way match
+  against PO and GRN; the e-invoice is checked against the pinned PINT AE 1.0.4 schematron.
+- Policy engine P1-P5 with segregation of duties; the payee comes only from admin-verified
+  accounts, and a vendor may hold several, from which the invoice IBAN selects one (ADR-0014).
+- Fraud rules (duplicates, split invoices, bank-detail changes, vendor impersonation, new vendor
+  with a high amount, shared IBAN, price variance against the PO) and page-image similarity for
+  near-duplicates; an isolation-forest detector in the offline evaluation.
+- Fine-tuned ModernBERT injection guard, run on CPU in the worker's scan step (ADR-0017).
+- Calibrated trust gate with a Learn-then-Test threshold, fitted on Extractor A (ADR-0018).
+- Extractor B: a LoRA fine-tune of Qwen3.5-4B trained in three rounds (synthetic data; plus CORD
+  receipts; plus a page-rule fix), exported to GGUF and registered as the challenger. The third
+  round passes 4 of 5 promotion gates and misses latency, so it is not promoted (ADR-0015).
+- Review UI (Next.js): inbox, review queue, invoice detail with field boxes on the page image,
+  fraud-flag explanations, operations board, assistant panel and keyboard shortcuts.
+- Exception agent, ops chat and an MCP server over six typed read and propose tools.
+- Hash-chained audit log with an anchor chain and `python -m apx.audit verify`; OpenTelemetry
+  tracing to Phoenix; MLflow model registry.
+- Promotion decider and retrain pipeline (ADR-0015), run offline; `make retrain` exits 2 until
+  its production adapters exist.
+- Evaluation harness: dataset fetchers, fixed sha256 splits with a leakage test, scorers, a
+  generated scoreboard synced into the README, and a real-data track on CORD v2 and ExtractBench
+  (ADR-0019).
+- 312-case attack suite in 12 categories and its end-to-end runner.
+- `make demo`, `make e2e-pipeline`, `make status` and `make preview`.
 
 ### Changed
 
-- Extractor B training requires the DeltaNet fast-path kernels: the trainer image (2026.9.28) installs flash-linear-attention and causal-conv1d for sm_89 and refuses the slow torch fallback at model load (ADR-0011 amendment 6). The bake-off reads the shared parse cache and reuses verified arm-a rows, checked on the full serving identity (ADR-0016 amendment 2; 44b0e0b).
-- The parse service decodes under `torch.inference_mode()`, which is token-identical to `no_grad` and drops per-op autograd bookkeeping (ADR-0013 amendment 3, b5abda8).
-- Docs: README rewritten (pipeline diagram, measured highlights with report links, security model, quality-gate status, milestone status, docs index); new `docs/README.md` index; the runbook gains the migrations table (0001-0009), the ops dashboard, a `PayeeRefusal` row and the A/B swap; `docs/architecture.md` states the ADR-0013 whole-card budget, preflight and measured stage peaks; `docs/security.md` marks SEC-15 implemented.
-- ADR-0011 amendment 4: `data/ml/gpu.lock` liveness is a kernel `flock` held for the whole training job; a lock with a free flock (empty metadata included) is reclaimed, legacy and no-flock locks need a manual `rm` after confirming no trainer runs; `make gpu-free` does not clear it.
-- M5.4a Mobile Lighthouse 96/96/96 on the key pages: command palette, shortcut help, assistant and toasts load on first use, Radix controls render a stand-in until first interaction, and pdf.js renders in a worker via OffscreenCanvas.
-- M5.4 Design fixes: inbox columns no longer overlap and show the supplier invoice number, focus rings render inside rows, mono only for numbers and IDs, one Latin-digit amount formatter, solid AA Approve in dark mode.
-- A vendor with a sole verified account whose invoice prints a different IBAN, or any vendor with several verified accounts, now routes REVIEW (ADR-0014).
+- llama-swap serves one pipeline stage at a time inside an 11.8 GB whole-card budget, with a
+  VRAM preflight before each stage switch (ADR-0013).
+- A vendor whose invoice prints an IBAN other than its sole verified account, or any vendor with
+  several verified accounts, routes to review.
+- The e-invoice builder has no silent defaults: no AED default or relabel, no statutory 5% fill,
+  no fabricated EndpointID.
 
 ### Fixed
 
-- pdf.js viewer broke on Chromium 141-class browsers (`Map.getOrInsertComputed`, `Math.sumPrecise`); spec-correct ES polyfills load with the viewer, and a failed worker load shows an error instead of spinning.
-- Inbox hotkeys: Enter on a filter option no longer also opens the highlighted invoice, `?` opens and closes the shortcut reference on real keyboards, letter hotkeys work on Arabic layouts and AltGr symbols never fire them.
-- Keys typed right after Cmd/Ctrl+K, `c` or `?` are held and forwarded to the opening overlay, never reaching Approve, Reject or Fix (`web/src/lib/overlay-guard.ts`).
-- Inbox shows the internal id when the API sends no invoice number; amounts that would lose precision are shown as the raw extracted text.
-- E-invoice builder silent defaults removed (ADR-0012 amendment 2): no AED default or relabel, no statutory 5% rate fill, no fabricated EndpointID; E/O lines with a rate and category/rate mismatches are refused before approval.
+- Arabic text reached Extractor A reversed; the parser now applies the Unicode bidi algorithm per
+  line and folds presentation forms.
+- OCR cut pages at 1,024 tokens and looped on Arabic-first scans; pages now get a larger budget,
+  and a looping page is re-read in overlapping strips.
+- Extractor B training showed only the first three pages of long invoices while keeping labels
+  from later pages; B now sees the first two pages and the last, and targets hold only labels on
+  those pages.
+- The token estimator undercounted real text by up to 3.4x and could overflow the request slot;
+  it now counts tokenizer units with a safety margin.
+- The inbox watcher missed files dropped on a Docker Desktop bind mount and files dropped during
+  its startup sweep; it now polls and watches before the sweep.
+- A failed workflow now records FAILED on the invoice and the ingest row, with its typed cause.
+- `price_variance_po` no longer fires on clean invoices.
+- The pdf.js viewer broke on newer Chromium builds; ES polyfills load with it.
 
 ### Security
 
-- M11 audit pass 3 and KI-02 (N-03): a review signal's field corrections are checked against the approval digest, which now covers them (migration 0014, `_LATER_COLUMNS` rule), so a correction edited after approval no longer rides on the old approval. A new reconciler (`apx/workflows/reconciler.py`) re-sends lost or stale review signals and fills its batch only from workflows actually waiting for review (P3-01); one workflow's failing query never aborts a pass. `execute_proposal` refuses a proposal that belongs to another invoice (P3-02). Refused logins create no account bucket, and limiter eviction keeps drained buckets (P3-03). Docs: README's attack-PDF metric matches the committed run (P3-04), the runbook lists migrations 0012-0014 and the drain step for executions in their review wait (P3-05), and KNOWN_ISSUES marks KI-02 closed with residuals (pre-patch executions, pre-0014 approvals) and lists the reconciler limits (P3-06). Verified before merge: integration `test_review_guard` + `test_migrations` 17/17, unit 3574 pass.
-- M11 audit pass 2 (4576685, bc89319): a bounded login limiter with an email-keyed account bucket, a coarse IP bucket and a 320-character cap (N-04). Raster caps are a 400 MB decoded budget, so A3 or Legal at 600 dpi and 64 MP photos pass while decompression bombs fail (N-05). The parse service requires a bearer token (`PARSE_SERVICE_TOKEN`, generated by `make env`), allows no browser origins, caps image headers at 100 MP and disables its docs (N-06).
-- M11 audit pass 1 (REVIEW.md C-01..C-03, H-01..H-07 and the M/L items, 6971630): reject and send-to-review only from their legal states under a row lock; approvals carry `invoice_digest` (migration 0012) and the workflow acts on a `review` signal only when a digest-matched approval or a recorded rejection backs it; the Temporal UI and Postgres are unpublished by default and served on 127.0.0.1 by the opt-in `devports` profile (Temporal UI read-only); `make env` generates `POSTGRES_PASSWORD` and `AGENT_RO_PASSWORD` (migration 0013), `make rotate-db-password` migrates older installs; admin bank-detail propose/verify API with verifier ≠ changer (`apx.bank`); raster caps at ingest, scan and parse; login throttle; audit appends inside the state-write transaction; CSP and security headers; one `APPROVAL_LIMIT`; resilience tests for llama-swap and Postgres restarts.
-- No default database password remains: `apx.db.session.get_database_url` raises `ConfigError` when neither `DATABASE_URL` nor `POSTGRES_PASSWORD` is set, and `alembic.ini` ships an empty URL. `infra/compose.yaml` passes `APPROVAL_LIMIT` (default 10000.00) to api and worker. `make dashboard` points at the `devports` profile for the Temporal UI. `docs/security.md` closes R-5, G-1..G-4 and C-03 and adds SEC-26..SEC-29; ADR-0001 amendment 3; new `KNOWN_ISSUES.md`.
-- SEC-08 (ADR-0014): the invoice IBAN only selects among admin-verified accounts, never introduces a payee; the grant digest binds payee IBAN and match, and the routed payee is re-checked at the build (TOCTOU between approval and build closed).
-- Reviewers can no longer relabel a valid non-AED currency as AED (`CurrencyRelabelError`), and an approval with a missing supplier TRN is refused (`SupplierTrnMissingError`, 422).
+- Ports bind to 127.0.0.1 only, Postgres and the Temporal UI are published only by an opt-in
+  profile (the Temporal UI read-only), and every secret is generated into `.env` with no default
+  in code or config.
+- Approvals carry a digest of the invoice and of the reviewer's corrections; the workflow acts on
+  a review signal only when a matching approval or a recorded rejection backs it, and a
+  reconciler re-sends lost signals (KI-02).
+- Bank-detail changes go through a propose-and-verify API where the verifier must differ from the
+  person who made the change.
+- Raster caps at ingest, scan and parse, a login throttle, CSP and security headers, and a bearer
+  token on the parse service.
+
+[Unreleased]: https://github.com/AdityaAg8/sovereign-ap-autopilot/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/AdityaAg8/sovereign-ap-autopilot/compare/v0.1.0...v1.0.0
+[0.1.0]: https://github.com/AdityaAg8/sovereign-ap-autopilot/releases/tag/v0.1.0

@@ -628,7 +628,7 @@ def render_report(
         lines += ["| Stage | Peak VRAM (GB) | Within budget |", "|---|---|---|"]
         for stage, peak in sorted(stage_peaks.items()):
             within = peak <= budget_gb
-            verdict = "yes" if within else "no -- switch to sequential groups"
+            verdict = "yes" if within else "no: switch to sequential groups"
             lines.append(f"| {stage} | {peak:.2f} | {verdict} |")
     else:
         lines.append("No VRAM samples collected (nvidia-smi unavailable or no model reachable).")
